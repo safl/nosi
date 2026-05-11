@@ -111,11 +111,12 @@ jobs:
           REPO: ${{ github.repository }}
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
-        # cd into the artefacts dir and push by basename so ORAS records
-        # plain filenames in the manifest (default behaviour blocks
-        # absolute paths to prevent leaking host paths into the artefact).
-        working-directory: ~/system_imaging/disk
         run: |
+          # cd into the artefacts dir and push by basename so ORAS records
+          # plain filenames in the manifest (default behaviour blocks
+          # absolute paths to prevent leaking host paths into the artefact).
+          # GHA's working-directory: doesn't expand ~, hence the cd here.
+          cd "$HOME/system_imaging/disk"
           gz="csi-${IMG}-x86_64.img.gz"
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
