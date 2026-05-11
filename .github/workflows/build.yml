@@ -37,9 +37,12 @@ jobs:
         run: |
           sudo apt-get update
           # `dnf5` isn't in Ubuntu 24.04's repos; legacy `dnf` is, and mkosi
-          # works with either when building Fedora images.
+          # works with either when building Fedora images. The keyring
+          # packages are needed for mkosi to validate the upstream apt repos
+          # when building Debian / Ubuntu variants on this runner.
           sudo apt-get install -y --no-install-recommends \
             bubblewrap \
+            debian-archive-keyring \
             dnf \
             dosfstools \
             e2fsprogs \
@@ -48,6 +51,7 @@ jobs:
             qemu-utils \
             squashfs-tools \
             systemd-container \
+            ubuntu-keyring \
             zstd
           pipx ensurepath
           # mkosi is not on PyPI; install from upstream git.
