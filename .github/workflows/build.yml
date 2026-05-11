@@ -114,7 +114,11 @@ jobs:
         run: |
           gz="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz"
           sha="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz.sha256"
+          # --disable-path-validation lets ORAS accept absolute paths
+          # (defaults are workspace-relative); our build artefacts live
+          # under $HOME/system_imaging/, not the workspace.
           oras push \
+              --disable-path-validation \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.csi.disk-image.v1+gzip \
               "${gz}:application/vnd.csi.disk-image.layer.v1+gzip" \
