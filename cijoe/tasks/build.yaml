@@ -1,0 +1,25 @@
+---
+doc: |
+  csi base image build
+  ====================
+
+  1. Download the upstream cloud image for the variant.
+  2. Resize the boot disk so cloud-init has room to install packages.
+  3. Build a NoCloud seed.iso from
+     csi-media/auxiliary/cloudinit-base-<distro>.user + the shared meta-data.
+  4. Boot QEMU; cloud-init installs the package set, sets up the default
+     `odus` operator account (mirroring bty's PiKVM-style appliance pattern),
+     strips SSH host keys and machine-id, and powers off.
+  5. Compact and checksum the baked qcow2.
+  6. ``img_gz_publish`` converts qcow2 -> raw -> gzip-compressed .img.gz
+     with a sha256 sidecar, for direct ``dd`` flashing.
+
+  Variant is selected via ``-c configs/<variant>.toml``; ``[csi].variant``
+  drives the image-name lookup and download URLs.
+
+steps:
+- name: diskimage_build
+  uses: diskimage_build
+
+- name: img_gz_publish
+  uses: img_gz_publish

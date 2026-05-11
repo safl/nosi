@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   schedule:
     # Weekly rebuild to pick up upstream package updates even when csi hasn't
-    # changed. Sunday 03:00 UTC keeps it well clear of weekday CI traffic.
+    # changed. Sunday 03:00 UTC, well clear of weekday CI traffic.
     - cron: '0 3 * * 0'
 
 permissions:
@@ -19,37 +19,53 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # PRs build only. Anything else (push to main, schedule, manual) publishes.
   PUBLISH: ${{ github.event_name != 'pull_request' }}
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         variant: [debian-base, ubuntu-base, fedora-base]
-    container:
-      image: ghcr.io/refenv/cijoe-docker:latest
-      # /dev/kvm exposes hardware virt to qemu inside the container so cloud-init
-      # provisioning runs at acceptable speed.
-      options: --device=/dev/kvm
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 \
+            qemu-utils \
+            genisoimage \
+            pipx \
+            zstd \
+            cpu-checker
+
+      - name: Enable KVM access for the runner
+        # GHA hosted runners ship /dev/kvm but the runner user isn't in the
+        # kvm group, so QEMU's `-accel kvm` fails. Same udev workaround bty
+        # uses in its release workflow.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo kvm-ok || true
+          ls -l /dev/kvm
+
       - name: Install cijoe
         run: |
-          make deps
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          pipx install --force cijoe
+          pipx ensurepath
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build ${{ matrix.variant }}
         run: make build VARIANT=${{ matrix.variant }}
 
-      - name: Package ${{ matrix.variant }}
-        run: make package VARIANT=${{ matrix.variant }}
-
-      - name: Upload built qcow2 + cijoe report
+      - name: Upload baked image + cijoe report (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -57,9 +73,9 @@ jobs:
           path: |
             ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2
             ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2.sha256
-            dist/csi-${{ matrix.variant }}.raw.zst
-            dist/csi-${{ matrix.variant }}.raw.zst.sha256
-            cijoe-output/
+            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.img.gz
+            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.img.gz.sha256
+            cijoe/cijoe-output/
           if-no-files-found: warn
           retention-days: 14
 
@@ -90,11 +106,13 @@ jobs:
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
+          gz="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz"
+          sha="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz.sha256"
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
-              --artifact-type application/vnd.csi.disk-image.v1+zstd \
-              "dist/csi-${IMG}.raw.zst:application/vnd.csi.disk-image.layer.v1+zstd" \
-              "dist/csi-${IMG}.raw.zst.sha256:text/plain"
+              --artifact-type application/vnd.csi.disk-image.v1+gzip \
+              "${gz}:application/vnd.csi.disk-image.layer.v1+gzip" \
+              "${sha}:text/plain"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Write build summary
@@ -104,8 +122,9 @@ jobs:
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
-          sha=$(awk '{print $1}' "dist/csi-${IMG}.raw.zst.sha256")
-          size=$(numfmt --to=iec "$(stat -c%s "dist/csi-${IMG}.raw.zst")")
+          gz="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz"
+          sha=$(awk '{print $1}' "${gz}.sha256")
+          size=$(numfmt --to=iec "$(stat -c%s "${gz}")")
           {
             echo "### \`${IMG}\` — ${ROLLING}"
             echo
@@ -120,7 +139,7 @@ jobs:
             echo
             echo '```'
             echo "curl -sL 'https://ghcr.io/v2/${REPO}/${IMG}/blobs/sha256:${sha}' \\"
-            echo "    | zstd -d \\"
+            echo "    | gunzip -d \\"
             echo "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

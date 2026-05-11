@@ -3,11 +3,13 @@
 # Fedora cloud-image point releases have non-predictable URLs (build numbers
 # vary). Pinned to a known-good release; bump as needed.
 #
-# Usage:
-#   cijoe tasks/build.yaml --config configs/fedora-base.toml --monitor
+# Usage (from repo root, the Makefile cd's into cijoe/):
+#   make build VARIANT=fedora-base
 
 [csi]
 variant = "fedora-base"
+hostname = "csi-fedora"
+timezone = "UTC"
 
 [cijoe.transport.qemu_guest]
 username = "root"
@@ -25,7 +27,7 @@ img_bin = "qemu-img"
 bin = "/usr/bin/qemu-system-x86_64"
 
 [qemu.guests.csi-fedora-base-x86_64]
-path = "{{ local.env.HOME }}/guests/csi-fedora-base-x86_64"
+path = "{{ local.env.HOME }}/system_imaging/guests/csi-fedora-base-x86_64"
 system_label = "x86_64"
 system_image_name = "csi-fedora-base-x86_64"
 system_args.kwa = { cpu = "host", smp = 4, m = "4G", accel = "kvm" }
@@ -36,7 +38,11 @@ system_label = "x86_64"
 
 cloud.url = "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2"
 cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/Fedora-Cloud-Base-Generic-43.x86_64.qcow2"
-cloud.metadata_path = "{{ resources.auxiliary['cloudinit-metadata'] }}"
-cloud.userdata_path = "{{ resources.auxiliary['cloudinit-fedora-base'] }}"
+cloud.metadata_path = "csi-media/auxiliary/cloudinit-metadata.meta"
+cloud.userdata_path = "csi-media/auxiliary/cloudinit-base-fedora.user"
 
 disk.path = "{{ local.env.HOME }}/system_imaging/disk/csi-fedora-base-x86_64.qcow2"
+
+publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/csi-fedora-base-x86_64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/csi-fedora-base-x86_64.img.gz"
+publish.gzip_level = 9
