@@ -111,18 +111,17 @@ jobs:
           REPO: ${{ github.repository }}
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
+        # cd into the artefacts dir and push by basename so ORAS records
+        # plain filenames in the manifest (default behaviour blocks
+        # absolute paths to prevent leaking host paths into the artefact).
+        working-directory: ~/system_imaging/disk
         run: |
-          gz="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz"
-          sha="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz.sha256"
-          # --disable-path-validation lets ORAS accept absolute paths
-          # (defaults are workspace-relative); our build artefacts live
-          # under $HOME/system_imaging/, not the workspace.
+          gz="csi-${IMG}-x86_64.img.gz"
           oras push \
-              --disable-path-validation \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.csi.disk-image.v1+gzip \
               "${gz}:application/vnd.csi.disk-image.layer.v1+gzip" \
-              "${sha}:text/plain"
+              "${gz}.sha256:text/plain"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Write build summary
