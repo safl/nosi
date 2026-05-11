@@ -84,9 +84,15 @@ jobs:
       - name: Compute rolling tag
         if: env.PUBLISH == 'true'
         id: tag
+        env:
+          SHA: ${{ github.sha }}
         run: |
+          # Use GHA-provided SHA rather than `git rev-parse`: cijoe ran parts
+          # of the build as root, which trips git's safe.directory check
+          # ("dubious ownership in /__w/csi/csi") when the rolling-tag step
+          # then runs as the runner user.
           date_tag=$(date -u +'%Y.%m.%d')
-          short=$(git rev-parse --short=7 HEAD)
+          short=${SHA:0:7}
           echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
 
       - name: Set up oras
