@@ -60,7 +60,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: mkosi.cache
-          key: mkosi-${{ matrix.image }}-${{ hashFiles('mkosi.conf', format('mkosi.images/{0}/mkosi.conf', matrix.image)) }}
+          key: mkosi-${{ matrix.image }}-${{ hashFiles('mkosi.conf', format('variants/{0}.conf', matrix.image)) }}
           restore-keys: |
             mkosi-${{ matrix.image }}-
 

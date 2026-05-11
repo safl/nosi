@@ -1,24 +1,18 @@
 IMAGES := debian-base ubuntu-base fedora-base
 DIST   := dist
 
-RENDER_TARGETS  := $(addprefix render-,$(IMAGES))
 PACKAGE_TARGETS := $(addprefix package-,$(IMAGES))
 
-.PHONY: help all clean deps package render-seeds \
-        $(IMAGES) $(RENDER_TARGETS) $(PACKAGE_TARGETS)
+.PHONY: help all clean deps package $(IMAGES) $(PACKAGE_TARGETS)
 
 help:
 	@echo "Targets:"
-	@echo "  deps                     install mkosi via pipx"
+	@echo "  deps                     install mkosi via pipx (from upstream git)"
 	@echo "  all                      build every base image"
 	@echo "  $(IMAGES)"
-	@echo "  render-seeds             (re)render cloud-init seed for every image"
 	@echo "  package                  package every built image into $(DIST)/"
 	@echo "  package-<image>          package a single image"
-	@echo "  clean                    remove mkosi outputs, rendered seeds, dist/"
-	@echo ""
-	@echo "Env:"
-	@echo "  CSI_SSH_PUBKEY=/path/key.pub   override SSH key baked into images"
+	@echo "  clean                    remove mkosi outputs and dist/"
 
 deps:
 	# mkosi is not published to PyPI; install straight from the upstream repo.
@@ -26,18 +20,11 @@ deps:
 
 all: $(IMAGES)
 
-# Images ship anonymous — no SSH keys or hostname baked in. bty (or whoever
-# flashes) is responsible for writing /var/lib/cloud/seed/nocloud/ at flash
-# time. For local testing, see `make render-<image>` below — it bakes a seed
-# into mkosi.extra/ for the next build only.
+# Build each variant by overlaying its distro-specific config on top of the
+# shared mkosi.conf. ImageId comes from the variant config and drives the
+# output filename (mkosi.output/csi-<image>.raw).
 $(IMAGES):
-	mkosi --image=$@ build
-
-# Opt-in seed rendering for local testing only. Never invoked by CI.
-$(RENDER_TARGETS): render-%: scripts/render-seed.sh
-	./scripts/render-seed.sh $*
-
-render-seeds: $(RENDER_TARGETS)
+	mkosi --include variants/$@.conf build
 
 package: $(PACKAGE_TARGETS)
 
@@ -47,4 +34,3 @@ $(PACKAGE_TARGETS): package-%:
 clean:
 	-mkosi clean
 	rm -rf mkosi.output mkosi.cache mkosi.builddir mkosi.workspace $(DIST)
-	rm -rf $(addsuffix /mkosi.extra/var/lib/cloud/seed,$(addprefix mkosi.images/,$(IMAGES)))

@@ -3,8 +3,6 @@ mkosi.cache/
 mkosi.builddir/
 mkosi.workspace/
 dist/
-# Rendered cloud-init seeds (per-image, contain the operator's SSH key).
-mkosi.images/*/mkosi.extra/var/lib/cloud/seed/
 *.raw
 *.raw.zst
 *.raw.gz
