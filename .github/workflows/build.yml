@@ -1,0 +1,151 @@
+name: build-images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly rebuild to pick up upstream package updates even when csi hasn't
+    # changed. Sunday 03:00 UTC keeps it well clear of weekday CI traffic.
+    - cron: '0 3 * * 0'
+
+permissions:
+  contents: read
+  packages: write    # push images to GHCR on publish triggers
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # PRs build only. Anything else (push to main, schedule, manual) publishes.
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian-base, ubuntu-base, fedora-base]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update
+          # `dnf5` isn't in Ubuntu 24.04's repos; legacy `dnf` is, and mkosi
+          # works with either when building Fedora images.
+          sudo apt-get install -y --no-install-recommends \
+            bubblewrap \
+            dnf \
+            dosfstools \
+            e2fsprogs \
+            mtools \
+            pipx \
+            qemu-utils \
+            squashfs-tools \
+            systemd-container \
+            zstd
+          pipx ensurepath
+          # mkosi is not on PyPI; install from upstream git.
+          pipx install --include-deps git+https://github.com/systemd/mkosi.git
+          sudo ln -sf "$(pipx environment --value PIPX_LOCAL_VENVS)/mkosi/bin/mkosi" \
+            /usr/local/bin/mkosi
+          mkosi --version
+
+      - name: Restore mkosi package cache
+        uses: actions/cache@v4
+        with:
+          path: mkosi.cache
+          key: mkosi-${{ matrix.image }}-${{ hashFiles('mkosi.conf', format('mkosi.images/{0}/mkosi.conf', matrix.image)) }}
+          restore-keys: |
+            mkosi-${{ matrix.image }}-
+
+      - name: Compute rolling tag
+        id: tag
+        run: |
+          # Stable date tag + short commit SHA → unique, sortable, traceable.
+          date_tag=$(date -u +'%Y.%m.%d')
+          short=$(git rev-parse --short=7 HEAD)
+          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+          echo "date=${date_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Build ${{ matrix.image }}
+        run: sudo -E env "PATH=$PATH" make ${{ matrix.image }}
+
+      - name: Package ${{ matrix.image }}
+        run: sudo -E make package-${{ matrix.image }}
+
+      - name: Fix artifact ownership
+        run: sudo chown -R "$USER:$USER" dist
+
+      - name: Upload ${{ matrix.image }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csi-${{ matrix.image }}
+          path: |
+            dist/csi-${{ matrix.image }}.raw.zst
+            dist/csi-${{ matrix.image }}.raw.zst.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      # ----- publish (rolling: push-to-main, schedule, manual) -----
+
+      - name: Set up oras
+        if: env.PUBLISH == 'true'
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push ${{ matrix.image }} to GHCR
+        if: env.PUBLISH == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          IMG:  ${{ matrix.image }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+        run: |
+          # Push under the immutable rolling tag (date + short SHA). The
+          # artifactType identifies these as csi disk images so `docker pull`
+          # won't try to consume them as container images.
+          oras push \
+              "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
+              --artifact-type application/vnd.csi.disk-image.v1+zstd \
+              "dist/csi-${IMG}.raw.zst:application/vnd.csi.disk-image.layer.v1+zstd" \
+              "dist/csi-${IMG}.raw.zst.sha256:text/plain"
+          # Move :latest to point at the just-pushed manifest.
+          oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
+
+      - name: Write build summary
+        if: env.PUBLISH == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          IMG:  ${{ matrix.image }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+        run: |
+          sha=$(awk '{print $1}' "dist/csi-${IMG}.raw.zst.sha256")
+          size=$(numfmt --to=iec "$(stat -c%s "dist/csi-${IMG}.raw.zst")")
+          {
+            echo "### \`${IMG}\` — ${ROLLING}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Pull ref | \`ghcr.io/${REPO}/${IMG}:${ROLLING}\` |"
+            echo "| Latest alias | \`ghcr.io/${REPO}/${IMG}:latest\` |"
+            echo "| Blob digest (bty catalog) | \`sha256:${sha}\` |"
+            echo "| Size | ${size} |"
+            echo
+            echo "Flash directly:"
+            echo
+            echo '```'
+            echo "curl -sL 'https://ghcr.io/v2/${REPO}/${IMG}/blobs/sha256:${sha}' \\"
+            echo "    | zstd -d \\"
+            echo "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

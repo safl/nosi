@@ -1,0 +1,23 @@
+#!/bin/bash
+# Strip baked-in machine identity so every flashed instance regenerates its
+# own on first boot. Without this, all images would share SSH host keys and
+# machine-id — anyone with the .raw.zst would hold the private key for every
+# deployed box, making MITM trivial.
+#
+# Runs inside the image rootfs at the end of the build (auto-discovered by
+# mkosi as mkosi.finalize.chroot at the repo root).
+
+set -euo pipefail
+
+# SSH host keys — sshd regenerates these on next start when absent.
+rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
+# machine-id — empty file signals systemd-machine-id-setup to allocate on boot.
+: > /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+
+# Cloud-init seed cache — ensure first-boot modules run on the real instance,
+# not on whatever transient instance-id was assigned during build.
+rm -rf /var/lib/cloud/instances/* \
+       /var/lib/cloud/data \
+       /var/lib/cloud/sem
