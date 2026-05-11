@@ -34,7 +34,7 @@ system_args.tcp_forward = { host = 4200, guest = 22 }
 [system-imaging.images.csi-fedora-base-x86_64]
 system_label = "x86_64"
 
-cloud.url = "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.1.x86_64.qcow2"
+cloud.url = "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2"
 cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/Fedora-Cloud-Base-Generic-43.x86_64.qcow2"
 cloud.metadata_path = "{{ resources.auxiliary['cloudinit-metadata'] }}"
 cloud.userdata_path = "{{ resources.auxiliary['cloudinit-fedora-base'] }}"
