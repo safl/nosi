@@ -1,31 +1,29 @@
 #!/usr/bin/env bash
-# Package a mkosi-built raw image for bty:
-#   - locate the raw output by ImageId
-#   - compress to .raw.zst
-#   - emit a .sha256 sidecar of the *compressed* artifact
+# Convert a cijoe-built qcow2 to .raw.zst + sha256 in $DIST.
 #
-# Usage: package.sh <image> <dist-dir>
-#   <image>    sub-image directory name under mkosi.images/ (e.g. debian-base)
-#   <dist-dir> output directory for packaged artifacts
+# Usage: package.sh <variant> <dist-dir>
+#   <variant>  name without the csi- prefix (e.g. debian-base)
+#   <dist-dir> output directory for packaged artefacts
 
 set -euo pipefail
 
-image=${1:?usage: package.sh <image> <dist-dir>}
-dist=${2:?usage: package.sh <image> <dist-dir>}
+variant=${1:?usage: package.sh <variant> <dist-dir>}
+dist=${2:?usage: package.sh <variant> <dist-dir>}
 
-id="csi-${image}"
-src="mkosi.output/${id}.raw"
-
+src="$HOME/system_imaging/disk/csi-${variant}-x86_64.qcow2"
 if [[ ! -f $src ]]; then
-        echo "package.sh: $src not found; run 'make $image' first" >&2
+        echo "package.sh: $src not found; run 'make build VARIANT=$variant' first" >&2
         exit 1
 fi
 
 mkdir -p "$dist"
-out="$dist/${id}.raw.zst"
+raw="$dist/csi-${variant}.raw"
+out="$dist/csi-${variant}.raw.zst"
 
-zstd -19 -T0 -f "$src" -o "$out"
-( cd "$dist" && sha256sum "${id}.raw.zst" > "${id}.raw.zst.sha256" )
+qemu-img convert -f qcow2 -O raw "$src" "$raw"
+zstd -19 -T0 -f "$raw" -o "$out"
+rm -f "$raw"
+( cd "$dist" && sha256sum "csi-${variant}.raw.zst" > "csi-${variant}.raw.zst.sha256" )
 
 echo "packaged: $out"
-cat "$dist/${id}.raw.zst.sha256"
+cat "$dist/csi-${variant}.raw.zst.sha256"

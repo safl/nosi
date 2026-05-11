@@ -1,0 +1,23 @@
+---
+doc: |
+  csi base image build
+  ====================
+
+  Build an anonymous csi base image from an upstream cloud image:
+
+  1. Download the cloud image (Debian / Ubuntu / Fedora).
+  2. Resize so cloud-init has space to install our package list.
+  3. Boot QEMU with a cloud-init seed disk containing the per-variant
+     user-data (package install + uv + podman.socket + identity wipe).
+  4. cloud-init runs, then powers off; result is snapshotted to disk.path.
+
+  The baked image carries no users, no SSH keys, no hostname — bty (or any
+  flasher) is expected to inject /var/lib/cloud/seed/nocloud/ at flash time
+  with per-target identity. cloud-init runs again on first boot of the
+  flashed system because we wipe machine-id and cloud-init state at the end.
+
+steps:
+- name: diskimage_build
+  uses: diskimage_build
+  with:
+    image_name: csi-{{ config.csi.variant }}-x86_64

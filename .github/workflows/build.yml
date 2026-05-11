@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: read
-  packages: write    # push images to GHCR on publish triggers
+  packages: write    # GHCR push on publish triggers
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
@@ -28,91 +28,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [debian-base, ubuntu-base, fedora-base]
+        variant: [debian-base, ubuntu-base, fedora-base]
+    container:
+      image: ghcr.io/refenv/cijoe-docker:latest
+      # /dev/kvm exposes hardware virt to qemu inside the container so cloud-init
+      # provisioning runs at acceptable speed.
+      options: --device=/dev/kvm
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tooling
+      - name: Install cijoe
         run: |
-          sudo apt-get update
-          # `dnf5` isn't in Ubuntu 24.04's repos; legacy `dnf` is, and mkosi
-          # works with either when building Fedora images. The keyring
-          # packages are needed for mkosi to validate the upstream apt repos
-          # when building Debian / Ubuntu variants on this runner.
-          sudo apt-get install -y --no-install-recommends \
-            bubblewrap \
-            debian-archive-keyring \
-            dnf \
-            dosfstools \
-            e2fsprogs \
-            mtools \
-            pipx \
-            qemu-utils \
-            squashfs-tools \
-            systemd-container \
-            ubuntu-keyring \
-            zstd
-          pipx ensurepath
-          # mkosi is not on PyPI; install from upstream git.
-          pipx install --include-deps git+https://github.com/systemd/mkosi.git
-          sudo ln -sf "$(pipx environment --value PIPX_LOCAL_VENVS)/mkosi/bin/mkosi" \
-            /usr/local/bin/mkosi
-          mkosi --version
+          make deps
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Restore mkosi package cache
-        uses: actions/cache@v4
-        with:
-          path: mkosi.cache
-          key: mkosi-${{ matrix.image }}-${{ hashFiles('mkosi.conf', format('variants/{0}.conf', matrix.image)) }}
-          restore-keys: |
-            mkosi-${{ matrix.image }}-
+      - name: Build ${{ matrix.variant }}
+        run: make build VARIANT=${{ matrix.variant }}
 
-      - name: Compute rolling tag
-        id: tag
-        run: |
-          # Stable date tag + short commit SHA → unique, sortable, traceable.
-          date_tag=$(date -u +'%Y.%m.%d')
-          short=$(git rev-parse --short=7 HEAD)
-          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
-          echo "date=${date_tag}" >> "$GITHUB_OUTPUT"
+      - name: Package ${{ matrix.variant }}
+        run: make package VARIANT=${{ matrix.variant }}
 
-      - name: Build ${{ matrix.image }}
-        run: |
-          # --debug makes mkosi log every command + its output, so failures
-          # show what the underlying tool said, not just mkosi's summary.
-          sudo -E env "PATH=$PATH" mkosi --debug \
-            --include variants/${{ matrix.image }}.conf \
-            build
-
-      - name: Upload mkosi build artifacts (always)
+      - name: Upload built qcow2 + cijoe report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mkosi-output-${{ matrix.image }}
+          name: csi-${{ matrix.variant }}
           path: |
-            mkosi.output/
-            mkosi.workspace/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Package ${{ matrix.image }}
-        run: sudo -E make package-${{ matrix.image }}
-
-      - name: Fix artifact ownership
-        run: sudo chown -R "$USER:$USER" dist
-
-      - name: Upload ${{ matrix.image }} artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: csi-${{ matrix.image }}
-          path: |
-            dist/csi-${{ matrix.image }}.raw.zst
-            dist/csi-${{ matrix.image }}.raw.zst.sha256
-          if-no-files-found: error
+            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2
+            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2.sha256
+            dist/csi-${{ matrix.variant }}.raw.zst
+            dist/csi-${{ matrix.variant }}.raw.zst.sha256
+            cijoe-output/
+          if-no-files-found: warn
           retention-days: 14
 
-      # ----- publish (rolling: push-to-main, schedule, manual) -----
+      # ----- publish (push-to-main, schedule, manual) -----
+
+      - name: Compute rolling tag
+        if: env.PUBLISH == 'true'
+        id: tag
+        run: |
+          date_tag=$(date -u +'%Y.%m.%d')
+          short=$(git rev-parse --short=7 HEAD)
+          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
@@ -124,29 +83,25 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Push ${{ matrix.image }} to GHCR
+      - name: Push ${{ matrix.variant }} to GHCR
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
-          IMG:  ${{ matrix.image }}
+          IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
-          # Push under the immutable rolling tag (date + short SHA). The
-          # artifactType identifies these as csi disk images so `docker pull`
-          # won't try to consume them as container images.
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.csi.disk-image.v1+zstd \
               "dist/csi-${IMG}.raw.zst:application/vnd.csi.disk-image.layer.v1+zstd" \
               "dist/csi-${IMG}.raw.zst.sha256:text/plain"
-          # Move :latest to point at the just-pushed manifest.
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Write build summary
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
-          IMG:  ${{ matrix.image }}
+          IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
           sha=$(awk '{print $1}' "dist/csi-${IMG}.raw.zst.sha256")

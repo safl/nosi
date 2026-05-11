@@ -1,36 +1,39 @@
-IMAGES := debian-base ubuntu-base fedora-base
-DIST   := dist
+VARIANT ?= debian-base
+DISK_IMAGE = $(HOME)/system_imaging/disk/csi-$(VARIANT)-x86_64.qcow2
+DIST       = dist
 
-PACKAGE_TARGETS := $(addprefix package-,$(IMAGES))
+.DEFAULT_GOAL := help
 
-.PHONY: help all clean deps package $(IMAGES) $(PACKAGE_TARGETS)
+.PHONY: help deps build package clean all
 
 help:
+	@echo "csi — headless system image builder for bty"
+	@echo
 	@echo "Targets:"
-	@echo "  deps                     install mkosi via pipx (from upstream git)"
-	@echo "  all                      build every base image"
-	@echo "  $(IMAGES)"
-	@echo "  package                  package every built image into $(DIST)/"
-	@echo "  package-<image>          package a single image"
-	@echo "  clean                    remove mkosi outputs and dist/"
+	@echo "  deps                 Install cijoe via pipx"
+	@echo "  build                Build a single variant (default: debian-base)"
+	@echo "  package              Convert built qcow2 to .raw.zst + sha256 in $(DIST)/"
+	@echo "  all                  Build every variant"
+	@echo "  clean                Remove cijoe artefacts, dist/, and $(DISK_IMAGE)"
+	@echo
+	@echo "Variant: $(VARIANT) (override with VARIANT=ubuntu-base etc.)"
+	@echo "Output:  $(DISK_IMAGE)"
 
 deps:
-	# mkosi is not published to PyPI; install straight from the upstream repo.
-	pipx install --include-deps git+https://github.com/systemd/mkosi.git
+	pipx install cijoe
+	pipx ensurepath
 
-all: $(IMAGES)
+build:
+	cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
 
-# Build each variant by overlaying its distro-specific config on top of the
-# shared mkosi.conf. ImageId comes from the variant config and drives the
-# output filename (mkosi.output/csi-<image>.raw).
-$(IMAGES):
-	mkosi --include variants/$@.conf build
+all:
+	$(MAKE) build VARIANT=debian-base
+	$(MAKE) build VARIANT=ubuntu-base
+	$(MAKE) build VARIANT=fedora-base
 
-package: $(PACKAGE_TARGETS)
-
-$(PACKAGE_TARGETS): package-%:
-	./scripts/package.sh $* $(DIST)
+package:
+	./scripts/package.sh $(VARIANT) $(DIST)
 
 clean:
-	-mkosi clean
-	rm -rf mkosi.output mkosi.cache mkosi.builddir mkosi.workspace $(DIST)
+	rm -rf cijoe-output cijoe-archive $(DIST)
+	rm -f $(DISK_IMAGE) $(DISK_IMAGE).sha256
