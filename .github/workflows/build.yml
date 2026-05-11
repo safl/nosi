@@ -74,7 +74,23 @@ jobs:
           echo "date=${date_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Build ${{ matrix.image }}
-        run: sudo -E env "PATH=$PATH" make ${{ matrix.image }}
+        run: |
+          # --debug makes mkosi log every command + its output, so failures
+          # show what the underlying tool said, not just mkosi's summary.
+          sudo -E env "PATH=$PATH" mkosi --debug \
+            --include variants/${{ matrix.image }}.conf \
+            build
+
+      - name: Upload mkosi build artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkosi-output-${{ matrix.image }}
+          path: |
+            mkosi.output/
+            mkosi.workspace/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Package ${{ matrix.image }}
         run: sudo -E make package-${{ matrix.image }}
