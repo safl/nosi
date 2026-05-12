@@ -342,7 +342,15 @@ runcmd:
 
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups wheel,kvm odus
-  - echo 'odus:odus.321' | chpasswd
+  # chpasswd without -e pipes the password through PAM, where
+  # pam_pwquality on Fedora rejects 'odus.321' for containing the
+  # username "odus" and silently leaves the account password-locked.
+  # Pre-hash with openssl (SHA-512) and hand chpasswd the encrypted
+  # form via -e so PAM is not consulted.
+  - |
+    set -eu
+    hash=$(openssl passwd -6 'odus.321')
+    printf 'odus:%s\n' "$hash" | chpasswd -e
   - |
     printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
     chown root:root /etc/sudoers.d/odus

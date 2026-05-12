@@ -397,7 +397,12 @@ runcmd:
   # exposing to anything beyond a trusted network.
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
-  - echo 'odus:odus.321' | chpasswd
+  # See fedora variant: pre-hash and use chpasswd -e so PAM's
+  # pam_pwquality cannot silently reject the password.
+  - |
+    set -eu
+    hash=$(openssl passwd -6 'odus.321')
+    printf 'odus:%s\n' "$hash" | chpasswd -e
   - |
     printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
     chown root:root /etc/sudoers.d/odus
