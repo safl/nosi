@@ -58,6 +58,7 @@ packages:
   - jq
   - lsof
   - mtr-tiny
+  - network-manager       # provides nmtui for interactive interface config
   - nmap
   - strace
   - tcpdump
@@ -94,6 +95,10 @@ packages:
   - pciutils
   - smartmontools
   - usbutils
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC (Alder
+  # Lake-P et al.), iwlwifi, regulatory.db, etc. Debian 13 cloud images
+  # already enable the non-free-firmware component by default.
+  - firmware-misc-nonfree
   # local virtualisation
   - ovmf
   - qemu-system-x86
@@ -433,7 +438,8 @@ runcmd:
     # Iterate so a not-present package is a no-op rather than aborting
     # the whole apt-get call.
     to_purge=""
-    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools udisks2; do
+    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools \
+               udisks2 accountsservice; do
         if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null \
                 | grep -q "install ok installed"; then
             to_purge="$to_purge $pkg"
@@ -445,6 +451,8 @@ runcmd:
     apt-get -y autoremove --purge || true
     # polkit stays installed (libs link against it and a --purge can
     # cascade into unrelated packages) but its daemon is masked.
+    # multipathd: only meaningful with SAN multipath. networkd-dispatcher:
+    # runs hooks from /etc/networkd-dispatcher/*.d which we ship empty.
     systemctl mask \
         apt-daily.service apt-daily.timer \
         apt-daily-upgrade.service apt-daily-upgrade.timer \
@@ -454,6 +462,8 @@ runcmd:
         e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
         polkit.service \
         smartd.service \
+        multipathd.service multipathd.socket \
+        networkd-dispatcher.service \
         2>/dev/null || true
 
   # SSH host-key hygiene: openssh-server's postinst generated host keys

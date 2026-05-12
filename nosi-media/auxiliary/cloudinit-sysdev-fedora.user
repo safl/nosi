@@ -47,6 +47,7 @@ packages:
   - jq
   - lsof
   - mtr
+  - NetworkManager-tui    # nmtui for interactive interface config
   - nmap
   - strace
   - tcpdump
@@ -73,6 +74,10 @@ packages:
   - pciutils
   - smartmontools
   - usbutils
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
+  # regulatory.db, etc. The kernel package used to pull linux-firmware via
+  # weak-deps; we set install_weak_deps=False so name it explicitly.
+  - linux-firmware
   - edk2-ovmf
   - qemu-img
   - qemu-system-x86-core
@@ -372,6 +377,9 @@ runcmd:
     if [ -n "$to_remove" ]; then
         dnf -y remove $to_remove
     fi
+    # abrt-*: Fedora's crash reporter (apport equivalent). multipathd:
+    # only meaningful with SAN multipath. Units that aren't installed
+    # are silently skipped by the 2>/dev/null swallow.
     systemctl mask \
         dnf-makecache.service dnf-makecache.timer \
         fwupd.service fwupd-refresh.service fwupd-refresh.timer \
@@ -379,6 +387,9 @@ runcmd:
         mlocate-updatedb.timer \
         polkit.service \
         smartd.service \
+        abrtd.service abrt-ccpp.service abrt-oops.service \
+        abrt-vmcore.service abrt-journal-core.service abrt-xorg.service \
+        multipathd.service multipathd.socket \
         2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*

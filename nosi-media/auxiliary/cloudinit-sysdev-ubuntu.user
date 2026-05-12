@@ -51,6 +51,7 @@ packages:
   - jq
   - lsof
   - mtr-tiny
+  - network-manager       # provides nmtui for interactive interface config
   - nmap
   - strace
   - tcpdump
@@ -82,6 +83,10 @@ packages:
   - pciutils
   - smartmontools
   - usbutils
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
+  # regulatory.db, etc. The kernel package used to pull linux-firmware via
+  # Recommends; we drop Recommends so name it explicitly.
+  - linux-firmware
   - ovmf
   - qemu-system-x86
   - qemu-utils
@@ -367,13 +372,48 @@ runcmd:
     chown root:root /etc/sudoers.d/odus
     chmod 0440 /etc/sudoers.d/odus
 
+  # Drop snapd. Ubuntu cloud images ship it preinstalled; sysdev doesn't
+  # use snaps (apt + podman cover the same ground) and snapd's
+  # auto-refresh timer + squashfs loop mounts add measurable runtime
+  # overhead on a flashed bare-metal box. Remove installed snaps first so
+  # apt can unmount their loops, then purge snapd and hold it so a future
+  # package_upgrade can't drag it back via a Recommends/Depends.
+  - |
+    set -eu
+    if command -v snap >/dev/null 2>&1; then
+        # Iterate a few times: some snaps refuse removal until their
+        # dependents go (e.g. core / snapd base is last).
+        for _ in 1 2 3; do
+            snaps=$(snap list 2>/dev/null | awk 'NR>1 {print $1}') || true
+            [ -z "$snaps" ] && break
+            for s in $snaps; do
+                snap remove --purge "$s" 2>/dev/null || true
+            done
+        done
+    fi
+    if dpkg-query -W -f='${Status}' snapd 2>/dev/null \
+            | grep -q "install ok installed"; then
+        DEBIAN_FRONTEND=noninteractive apt-get -y purge snapd
+    fi
+    apt-mark hold snapd 2>/dev/null || true
+    rm -rf /root/snap /home/*/snap /snap /var/snap /var/lib/snapd /var/cache/snapd
+
   # Minimize background daemons / timers (see debian variant for rationale).
   - |
     set -eu
     # See debian variant for rationale. Purges desktop-flavored daemons
     # the cloud base may carry but a headless sysdev box doesn't want.
     to_purge=""
-    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools udisks2; do
+    # Beyond the cross-distro set, Ubuntu carries Canonical-specific
+    # phone-home / interactive-prompt daemons (apport, whoopsie, pollinate,
+    # update-notifier-common, ubuntu-pro-client). needrestart prompts at
+    # apt time; we don't run apt interactively. accountsservice is the
+    # desktop user-metadata D-Bus daemon, unused headless.
+    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools \
+               udisks2 accountsservice \
+               apport whoopsie pollinate needrestart \
+               update-notifier-common \
+               ubuntu-pro-client ubuntu-advantage-tools; do
         if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null \
                 | grep -q "install ok installed"; then
             to_purge="$to_purge $pkg"
@@ -392,6 +432,8 @@ runcmd:
         e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
         polkit.service \
         smartd.service \
+        multipathd.service multipathd.socket \
+        networkd-dispatcher.service \
         2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*
