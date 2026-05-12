@@ -378,6 +378,7 @@ runcmd:
         man-db-cache-update.service man-db-cache-update.timer \
         mlocate-updatedb.timer \
         polkit.service \
+        smartd.service \
         2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*

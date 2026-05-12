@@ -65,7 +65,12 @@ packages:
   - pkg-config
   - python3
   - valgrind
+  # See debian variant: name podman's Recommends explicitly (crun /
+  # fuse-overlayfs / dbus-user-session) since Recommends are off.
   - buildah
+  - crun
+  - dbus-user-session
+  - fuse-overlayfs
   - passt
   - podman
   - podman-docker
@@ -386,6 +391,7 @@ runcmd:
         man-db.service man-db.timer \
         e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
         polkit.service \
+        smartd.service \
         2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*

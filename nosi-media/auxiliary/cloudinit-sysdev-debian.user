@@ -73,9 +73,16 @@ packages:
   - pkg-config
   - python3
   - valgrind
-  # containers
+  # containers. crun + fuse-overlayfs + dbus-user-session are podman's
+  # Recommends on Debian/Ubuntu (Fedora has them as hard deps); we drop
+  # Recommends globally for image size, so name them explicitly here.
+  # Without crun, podman falls back to runc which mismanages cgroup v2;
+  # without dbus-user-session, rootless cgroup delegation fails.
   - buildah
-  - passt                # provides /usr/bin/pasta for podman rootless networking
+  - crun
+  - dbus-user-session
+  - fuse-overlayfs
+  - passt                # /usr/bin/pasta for podman rootless networking
   - podman
   - podman-docker
   - skopeo
@@ -446,6 +453,7 @@ runcmd:
         man-db.service man-db.timer \
         e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
         polkit.service \
+        smartd.service \
         2>/dev/null || true
 
   # SSH host-key hygiene: openssh-server's postinst generated host keys
