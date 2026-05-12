@@ -212,6 +212,86 @@ runcmd:
     SCRIPT
     chmod 0755 /usr/local/bin/nosi-pci-mode
 
+  # /etc/motd banner regenerated each boot by nosi-motd.service.
+  # (See debian variant for the full script + service body.)
+  - |
+    cat > /usr/local/bin/nosi-motd <<'SCRIPT'
+    #!/bin/sh
+    set -eu
+
+    . /etc/os-release 2>/dev/null || true
+    distro="${PRETTY_NAME:-Linux}"
+    kernel="$(uname -r)"
+    arch="$(uname -m)"
+    host="$(hostnamectl --static 2>/dev/null || hostname)"
+
+    ips=""
+    while IFS= read -r line; do
+        iface="$(echo "$line" | awk '{print $2}')"
+        addr="$(echo "$line" | awk '{print $4}' | cut -d/ -f1)"
+        [ -z "$addr" ] && continue
+        ips="${ips}${ips:+, }${addr} (${iface})"
+    done <<EOF
+    $(ip -4 -o addr show scope global 2>/dev/null)
+    EOF
+    [ -z "$ips" ] && ips="(none)"
+
+    case " $(cat /proc/cmdline) " in
+        *' intel_iommu=on '*|*' amd_iommu=on '*) iommu="vfio (IOMMU on)" ;;
+        *' intel_iommu=off '*|*' amd_iommu=off '*) iommu="uio  (IOMMU off)" ;;
+        *) iommu="unset" ;;
+    esac
+
+    hp_count="$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)"
+    hp_size_kb="$(awk '/Hugepagesize:/ {print $2}' /proc/meminfo)"
+    if [ "${hp_count:-0}" -gt 0 ]; then
+        hp_mib=$(( hp_count * hp_size_kb / 1024 ))
+        hugepgs="${hp_count} x ${hp_size_kb} kB = ${hp_mib} MiB"
+    else
+        hugepgs="0 (sudo sysctl -w vm.nr_hugepages=N to allocate)"
+    fi
+
+    cpu_model="$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
+    cpu_count="$(nproc)"
+    ram_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+    ram_gib=$(( ram_kib / 1024 / 1024 ))
+    nvme_count="$(find /dev -maxdepth 1 -name 'nvme*n*' 2>/dev/null | wc -l)"
+
+    cat <<EOM
+
+      nosi sysdev   ${distro}   Linux ${kernel}   ${arch}
+
+      hostname:  ${host}
+      ip:        ${ips}
+      iommu:     ${iommu}
+      hugepgs:   ${hugepgs}
+      cpu:       ${cpu_model} x ${cpu_count}
+      ram:       ${ram_gib} GiB
+      nvme:      ${nvme_count}
+
+      Helpers:
+        nosi-pci-mode {vfio|uio|status}   flip IOMMU mode (reboot to apply)
+
+    EOM
+    SCRIPT
+    chmod 0755 /usr/local/bin/nosi-motd
+
+    cat > /etc/systemd/system/nosi-motd.service <<'UNIT'
+    [Unit]
+    Description=Generate nosi banner for /etc/motd
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    ExecStart=/bin/sh -c '/usr/local/bin/nosi-motd > /etc/motd'
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+  - systemctl enable nosi-motd.service
+
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
   - echo 'odus:odus' | chpasswd
