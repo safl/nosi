@@ -8,8 +8,6 @@
 
 [nosi]
 variant = "fedora-sysdev"
-hostname = "nosi-fedora"
-timezone = "UTC"
 
 [cijoe.transport.qemu_guest]
 username = "root"

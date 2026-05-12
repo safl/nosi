@@ -140,9 +140,6 @@ def main(args, cijoe):
         log.error("Failed computing sha256sum")
         return err
 
-    cijoe.run_local(f"ls -la {disk_path}")
-    cijoe.run_local(f"cat {disk_path}.sha256")
-
     return 0
 
 

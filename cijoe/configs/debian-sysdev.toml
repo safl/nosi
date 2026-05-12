@@ -5,8 +5,6 @@
 
 [nosi]
 variant = "debian-sysdev"
-hostname = "nosi-debian"
-timezone = "UTC"
 
 [cijoe.transport.qemu_guest]
 username = "root"

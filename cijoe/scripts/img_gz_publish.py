@@ -74,7 +74,7 @@ def main(args, cijoe):
         return err
 
     log.info(f"Compressing {raw_path} -> {gz_path} (gzip -{level})")
-    err, _ = cijoe.run_local(f"sh -c 'gzip -{level} -c {raw_path} > {gz_path}'")
+    err, _ = cijoe.run_local(f"gzip -{level} -c {raw_path} > {gz_path}")
     if err:
         log.error("Failed gzip-compressing raw image")
         return err
@@ -84,8 +84,10 @@ def main(args, cijoe):
         log.error("Failed computing sha256sum")
         return err
 
-    cijoe.run_local(f"ls -la {gz_path}")
-    cijoe.run_local(f"cat {gz_path}.sha256")
+    # The raw .img is an 8-12 GiB intermediate; once the .img.gz + .sha256
+    # are written it has no further consumer (artifact upload + GHCR push
+    # take only the .gz). Drop it to free disk on hosted CI runners.
+    raw_path.unlink(missing_ok=True)
 
     return 0
 

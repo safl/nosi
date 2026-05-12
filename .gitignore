@@ -1,9 +1,8 @@
 cijoe-output/
 cijoe-archive/
 dist/
-*.raw
-*.raw.zst
-*.raw.gz
+*.img
+*.img.gz
 *.qcow2
 *.sha256
 __pycache__/

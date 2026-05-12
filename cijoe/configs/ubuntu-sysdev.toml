@@ -5,8 +5,6 @@
 
 [nosi]
 variant = "ubuntu-sysdev"
-hostname = "nosi-ubuntu"
-timezone = "UTC"
 
 [cijoe.transport.qemu_guest]
 username = "root"

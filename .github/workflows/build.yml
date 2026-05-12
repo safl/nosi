@@ -46,13 +46,14 @@ jobs:
       - name: Cache upstream cloud image
         # Cloud images are 500MB-2GB downloads; on a fresh runner that's the
         # dominant cost of a cold build. Key on the variant's TOML so a
-        # cloud.url change automatically busts the cache.
+        # cloud.url change automatically busts the cache. No restore-keys
+        # fallback: a stale cache from a prior URL would satisfy
+        # diskimage_build's path-existence check and the bake would proceed
+        # with the wrong upstream.
         uses: actions/cache@v4
         with:
           path: ~/system_imaging/cloud
           key: cloud-${{ matrix.variant }}-${{ hashFiles(format('cijoe/configs/{0}.toml', matrix.variant)) }}
-          restore-keys: |
-            cloud-${{ matrix.variant }}-
 
       - name: Enable KVM access for the runner
         # GHA hosted runners ship /dev/kvm but the runner user isn't in the
@@ -68,8 +69,7 @@ jobs:
 
       - name: Install cijoe
         run: |
-          pipx install --force cijoe
-          pipx ensurepath
+          pipx install cijoe
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build ${{ matrix.variant }}
@@ -91,7 +91,6 @@ jobs:
             echo "| File | Size | Bytes |"
             echo "|---|---:|---:|"
             for f in nosi-${IMG}-x86_64.qcow2 \
-                     nosi-${IMG}-x86_64.img \
                      nosi-${IMG}-x86_64.img.gz; do
                 if [ -e "$f" ]; then
                     bytes=$(stat -c%s "$f")
@@ -140,9 +139,12 @@ jobs:
 
       - name: Log in to GHCR
         if: env.PUBLISH == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GHCR_TOKEN" \
+            | oras login ghcr.io -u "$GHCR_USER" --password-stdin
 
       - name: Push ${{ matrix.variant }} to GHCR
         if: env.PUBLISH == 'true'
