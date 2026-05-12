@@ -48,3 +48,42 @@ user-data file under `nosi-media/auxiliary/`. A
    with a SHA-256 sidecar.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
+
+## Repository layout
+
+```
+Makefile                            # build / deps / all / clean / docs-*
+cijoe/
+  configs/<variant>.toml            # cloud image URL, qemu guest, publish paths
+  tasks/build.yaml                  # cijoe workflow
+  scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
+  scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
+nosi-media/
+  auxiliary/
+    cloudinit-metadata.meta         # shared NoCloud meta-data
+    cloudinit-sysdev-<distro>.user  # per-variant cloud-init user-data
+docs/
+  src/                              # sphinx markdown sources (this tree)
+  tooling/                          # nosi-docs package (pyproject + cli)
+  Makefile                          # sphinx-build wrapper
+.github/workflows/
+  build.yml                         # matrix build + GHCR publish
+  docs.yml                          # docs build + GitHub Pages deploy
+```
+
+## Building the docs
+
+A small Python package (`nosi-docs`) lives under `docs/tooling/` and
+ships three console scripts: `nosi-docs-build-html`, `nosi-docs-build-pdf`,
+`nosi-docs-serve`. The top-level `Makefile` exposes them as:
+
+```
+make docs-deps          # pipx install ./docs/tooling
+make docs-html          # nosi-docs-build-html -> docs/_build/html/
+make docs-pdf           # nosi-docs-build-pdf  -> docs/_build/latex/nosi.pdf
+make docs-serve         # live-rebuild on http://localhost:8000
+make docs-clean         # remove docs/_build/
+```
+
+The PDF build needs a LaTeX distribution (`texlive` variants on Linux,
+MacTeX + latexmk on macOS).

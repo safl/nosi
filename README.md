@@ -17,6 +17,8 @@ ready-to-SSH bare-metal dev box. The companion project
 [bty](https://github.com/safl/bty) is one convenient flasher; it is not
 required.
 
+**Documentation: <https://safl.github.io/nosi/>** (sources in `docs/src/`)
+
 ## Scope
 
 | Variant          | Distribution | Version    | Codename  | Arch    | Flavor   |
@@ -25,47 +27,13 @@ required.
 | `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
 | `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
 
-The intent is **bare bases + opinionated flavors**, not actual layered
-inheritance (no Yocto / Nix style composition). Each variant is a
-self-contained build keyed by `<distro>-<flavor>`. Today only the
-`sysdev` flavor ships; a bare `base` flavor and other flavors (FreeBSD,
-Windows, ...) are roadmap.
-
 ## Quick start
 
     make deps                          # install cijoe via pipx
     make build VARIANT=debian-sysdev   # build one variant
     make all                           # build every variant
 
-Local builds need `qemu-system-x86_64` + KVM accessible. CI runs natively
-on `ubuntu-24.04` runners with a udev rule that makes `/dev/kvm`
-world-readable.
-
-## Documentation
-
-Rendered at <https://safl.github.io/nosi/>. Sources under `docs/src/`:
-
-- **[Overview](docs/src/overview.md)** -- bases + flavors, build pipeline.
-- **[Quick start](docs/src/quickstart.md)** -- build locally, flash, pull from GHCR.
-- **[Flavors / sysdev](docs/src/flavors.md)** -- what's in the C/Python/Rust
-  toolset; userspace PCI, KVM, container passthrough; daemon-minimization;
-  the login banner; the `nosi-pci-mode` / `devbind` / `hugepages` helpers.
-- **[Default credentials](docs/src/credentials.md)** -- `odus` / `odus.321`,
-  per-instance SSH host keys, flash-time seed override.
-- **[Release model](docs/src/release.md)** -- rolling, GHCR via ORAS,
-  pinning by blob digest.
-- **[Related projects](docs/src/related.md)** -- bty, xnvme, cijoe.
-
-Build the docs:
-
-    make docs-deps                     # pipx install ./docs/tooling
-    make docs-html                     # nosi-docs-build-html  -> docs/_build/html/
-    make docs-pdf                      # nosi-docs-build-pdf   -> docs/_build/latex/nosi.pdf
-    make docs-serve                    # live-rebuild on http://localhost:8000
-
-The `docs/tooling/` directory is a small Python package (`nosi-docs`) that
-ships those three console scripts; same pattern as `safl/bty`'s
-`docs/tooling/`.
+Local builds need `qemu-system-x86_64` + KVM accessible.
 
 ## Releasing
 
@@ -76,21 +44,4 @@ Rolling, not semver. Every publish gets:
 
 Publishes fire on push to `main`, weekly cron (Sunday 03:00 UTC), or
 manual `workflow_dispatch`. PRs build but don't publish. bty consumes by
-blob digest, not tag. See [docs/src/release.md](docs/src/release.md).
-
-## Layout
-
-    Makefile                            # build / deps / all / clean / docs-*
-    cijoe/
-      configs/<variant>.toml            # cloud image URL, qemu guest, publish paths
-      tasks/build.yaml                  # cijoe workflow
-      scripts/diskimage_build.py        # download → resize → seed → boot → snapshot
-      scripts/img_gz_publish.py         # qcow2 → raw → .img.gz + sha256
-    nosi-media/
-      auxiliary/
-        cloudinit-metadata.meta         # shared NoCloud meta-data
-        cloudinit-sysdev-<distro>.user  # per-variant cloud-init user-data
-    docs/
-      src/                              # sphinx markdown sources
-      Makefile                          # sphinx-build wrapper
-    .github/workflows/build.yml         # matrix build + GHCR publish
+blob digest, not tag.
