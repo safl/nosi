@@ -75,6 +75,35 @@ jobs:
       - name: Build ${{ matrix.variant }}
         run: make build VARIANT=${{ matrix.variant }}
 
+      - name: Show built-image sizes
+        # Runs on every event (including PRs) and even if a later step
+        # fails -- so the .qcow2 / .img / .img.gz sizes are visible
+        # before the upload + GHCR-push happen.
+        if: always()
+        env:
+          IMG: ${{ matrix.variant }}
+        run: |
+          set -eu
+          cd "$HOME/system_imaging/disk"
+          {
+            echo "### \`${IMG}\` built-image sizes"
+            echo
+            echo "| File | Size | Bytes |"
+            echo "|---|---:|---:|"
+            for f in nosi-${IMG}-x86_64.qcow2 \
+                     nosi-${IMG}-x86_64.img \
+                     nosi-${IMG}-x86_64.img.gz; do
+                if [ -e "$f" ]; then
+                    bytes=$(stat -c%s "$f")
+                    printf '| `%s` | %s | %s |\n' \
+                        "$f" "$(numfmt --to=iec "$bytes")" "$bytes"
+                else
+                    printf '| `%s` | _(missing)_ | _(missing)_ |\n' "$f"
+                fi
+            done
+            echo
+          } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/stderr}"
+
       - name: Upload baked image + cijoe report (always)
         if: always()
         uses: actions/upload-artifact@v4
