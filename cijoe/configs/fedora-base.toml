@@ -1,4 +1,4 @@
-# nosi base image — Fedora 43
+# nosi base image — Fedora 44
 #
 # Fedora cloud-image point releases have non-predictable URLs (build numbers
 # vary). Pinned to a known-good release; bump as needed.
@@ -36,8 +36,8 @@ system_args.tcp_forward = { host = 4200, guest = 22 }
 [system-imaging.images.nosi-fedora-base-x86_64]
 system_label = "x86_64"
 
-cloud.url = "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2"
-cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/Fedora-Cloud-Base-Generic-43.x86_64.qcow2"
+cloud.url = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/Fedora-Cloud-Base-Generic-44.x86_64.qcow2"
 cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
 cloud.userdata_path = "nosi-media/auxiliary/cloudinit-base-fedora.user"
 

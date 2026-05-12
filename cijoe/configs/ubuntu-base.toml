@@ -1,6 +1,4 @@
-# nosi base image — Ubuntu 24.04 LTS (noble)
-#
-# 26.04 isn't on archive.ubuntu.com yet as of 2026-05; bump when mirrors carry it.
+# nosi base image — Ubuntu 26.04 LTS (resolute)
 #
 # Usage (from repo root, the Makefile cd's into cijoe/):
 #   make build VARIANT=ubuntu-base
@@ -35,8 +33,8 @@ system_args.tcp_forward = { host = 4200, guest = 22 }
 [system-imaging.images.nosi-ubuntu-base-x86_64]
 system_label = "x86_64"
 
-cloud.url = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
-cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/noble-server-cloudimg-amd64.img"
+cloud.url = "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/resolute-server-cloudimg-amd64.img"
 cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
 cloud.userdata_path = "nosi-media/auxiliary/cloudinit-base-ubuntu.user"
 

@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base — Fedora 43. PiKVM-style defaults: operator account `odus` with
+# nosi base — Fedora 44. Default credentials: operator account `odus` with
 # password `odus`, root locked, SSH password auth on. Per-instance SSH
 # identity: host keys stripped at end of cloud-init, regenerated on first
 # boot.

@@ -15,8 +15,8 @@ help:
 	@echo
 	@echo "Variants:"
 	@echo "  debian-base       Debian 13 trixie"
-	@echo "  ubuntu-base       Ubuntu 24.04 noble"
-	@echo "  fedora-base       Fedora 43"
+	@echo "  ubuntu-base       Ubuntu 26.04 resolute"
+	@echo "  fedora-base       Fedora 44"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"

@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base — Ubuntu 24.04 LTS (noble). PiKVM-style defaults: operator
+# nosi base — Ubuntu 26.04 LTS (resolute). Default credentials: operator
 # account `odus` with password `odus`, root locked, SSH password auth on.
 # Per-instance SSH identity: host keys stripped at end of cloud-init,
 # regenerated on first boot.
@@ -22,7 +22,7 @@ resize_rootfs: true
 apt:
   sources:
     universe:
-      source: "deb http://archive.ubuntu.com/ubuntu noble universe"
+      source: "deb http://archive.ubuntu.com/ubuntu resolute universe"
 
 package_update: true
 package_upgrade: false

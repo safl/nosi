@@ -9,8 +9,8 @@ Mirrors the structure of bty's own `cijoe/` + `bty-media/` layout and
 | Variant         | Distribution      | Arch    |
 | --------------- | ----------------- | ------- |
 | `debian-base`   | Debian 13 trixie  | x86_64  |
-| `ubuntu-base`   | Ubuntu 24.04 LTS  | x86_64  |
-| `fedora-base`   | Fedora 43         | x86_64  |
+| `ubuntu-base`   | Ubuntu 26.04 LTS  | x86_64  |
+| `fedora-base`   | Fedora 44         | x86_64  |
 
 FreeBSD and Windows variants are planned. Appliance overlays will stack on
 top of the bases.
@@ -26,14 +26,12 @@ user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
    meta-data.
 4. Boots QEMU with the seed; cloud-init installs the package list, drops in
    `uv`, enables `podman.socket`, creates the `odus` operator account
-   (PiKVM-style default credentials), locks root, strips SSH host keys and
+   with default credentials, locks root, strips SSH host keys and
    machine-id, and powers off.
 5. Compacts the baked qcow2 and gzip-publishes it as a dd-able `.img.gz`
    with a SHA-256 sidecar for bty's catalog.
 
 ## Default credentials
-
-Same model as PiKVM / Raspberry Pi OS:
 
 - Operator: `odus` / `odus` (passwordless sudo, shell `/bin/bash`)
 - Root: locked

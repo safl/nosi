@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base — Debian 13 (trixie). PiKVM-style defaults: operator account
+# nosi base — Debian 13 (trixie). Default credentials: operator account
 # `odus` with password `odus`, root locked, SSH password auth on (operators
 # rotate the password before exposing the appliance). Per-instance SSH
 # identity: host keys are stripped at the end of cloud-init; sshd's stock
