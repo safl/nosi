@@ -1,9 +1,11 @@
 # nosi
 
 Automated builds of **Niche Operating System Images**. Niche because
-they ship pre-loaded with software fit for systems development in C and
-Python, plus a handful of dev tools of a certain opinionated flavor
-(`helix`, `zellij`, `btop`, `uv`, `podman` + `podman-docker`, ...).
+they ship pre-loaded with software fit for systems development in C,
+Python, and Rust, plus a handful of dev tools of a certain opinionated
+flavor: `helix`, `zellij`, `btop`, `uv`, `cargo`/`rustup`, `podman` +
+`podman-docker`; LSPs `clangd`, `pyright`, `ruff`, `rust-analyzer`;
+`gdb`, `valgrind`; ...
 
 The output is a vanilla disk image. Flash it with `dd`, Balena Etcher,
 or any tool that handles `.img.gz`, and you have a ready-to-SSH
@@ -22,7 +24,8 @@ images onto systems in different ways; it is not required.
 The intent is **bare bases + opinionated flavors**, not actual layered
 inheritance (no Yocto / Nix style composition). Each variant is a
 self-contained build keyed by `<distro>-<flavor>`: the `sysdev` flavor
-selects the package set fit for C / Python systems dev work; a future
+selects the package set fit for C / Python / Rust systems dev work
+(compilers, LSPs, debuggers, the modern terminal-stack); a future
 `base` flavor would carry only the minimum to be SSH-reachable.
 
 Today the only flavor shipped is `sysdev`. A bare `base` flavor and
@@ -44,9 +47,8 @@ user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
 5. Compacts the baked qcow2 and gzip-publishes it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
 
-Layout, cijoe scripts, and cloud-init userdata structure all mirror
-`safl/bty`'s internal `cijoe/` + `bty-media/` pattern, originally
-modelled on `safl/jellyfin-kiosk-appliance-builder`.
+Layout, cijoe scripts, and cloud-init userdata structure mirror
+`safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
 ## Default credentials
 
