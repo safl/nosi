@@ -13,11 +13,11 @@ images onto systems in different ways; it is not required.
 
 ## Scope
 
-| Variant         | Distribution      | Arch    |
-| --------------- | ----------------- | ------- |
-| `debian-sysdev`   | Debian 13 trixie  | x86_64  |
-| `ubuntu-sysdev`   | Ubuntu 26.04 LTS  | x86_64  |
-| `fedora-sysdev`   | Fedora 44         | x86_64  |
+| Variant          | Distribution | Version    | Codename  | Arch    | Overlay  |
+| ---------------- | ------------ | ---------- | --------- | ------- | -------- |
+| `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
+| `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
+| `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
 
 The intended structure is **bare bases + overlays**. A base is a minimal,
 distro-stock image with just enough to be SSH-reachable; the opinionated
