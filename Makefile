@@ -1,4 +1,4 @@
-VARIANT ?= debian-base
+VARIANT ?= debian-sysdev
 
 .DEFAULT_GOAL := help
 
@@ -14,9 +14,9 @@ help:
 	@echo "  clean             Remove cijoe artefacts"
 	@echo
 	@echo "Variants:"
-	@echo "  debian-base       Debian 13 trixie"
-	@echo "  ubuntu-base       Ubuntu 26.04 resolute"
-	@echo "  fedora-base       Fedora 44"
+	@echo "  debian-sysdev       Debian 13 trixie"
+	@echo "  ubuntu-sysdev       Ubuntu 26.04 resolute"
+	@echo "  fedora-sysdev       Fedora 44"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
@@ -34,9 +34,9 @@ build:
 	cd cijoe && cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
 
 all:
-	$(MAKE) build VARIANT=debian-base
-	$(MAKE) build VARIANT=ubuntu-base
-	$(MAKE) build VARIANT=fedora-base
+	$(MAKE) build VARIANT=debian-sysdev
+	$(MAKE) build VARIANT=ubuntu-sysdev
+	$(MAKE) build VARIANT=fedora-sysdev
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive

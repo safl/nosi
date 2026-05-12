@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-base, ubuntu-base, fedora-base]
+        variant: [debian-sysdev, ubuntu-sysdev, fedora-sysdev]
 
     steps:
       - uses: actions/checkout@v5

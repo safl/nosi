@@ -15,12 +15,19 @@ images onto systems in different ways; it is not required.
 
 | Variant         | Distribution      | Arch    |
 | --------------- | ----------------- | ------- |
-| `debian-base`   | Debian 13 trixie  | x86_64  |
-| `ubuntu-base`   | Ubuntu 26.04 LTS  | x86_64  |
-| `fedora-base`   | Fedora 44         | x86_64  |
+| `debian-sysdev`   | Debian 13 trixie  | x86_64  |
+| `ubuntu-sysdev`   | Ubuntu 26.04 LTS  | x86_64  |
+| `fedora-sysdev`   | Fedora 44         | x86_64  |
 
-FreeBSD and Windows variants are planned. Appliance overlays will stack on
-top of the bases.
+The intended structure is **bare bases + overlays**. A base is a minimal,
+distro-stock image with just enough to be SSH-reachable; the opinionated
+content (helix / zellij / btop / uv / podman / C + Python toolchains / ...)
+belongs in an overlay that sits on top. The `*-sysdev` variants above are
+the C/Python systems-dev overlay applied to each distro.
+
+Today each `*-sysdev` build runs base + overlay in a single cloud-init
+pass. Carving the bare base out into its own `*-base` variant (and adding
+other overlay flavors, FreeBSD, Windows) is on the roadmap.
 
 ## How it works
 
@@ -63,7 +70,7 @@ defaults.
 ## Quick start
 
     make deps                          # install cijoe via pipx
-    make build VARIANT=debian-base     # build one variant
+    make build VARIANT=debian-sysdev     # build one variant
     make all                           # build every variant
 
 Local builds need `qemu-system-x86_64` + KVM accessible. CI runs natively
@@ -96,9 +103,9 @@ Flashing directly, without any registry client:
     Makefile                            # build / deps / all / clean
     cijoe/
       configs/
-        debian-base.toml                # cloud image URL, qemu guest, publish paths
-        ubuntu-base.toml
-        fedora-base.toml
+        debian-sysdev.toml                # cloud image URL, qemu guest, publish paths
+        ubuntu-sysdev.toml
+        fedora-sysdev.toml
       tasks/
         build.yaml                      # cijoe workflow: diskimage_build + img_gz_publish
       scripts/
@@ -107,7 +114,7 @@ Flashing directly, without any registry client:
     nosi-media/
       auxiliary/
         cloudinit-metadata.meta         # shared NoCloud meta-data
-        cloudinit-base-debian.user      # per-variant cloud-init user-data
-        cloudinit-base-ubuntu.user
-        cloudinit-base-fedora.user
+        cloudinit-sysdev-debian.user      # per-variant cloud-init user-data
+        cloudinit-sysdev-ubuntu.user
+        cloudinit-sysdev-fedora.user
     .github/workflows/build.yml         # matrix build + GHCR publish

@@ -1,12 +1,12 @@
 ---
 doc: |
-  nosi base image build
-  ====================
+  nosi image build
+  ================
 
   1. Download the upstream cloud image for the variant.
   2. Resize the boot disk so cloud-init has room to install packages.
   3. Build a NoCloud seed.iso from
-     nosi-media/auxiliary/cloudinit-base-<distro>.user + the shared meta-data.
+     nosi-media/auxiliary/cloudinit-sysdev-<distro>.user + the shared meta-data.
   4. Boot QEMU; cloud-init installs the package set, sets up the default
      `odus` operator account, strips SSH host keys and machine-id, and
      powers off.

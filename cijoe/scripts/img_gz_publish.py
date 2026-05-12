@@ -92,5 +92,5 @@ def main(args, cijoe):
 
 def _default_image_name(cijoe) -> str:
     nosi = cijoe.getconf("nosi", {})
-    variant = nosi.get("variant", "debian-base")
+    variant = nosi.get("variant", "debian-sysdev")
     return f"nosi-{variant}-x86_64"

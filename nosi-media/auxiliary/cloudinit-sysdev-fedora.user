@@ -118,7 +118,7 @@ runcmd:
   - dnf clean all
   - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi fedora-base baked in $UPTIME seconds; powering off"
+final_message: "nosi fedora-sysdev baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff
