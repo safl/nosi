@@ -1,6 +1,6 @@
 # nosi
 
-Automated builder for headless system images consumed by [bty](https://github.com/safl/bty).
+Automated builds of operating system images for [bty](https://github.com/safl/bty).
 Mirrors the structure of bty's own `cijoe/` + `bty-media/` layout and
 `jellyfin-kiosk-appliance-builder`.
 

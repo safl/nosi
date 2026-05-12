@@ -5,7 +5,7 @@ VARIANT ?= debian-base
 .PHONY: help deps build all clean
 
 help:
-	@echo "nosi — headless system image builder for bty"
+	@echo "nosi — automated builds of operating system images for bty"
 	@echo
 	@echo "Targets:"
 	@echo "  deps              Install cijoe via pipx"
