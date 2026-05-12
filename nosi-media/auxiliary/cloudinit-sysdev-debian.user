@@ -32,22 +32,26 @@ apt:
     APT::Install-Recommends "false";
     APT::Install-Suggests "false";
 
+# Refresh and upgrade the base image's packages before installing the
+# `packages:` list below: a cloud base is a point-in-time snapshot, and
+# without an upgrade the baked nosi image inherits whatever CVEs the
+# upstream snapshot was carrying. Adds a couple of minutes to bake time.
 package_update: true
-package_upgrade: false
+package_upgrade: true
 
 packages:
   - ca-certificates
   - openssh-server
   - sudo
   - systemd-resolved
-  # user daily-driver baseline
+  # user daily-driver baseline (helix + zellij installed from upstream
+  # tarballs in runcmd; distro packages skew old and Ubuntu 26.04 dropped
+  # helix from universe at one point)
   - btop
   - git
-  - helix
   - htop
   - meson
   - ninja-build
-  - zellij
   # network & debug
   - curl
   - dnsutils
@@ -71,6 +75,7 @@ packages:
   - valgrind
   # containers
   - buildah
+  - passt                # provides /usr/bin/pasta for podman rootless networking
   - podman
   - podman-docker
   - skopeo
@@ -124,6 +129,54 @@ runcmd:
     PROF
     chmod 0644 /etc/profile.d/nosi-rust.sh
     /usr/local/cargo/bin/rustc --version
+
+  # Install Helix editor from upstream release. Distro packages lag
+  # the upstream pace and Ubuntu 26.04 lost helix from universe at one
+  # point; the upstream tarball is the only reliable channel across the
+  # three variants. Runtime data lives at /usr/local/share/helix/runtime
+  # and is found via $HELIX_RUNTIME (set in /etc/profile.d/nosi-helix.sh).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  tarch=x86_64-linux ;;
+        aarch64) tarch=aarch64-linux ;;
+        *) echo "nosi: unsupported arch $arch for helix" >&2; exit 1 ;;
+    esac
+    # Resolve latest tag via the releases/latest redirect (no jq dep).
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/helix-editor/helix/releases/latest \
+        | sed 's#.*/tag/##')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/helix-editor/helix/releases/download/${ver}/helix-${ver}-${tarch}.tar.xz" \
+        | tar -xJ -C "$tmp"
+    src="$tmp/helix-${ver}-${tarch}"
+    install -D -m 0755 "$src/hx" /usr/local/bin/hx
+    mkdir -p /usr/local/share/helix
+    rm -rf /usr/local/share/helix/runtime
+    cp -a "$src/runtime" /usr/local/share/helix/runtime
+    rm -rf "$tmp"
+    cat > /etc/profile.d/nosi-helix.sh <<'PROF'
+    export HELIX_RUNTIME=/usr/local/share/helix/runtime
+    PROF
+    chmod 0644 /etc/profile.d/nosi-helix.sh
+    /usr/local/bin/hx --version
+
+  # Install Zellij from upstream release (single static binary, musl).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  ztarget=x86_64-unknown-linux-musl ;;
+        aarch64) ztarget=aarch64-unknown-linux-musl ;;
+        *) echo "nosi: unsupported arch $arch for zellij" >&2; exit 1 ;;
+    esac
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ztarget}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/zellij"
+    rm -rf "$tmp"
+    /usr/local/bin/zellij --version
 
   # Shared /opt/python-tools venv with the opinionated helix LSP /
   # linter / formatter stack and the userspace-PCI helpers:
@@ -357,8 +410,29 @@ runcmd:
   # unattended-upgrades outright.
   - |
     set -eu
-    DEBIAN_FRONTEND=noninteractive apt-get -y purge unattended-upgrades || true
+    # Purge headless-useless daemons that the base image may carry:
+    #   unattended-upgrades  -- apt churn at random times
+    #   modemmanager         -- probes /dev/ttyUSB* with AT commands
+    #                           and breaks USB-serial dev work
+    #   packagekit*          -- D-Bus desktop package shim that races
+    #                           dpkg/apt for the rpm/dpkg lock
+    #   udisks2              -- D-Bus storage automounter for desktops;
+    #                           sysdev uses mount/lsblk directly
+    # Iterate so a not-present package is a no-op rather than aborting
+    # the whole apt-get call.
+    to_purge=""
+    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools udisks2; do
+        if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null \
+                | grep -q "install ok installed"; then
+            to_purge="$to_purge $pkg"
+        fi
+    done
+    if [ -n "$to_purge" ]; then
+        DEBIAN_FRONTEND=noninteractive apt-get -y purge $to_purge
+    fi
     apt-get -y autoremove --purge || true
+    # polkit stays installed (libs link against it and a --purge can
+    # cascade into unrelated packages) but its daemon is masked.
     systemctl mask \
         apt-daily.service apt-daily.timer \
         apt-daily-upgrade.service apt-daily-upgrade.timer \
@@ -366,6 +440,7 @@ runcmd:
         motd-news.service motd-news.timer \
         man-db.service man-db.timer \
         e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
+        polkit.service \
         2>/dev/null || true
 
   # SSH host-key hygiene: openssh-server's postinst generated host keys

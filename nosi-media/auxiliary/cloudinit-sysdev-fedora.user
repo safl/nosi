@@ -27,8 +27,10 @@ bootcmd:
         echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
     fi
 
+# See debian variant: upgrade the base snapshot before installing our
+# explicit packages, so the baked image picks up upstream security fixes.
 package_update: true
-package_upgrade: false
+package_upgrade: true
 
 packages:
   - ca-certificates
@@ -37,11 +39,9 @@ packages:
   - systemd-resolved
   - btop
   - git
-  - helix
   - htop
   - meson
   - ninja-build
-  - zellij
   - bind-utils
   - curl
   - jq
@@ -62,6 +62,7 @@ packages:
   - python3
   - valgrind
   - buildah
+  - passt
   - podman
   - podman-docker
   - skopeo
@@ -112,6 +113,51 @@ runcmd:
     PROF
     chmod 0644 /etc/profile.d/nosi-rust.sh
     /usr/local/cargo/bin/rustc --version
+
+  # Install Helix editor from upstream release (see debian variant for
+  # rationale). Runtime data lives at /usr/local/share/helix/runtime,
+  # located via $HELIX_RUNTIME (set in /etc/profile.d/nosi-helix.sh).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  tarch=x86_64-linux ;;
+        aarch64) tarch=aarch64-linux ;;
+        *) echo "nosi: unsupported arch $arch for helix" >&2; exit 1 ;;
+    esac
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/helix-editor/helix/releases/latest \
+        | sed 's#.*/tag/##')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/helix-editor/helix/releases/download/${ver}/helix-${ver}-${tarch}.tar.xz" \
+        | tar -xJ -C "$tmp"
+    src="$tmp/helix-${ver}-${tarch}"
+    install -D -m 0755 "$src/hx" /usr/local/bin/hx
+    mkdir -p /usr/local/share/helix
+    rm -rf /usr/local/share/helix/runtime
+    cp -a "$src/runtime" /usr/local/share/helix/runtime
+    rm -rf "$tmp"
+    cat > /etc/profile.d/nosi-helix.sh <<'PROF'
+    export HELIX_RUNTIME=/usr/local/share/helix/runtime
+    PROF
+    chmod 0644 /etc/profile.d/nosi-helix.sh
+    /usr/local/bin/hx --version
+
+  # Install Zellij from upstream release (single static binary, musl).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  ztarget=x86_64-unknown-linux-musl ;;
+        aarch64) ztarget=aarch64-unknown-linux-musl ;;
+        *) echo "nosi: unsupported arch $arch for zellij" >&2; exit 1 ;;
+    esac
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ztarget}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/zellij"
+    rm -rf "$tmp"
+    /usr/local/bin/zellij --version
 
   # Shared /opt/python-tools venv (see debian variant for rationale):
   # ruff + pyright LSPs + devbind + hugepages.
@@ -307,11 +353,23 @@ runcmd:
   # man-db refreshers that wake up periodically.
   - |
     set -eu
+    # See debian variant for rationale. Purges desktop-flavored daemons
+    # the cloud base may carry but a headless sysdev box doesn't want.
+    to_remove=""
+    for pkg in ModemManager PackageKit udisks2; do
+        if rpm -q "$pkg" >/dev/null 2>&1; then
+            to_remove="$to_remove $pkg"
+        fi
+    done
+    if [ -n "$to_remove" ]; then
+        dnf -y remove $to_remove
+    fi
     systemctl mask \
         dnf-makecache.service dnf-makecache.timer \
         fwupd.service fwupd-refresh.service fwupd-refresh.timer \
         man-db-cache-update.service man-db-cache-update.timer \
         mlocate-updatedb.timer \
+        polkit.service \
         2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*
