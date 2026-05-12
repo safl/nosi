@@ -1,4 +1,4 @@
-# nosi base image — Fedora 44
+# nosi base image : Fedora 44
 #
 # Fedora cloud-image point releases have non-predictable URLs (build numbers
 # vary). Pinned to a known-good release; bump as needed.

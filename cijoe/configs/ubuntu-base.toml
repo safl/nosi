@@ -1,4 +1,4 @@
-# nosi base image — Ubuntu 26.04 LTS (resolute)
+# nosi base image : Ubuntu 26.04 LTS (resolute)
 #
 # Usage (from repo root, the Makefile cd's into cijoe/):
 #   make build VARIANT=ubuntu-base

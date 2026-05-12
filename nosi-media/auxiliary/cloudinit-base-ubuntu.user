@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base — Ubuntu 26.04 LTS (resolute). Default credentials: operator
+# nosi base : Ubuntu 26.04 LTS (resolute). Default credentials: operator
 # account `odus` with password `odus`, root locked, SSH password auth on.
 # Per-instance SSH identity: host keys stripped at end of cloud-init,
 # regenerated on first boot.
@@ -113,7 +113,7 @@ runcmd:
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi ubuntu-base baked in $UPTIME seconds — powering off"
+final_message: "nosi ubuntu-base baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff

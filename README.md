@@ -1,16 +1,15 @@
 # nosi
 
-Automated builds of **Niche Operating System Images** — niche because
-they're pre-loaded with software fit for systems development in C and
+Automated builds of **Niche Operating System Images**. Niche because
+they ship pre-loaded with software fit for systems development in C and
 Python, plus a handful of dev tools of a certain opinionated flavor
-(`helix`, `zellij`, `btop`, `uv`, `podman` + `podman-docker`, …).
+(`helix`, `zellij`, `btop`, `uv`, `podman` + `podman-docker`, ...).
 
-The output is a vanilla disk image — flash it with `dd`, Balena Etcher,
+The output is a vanilla disk image. Flash it with `dd`, Balena Etcher,
 or any tool that handles `.img.gz`, and you have a ready-to-SSH
 bare-metal dev box. The companion project
-[bty](https://github.com/safl/bty) makes deployment especially convenient
-(content-addressed pull from a registry, MAC-keyed binding, USB / PXE
-workflows) but isn't required to use the images.
+[bty](https://github.com/safl/bty) is a convenient way to flash these
+images onto systems in different ways; it is not required.
 
 ## Scope
 
@@ -75,14 +74,14 @@ world-readable.
 
 Rolling, not semver. Every publish gets:
 
-- `ghcr.io/<owner>/<repo>/<variant>:YYYY.MM.DD-<shortsha>` — immutable
-- `ghcr.io/<owner>/<repo>/<variant>:latest` — moves to most recent publish
+- `ghcr.io/<owner>/<repo>/<variant>:YYYY.MM.DD-<shortsha>` (immutable)
+- `ghcr.io/<owner>/<repo>/<variant>:latest` (moves to most recent publish)
 
 Publishes fire on push to `main`, weekly cron (Sunday 03:00 UTC), or
 manual `workflow_dispatch`. PRs build but don't publish.
 
 Each per-build SHA-256 (the OCI blob digest) is printed on the workflow
-summary page and lives forever — that's the canonical reference for any
+summary page and lives forever. That's the canonical reference for any
 consumer that wants reproducible flashing (bty does this by default; any
 content-addressed tool can do the same).
 

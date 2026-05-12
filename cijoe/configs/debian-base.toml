@@ -1,4 +1,4 @@
-# nosi base image — Debian 13 (trixie)
+# nosi base image : Debian 13 (trixie)
 #
 # Usage (from repo root, the Makefile cd's into cijoe/):
 #   make build VARIANT=debian-base

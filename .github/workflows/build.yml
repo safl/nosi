@@ -146,7 +146,7 @@ jobs:
           sha=$(awk '{print $1}' "${gz}.sha256")
           size=$(numfmt --to=iec "$(stat -c%s "${gz}")")
           {
-            echo "### \`${IMG}\` — ${ROLLING}"
+            echo "### \`${IMG}\` (${ROLLING})"
             echo
             echo "| | |"
             echo "|---|---|"

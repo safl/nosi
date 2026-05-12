@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base — Debian 13 (trixie). Default credentials: operator account
+# nosi base : Debian 13 (trixie). Default credentials: operator account
 # `odus` with password `odus`, root locked, SSH password auth on (operators
 # rotate the password before exposing the appliance). Per-instance SSH
 # identity: host keys are stripped at the end of cloud-init; sshd's stock
@@ -132,14 +132,14 @@ runcmd:
 
   # cloud-init state cache: clear it so cloud-init runs fresh on first boot
   # of the flashed instance (against whatever seed bty injects, or the
-  # built-in NoCloud absence which is fine — defaults from this run stay).
+  # built-in NoCloud absence which is fine; defaults from this run stay).
   - cloud-init clean --logs --seed || true
 
   # Trim caches for a smaller image.
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi debian-base baked in $UPTIME seconds — powering off"
+final_message: "nosi debian-base baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff
