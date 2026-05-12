@@ -1,28 +1,26 @@
-SPHINXBUILD ?= sphinx-build
-SRC          = src
-BUILD        = _build
-
 .DEFAULT_GOAL := help
 
-.PHONY: help deps html serve clean
+.PHONY: help deps html pdf serve clean
 
 help:
 	@echo "nosi docs:"
-	@echo "  deps    install sphinx + myst-parser + furo + sphinx-copybutton via pipx"
-	@echo "  html    build HTML docs into $(BUILD)/html/"
-	@echo "  serve   live-rebuild on edits (sphinx-autobuild) at http://127.0.0.1:8000"
-	@echo "  clean   remove $(BUILD)/"
+	@echo "  deps    pipx install ./tooling  (provides nosi-docs-{serve,build-html,build-pdf})"
+	@echo "  html    nosi-docs-build-html   -> _build/html/"
+	@echo "  pdf     nosi-docs-build-pdf    -> _build/latex/nosi.pdf  (requires LaTeX)"
+	@echo "  serve   nosi-docs-serve        (live rebuild on http://localhost:8000)"
+	@echo "  clean   remove _build/"
 
 deps:
-	pipx install sphinx \
-	    --include-deps \
-	    --pip-args 'myst-parser sphinx-copybutton furo sphinx-autobuild linkify-it-py'
+	pipx install ./tooling
 
 html:
-	$(SPHINXBUILD) -W -b html $(SRC) $(BUILD)/html
+	nosi-docs-build-html
+
+pdf:
+	nosi-docs-build-pdf
 
 serve:
-	sphinx-autobuild $(SRC) $(BUILD)/html --host 127.0.0.1 --port 8000
+	nosi-docs-serve
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf _build

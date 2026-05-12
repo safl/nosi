@@ -2,7 +2,7 @@ VARIANT ?= debian-sysdev
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps build all clean docs-deps docs-html docs-serve docs-clean
+.PHONY: help deps build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
 
 help:
 	@echo "nosi: automated builds of Niche Operating System Images (C / Python dev fit)"
@@ -14,9 +14,10 @@ help:
 	@echo "  clean             Remove cijoe artefacts"
 	@echo
 	@echo "Docs targets:"
-	@echo "  docs-deps         Install sphinx + myst + furo via pipx"
+	@echo "  docs-deps         pipx install ./docs/tooling"
 	@echo "  docs-html         Build HTML docs into docs/_build/html/"
-	@echo "  docs-serve        Live-rebuild on http://127.0.0.1:8000"
+	@echo "  docs-pdf          Build PDF docs (requires LaTeX)"
+	@echo "  docs-serve        Live-rebuild on http://localhost:8000"
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
 	@echo "Variants:"
@@ -54,6 +55,9 @@ docs-deps:
 
 docs-html:
 	$(MAKE) -C docs html
+
+docs-pdf:
+	$(MAKE) -C docs pdf
 
 docs-serve:
 	$(MAKE) -C docs serve

@@ -58,9 +58,14 @@ Rendered at <https://safl.github.io/nosi/>. Sources under `docs/src/`:
 
 Build the docs:
 
-    make docs-deps                     # one-time
-    make docs-html                     # output in docs/_build/html/
-    make docs-serve                    # live-rebuild on http://127.0.0.1:8000
+    make docs-deps                     # pipx install ./docs/tooling
+    make docs-html                     # nosi-docs-build-html  -> docs/_build/html/
+    make docs-pdf                      # nosi-docs-build-pdf   -> docs/_build/latex/nosi.pdf
+    make docs-serve                    # live-rebuild on http://localhost:8000
+
+The `docs/tooling/` directory is a small Python package (`nosi-docs`) that
+ships those three console scripts; same pattern as `safl/bty`'s
+`docs/tooling/`.
 
 ## Releasing
 
