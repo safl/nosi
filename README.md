@@ -7,18 +7,14 @@
 **nosi** = **N**iche **O**perating **S**ystem **I**mages.
 *(Also accepted: **N**ot **O**marchy **S**ystem **I**mages, if you're feeling cheeky. Same urge to bake an opinionated dev setup into someone else's distro, different crowd.)*
 
-Automated builds of operating-system images, niche because they ship
-pre-loaded with software fit for systems development in C, Python, and
-Rust, plus a handful of dev tools of a certain opinionated flavor:
-`helix`, `zellij`, `btop`, `uv`, `cargo`/`rustup`, `podman` +
-`podman-docker`; LSPs `clangd`, `pyright`, `ruff`, `rust-analyzer`;
-`gdb`, `valgrind`; ...
+Automated builds of operating-system images, pre-loaded with software fit
+for systems development in C, Python, and Rust.
 
-The output is a vanilla disk image. Flash it with `dd`, Balena Etcher,
-or any tool that handles `.img.gz`, and you have a ready-to-SSH
-bare-metal dev box. The companion project
-[bty](https://github.com/safl/bty) is a convenient way to flash these
-images onto systems in different ways; it is not required.
+The output is a vanilla `.img.gz`. Flash it with `dd`, Balena Etcher, or
+any tool that handles gzip-compressed disk images, and you have a
+ready-to-SSH bare-metal dev box. The companion project
+[bty](https://github.com/safl/bty) is one convenient flasher; it is not
+required.
 
 ## Scope
 
@@ -30,113 +26,40 @@ images onto systems in different ways; it is not required.
 
 The intent is **bare bases + opinionated flavors**, not actual layered
 inheritance (no Yocto / Nix style composition). Each variant is a
-self-contained build keyed by `<distro>-<flavor>`: the `sysdev` flavor
-selects the package set fit for C / Python / Rust systems dev work
-(compilers, LSPs, debuggers, the modern terminal-stack); a future
-`base` flavor would carry only the minimum to be SSH-reachable.
-
-Today the only flavor shipped is `sysdev`. A bare `base` flavor and
-other flavors (FreeBSD, Windows, …) are roadmap.
-
-## How it works
-
-Each variant pairs a TOML config in `cijoe/configs/` with a cloud-init
-user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
-
-1. Downloads the upstream cloud image (Debian / Ubuntu / Fedora qcow2).
-2. Resizes the boot disk so cloud-init has room to install our packages.
-3. Generates a NoCloud seed ISO from the variant's user-data + shared
-   meta-data.
-4. Boots QEMU with the seed; cloud-init installs the package list, drops in
-   `uv`, enables `podman.socket`, creates the `odus` operator account with
-   default credentials, locks root, strips SSH host keys and machine-id,
-   and powers off.
-5. Compacts the baked qcow2 and gzip-publishes it as a dd-able `.img.gz`
-   with a SHA-256 sidecar.
-
-Layout, cijoe scripts, and cloud-init userdata structure mirror
-`safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
-
-## Userspace PCI / KVM / containers
-
-Every `sysdev` image is set up so an unprivileged `odus` shell can do
-userspace-PCI work and pass devices through to local VMs or containers
-without `sudo`:
-
-- IOMMU is enabled at boot (`intel_iommu=on amd_iommu=on iommu=pt`).
-- `vfio-pci` and `uio_pci_generic` are auto-loaded at boot.
-- A udev rule hands `/dev/vfio/*` to the `kvm` group; `odus` is a member.
-- `/dev/kvm` is in the `kvm` group by default; `odus` is a member.
-- Hugepages are not reserved at build (depends on host RAM); allocate at
-  runtime with e.g. `sudo sysctl -w vm.nr_hugepages=512` for 1 GiB of
-  2 MiB pages.
-
-Switching IOMMU on/off (vfio vs uio modes) is a one-liner:
-
-    nosi-pci-mode status      # show current mode + cmdline
-    nosi-pci-mode vfio        # IOMMU on, intended for vfio-pci binding
-    nosi-pci-mode uio         # IOMMU off, intended for uio_pci_generic
-    sudo reboot               # required for cmdline change to apply
-
-The helper auto-detects `grubby` (Fedora) vs `update-grub`
-(Debian/Ubuntu), so the same command works on all variants.
-
-Typical one-liners after binding a device to `vfio-pci`:
-
-    # qemu: pass PCIe device 01:00.0 into a guest
-    qemu-system-x86_64 -enable-kvm -m 4G \
-        -device vfio-pci,host=01:00.0 ...
-
-    # podman: same device into a container
-    podman run --rm -it \
-        --device=/dev/vfio/$(readlink /sys/bus/pci/devices/0000:01:00.0/iommu_group | xargs basename) \
-        --device=/dev/vfio/vfio \
-        --group-add keep-groups \
-        <image>
-
-## Background daemons (minimized)
-
-Stock cloud images carry a bag of timers/services that wake periodically
-to refresh `apt`/`dnf` indexes, firmware metadata, motd, man-db cache, fs
-scrubbing, etc. On a dev-flashed bare-metal box they cause unexpected IO
-and lock the package manager at random times. The build masks them:
-
-- Debian/Ubuntu: `apt-daily*`, `apt-daily-upgrade*`, `fwupd-refresh*`,
-  `motd-news*`, `man-db.*`, `e2scrub_*`. `unattended-upgrades` is purged
-  outright.
-- Fedora: `dnf-makecache*`, `fwupd-refresh*`, `man-db-cache-update*`,
-  `mlocate-updatedb*`.
-
-Re-enable any of these post-flash with
-`sudo systemctl unmask <unit> && sudo systemctl enable --now <unit>`.
-
-## Default credentials
-
-- Operator: `odus` / `odus.321` (passwordless sudo, shell `/bin/bash`)
-- Root: locked
-- SSH: password auth enabled on first boot
-- **Rotate `odus`'s password before exposing the box to anything beyond a
-  trusted network.**
-
-SSH host keys are *not* baked: they're stripped at end of build, and sshd's
-stock systemd preset regenerates a unique set on first boot. The
-machine-id is wiped the same way, so every flashed instance has its own
-identity.
-
-If a downstream provisioner (bty, a kickstart pipeline, your own scripted
-seeding, …) injects a fresh NoCloud seed at flash time, cloud-init runs
-again on first boot of the flashed instance and applies it on top of these
-defaults.
+self-contained build keyed by `<distro>-<flavor>`. Today only the
+`sysdev` flavor ships; a bare `base` flavor and other flavors (FreeBSD,
+Windows, ...) are roadmap.
 
 ## Quick start
 
     make deps                          # install cijoe via pipx
-    make build VARIANT=debian-sysdev     # build one variant
+    make build VARIANT=debian-sysdev   # build one variant
     make all                           # build every variant
 
 Local builds need `qemu-system-x86_64` + KVM accessible. CI runs natively
 on `ubuntu-24.04` runners with a udev rule that makes `/dev/kvm`
 world-readable.
+
+## Documentation
+
+Full docs live under `docs/`:
+
+- **[Overview](docs/src/overview.md)** -- bases + flavors, build pipeline.
+- **[Quick start](docs/src/quickstart.md)** -- build locally, flash, pull from GHCR.
+- **[Flavors / sysdev](docs/src/flavors.md)** -- what's in the C/Python/Rust
+  toolset; userspace PCI, KVM, container passthrough; daemon-minimization;
+  the login banner; the `nosi-pci-mode` / `devbind` / `hugepages` helpers.
+- **[Default credentials](docs/src/credentials.md)** -- `odus` / `odus.321`,
+  per-instance SSH host keys, flash-time seed override.
+- **[Release model](docs/src/release.md)** -- rolling, GHCR via ORAS,
+  pinning by blob digest.
+- **[Related projects](docs/src/related.md)** -- bty, xnvme, cijoe.
+
+Build the docs:
+
+    make docs-deps                     # one-time
+    make docs-html                     # output in docs/_build/html/
+    make docs-serve                    # live-rebuild on http://127.0.0.1:8000
 
 ## Releasing
 
@@ -146,36 +69,22 @@ Rolling, not semver. Every publish gets:
 - `ghcr.io/<owner>/<repo>/<variant>:latest` (moves to most recent publish)
 
 Publishes fire on push to `main`, weekly cron (Sunday 03:00 UTC), or
-manual `workflow_dispatch`. PRs build but don't publish.
-
-Each per-build SHA-256 (the OCI blob digest) is printed on the workflow
-summary page and lives forever. That's the canonical reference for any
-consumer that wants reproducible flashing (bty does this by default; any
-content-addressed tool can do the same).
-
-Flashing directly, without any registry client:
-
-    curl -sL 'https://ghcr.io/v2/<owner>/<repo>/<variant>/blobs/sha256:<digest>' \
-        | gunzip -d \
-        | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+manual `workflow_dispatch`. PRs build but don't publish. bty consumes by
+blob digest, not tag. See [docs/src/release.md](docs/src/release.md).
 
 ## Layout
 
-    Makefile                            # build / deps / all / clean
+    Makefile                            # build / deps / all / clean / docs-*
     cijoe/
-      configs/
-        debian-sysdev.toml                # cloud image URL, qemu guest, publish paths
-        ubuntu-sysdev.toml
-        fedora-sysdev.toml
-      tasks/
-        build.yaml                      # cijoe workflow: diskimage_build + img_gz_publish
-      scripts/
-        diskimage_build.py              # download → resize → seed → boot → snapshot
-        img_gz_publish.py               # qcow2 → raw → .img.gz + sha256
+      configs/<variant>.toml            # cloud image URL, qemu guest, publish paths
+      tasks/build.yaml                  # cijoe workflow
+      scripts/diskimage_build.py        # download → resize → seed → boot → snapshot
+      scripts/img_gz_publish.py         # qcow2 → raw → .img.gz + sha256
     nosi-media/
       auxiliary/
         cloudinit-metadata.meta         # shared NoCloud meta-data
-        cloudinit-sysdev-debian.user      # per-variant cloud-init user-data
-        cloudinit-sysdev-ubuntu.user
-        cloudinit-sysdev-fedora.user
+        cloudinit-sysdev-<distro>.user  # per-variant cloud-init user-data
+    docs/
+      src/                              # sphinx markdown sources
+      Makefile                          # sphinx-build wrapper
     .github/workflows/build.yml         # matrix build + GHCR publish

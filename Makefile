@@ -2,16 +2,22 @@ VARIANT ?= debian-sysdev
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps build all clean
+.PHONY: help deps build all clean docs-deps docs-html docs-serve docs-clean
 
 help:
 	@echo "nosi: automated builds of Niche Operating System Images (C / Python dev fit)"
 	@echo
-	@echo "Targets:"
+	@echo "Image targets:"
 	@echo "  deps              Install cijoe via pipx"
 	@echo "  build             Build one variant (override VARIANT=...)"
 	@echo "  all               Build every variant"
 	@echo "  clean             Remove cijoe artefacts"
+	@echo
+	@echo "Docs targets:"
+	@echo "  docs-deps         Install sphinx + myst + furo via pipx"
+	@echo "  docs-html         Build HTML docs into docs/_build/html/"
+	@echo "  docs-serve        Live-rebuild on http://127.0.0.1:8000"
+	@echo "  docs-clean        Remove docs/_build/"
 	@echo
 	@echo "Variants:"
 	@echo "  debian-sysdev       Debian 13 trixie"
@@ -40,3 +46,17 @@ all:
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive
+
+# ---------- Docs --------------------------------------------------------
+
+docs-deps:
+	$(MAKE) -C docs deps
+
+docs-html:
+	$(MAKE) -C docs html
+
+docs-serve:
+	$(MAKE) -C docs serve
+
+docs-clean:
+	$(MAKE) -C docs clean

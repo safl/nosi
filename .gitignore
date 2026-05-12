@@ -7,3 +7,4 @@ dist/
 *.qcow2
 *.sha256
 __pycache__/
+docs/_build/
