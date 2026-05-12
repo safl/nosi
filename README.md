@@ -4,10 +4,10 @@ Automated builds of operating-system images for quickly bringing up
 bare-metal systems for development work.
 
 The images are vanilla disk images — flash them with `dd`, Balena Etcher,
-Raspberry Pi Imager, or any tool that handles `.img.gz`. The companion
-project [bty](https://github.com/safl/bty) makes deployment especially
-convenient (content-addressed pull from a registry, MAC-keyed binding,
-USB / PXE workflows) but isn't required to use the images.
+or any tool that handles `.img.gz`. The companion project
+[bty](https://github.com/safl/bty) makes deployment especially convenient
+(content-addressed pull from a registry, MAC-keyed binding, USB / PXE
+workflows) but isn't required to use the images.
 
 ## Scope
 
