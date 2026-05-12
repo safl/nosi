@@ -18,11 +18,8 @@ growpart:
 
 resize_rootfs: true
 
-# helix, zellij, btop, podman-docker live in universe.
-apt:
-  sources:
-    universe:
-      source: "deb http://archive.ubuntu.com/ubuntu resolute universe"
+# Ubuntu cloud images already include universe in their default sources,
+# so helix / zellij / btop / podman-docker resolve without extra config.
 
 package_update: true
 package_upgrade: false

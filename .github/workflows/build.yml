@@ -31,7 +31,7 @@ jobs:
         variant: [debian-base, ubuntu-base, fedora-base]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install build dependencies
         run: |
@@ -41,8 +41,18 @@ jobs:
             qemu-utils \
             genisoimage \
             pipx \
-            zstd \
             cpu-checker
+
+      - name: Cache upstream cloud image
+        # Cloud images are 500MB-2GB downloads; on a fresh runner that's the
+        # dominant cost of a cold build. Key on the variant's TOML so a
+        # cloud.url change automatically busts the cache.
+        uses: actions/cache@v4
+        with:
+          path: ~/system_imaging/cloud
+          key: cloud-${{ matrix.variant }}-${{ hashFiles(format('cijoe/configs/{0}.toml', matrix.variant)) }}
+          restore-keys: |
+            cloud-${{ matrix.variant }}-
 
       - name: Enable KVM access for the runner
         # GHA hosted runners ship /dev/kvm but the runner user isn't in the
