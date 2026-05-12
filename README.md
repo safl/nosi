@@ -13,21 +13,20 @@ images onto systems in different ways; it is not required.
 
 ## Scope
 
-| Variant          | Distribution | Version    | Codename  | Arch    | Overlay  |
+| Variant          | Distribution | Version    | Codename  | Arch    | Flavor   |
 | ---------------- | ------------ | ---------- | --------- | ------- | -------- |
 | `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
 | `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
 | `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
 
-The intended structure is **bare bases + overlays**. A base is a minimal,
-distro-stock image with just enough to be SSH-reachable; the opinionated
-content (helix / zellij / btop / uv / podman / C + Python toolchains / ...)
-belongs in an overlay that sits on top. The `*-sysdev` variants above are
-the C/Python systems-dev overlay applied to each distro.
+The intent is **bare bases + opinionated flavors**, not actual layered
+inheritance (no Yocto / Nix style composition). Each variant is a
+self-contained build keyed by `<distro>-<flavor>`: the `sysdev` flavor
+selects the package set fit for C / Python systems dev work; a future
+`base` flavor would carry only the minimum to be SSH-reachable.
 
-Today each `*-sysdev` build runs base + overlay in a single cloud-init
-pass. Carving the bare base out into its own `*-base` variant (and adding
-other overlay flavors, FreeBSD, Windows) is on the roadmap.
+Today the only flavor shipped is `sysdev`. A bare `base` flavor and
+other flavors (FreeBSD, Windows, …) are roadmap.
 
 ## How it works
 
