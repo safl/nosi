@@ -150,6 +150,42 @@ runcmd:
   # Enable podman.socket so docker-compat clients work without setup.
   - systemctl enable podman.socket
 
+  # Userspace PCI prerequisites for passing PCI devices through to qemu
+  # guests or to podman containers (SPDK / DPDK / xNVMe / GPU-style work):
+  #   - Preload vfio-pci and uio_pci_generic so devices can be bound to
+  #     a userspace driver immediately.
+  #   - udev rule hands /dev/vfio/* to the kvm group, which odus is in,
+  #     so passthrough works without sudo.
+  #   - GRUB cmdline gets intel_iommu / amd_iommu / iommu=pt so vfio
+  #     actually has an IOMMU to talk to.
+  # Hugepages are intentionally NOT reserved at build (the right count
+  # depends on host RAM and workload); set at runtime with e.g.
+  # `sudo sysctl -w vm.nr_hugepages=512` for 1 GiB of 2 MiB pages.
+  - |
+    cat > /etc/modules-load.d/nosi-userspace-pci.conf <<'MODS'
+    vfio-pci
+    uio_pci_generic
+    MODS
+    cat > /etc/udev/rules.d/99-nosi-vfio.rules <<'RULES'
+    # /dev/vfio/* accessible to the kvm group so vfio passthrough works
+    # for unprivileged users in that group (qemu -device vfio-pci=... ,
+    # podman --device=/dev/vfio/N ...).
+    SUBSYSTEM=="vfio", OWNER="root", GROUP="kvm", MODE="0660"
+    RULES
+  - |
+    set -eu
+    EXTRA="intel_iommu=on amd_iommu=on iommu=pt"
+    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        for arg in $EXTRA; do
+            if ! grep -q "GRUB_CMDLINE_LINUX=.*\\b${arg}\\b" /etc/default/grub; then
+                sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${arg}\"/" /etc/default/grub
+            fi
+        done
+    else
+        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$EXTRA" >> /etc/default/grub
+    fi
+    update-grub
+
   # Operator account: `odus` with password `odus`, passwordless sudo. Lock
   # root so the only login channel is `odus`. Rotate the password before
   # exposing to anything beyond a trusted network.

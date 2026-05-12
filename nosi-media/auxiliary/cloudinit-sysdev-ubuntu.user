@@ -137,6 +137,31 @@ runcmd:
   - mkdir -p /etc/containers && touch /etc/containers/nodocker
   - systemctl enable podman.socket
 
+  # Userspace PCI prerequisites (see debian variant for full rationale):
+  # preload vfio-pci + uio_pci_generic, hand /dev/vfio/* to the kvm group
+  # so passthrough works without sudo, enable IOMMU on the kernel cmdline.
+  - |
+    cat > /etc/modules-load.d/nosi-userspace-pci.conf <<'MODS'
+    vfio-pci
+    uio_pci_generic
+    MODS
+    cat > /etc/udev/rules.d/99-nosi-vfio.rules <<'RULES'
+    SUBSYSTEM=="vfio", OWNER="root", GROUP="kvm", MODE="0660"
+    RULES
+  - |
+    set -eu
+    EXTRA="intel_iommu=on amd_iommu=on iommu=pt"
+    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        for arg in $EXTRA; do
+            if ! grep -q "GRUB_CMDLINE_LINUX=.*\\b${arg}\\b" /etc/default/grub; then
+                sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${arg}\"/" /etc/default/grub
+            fi
+        done
+    else
+        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$EXTRA" >> /etc/default/grub
+    fi
+    update-grub
+
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
   - echo 'odus:odus' | chpasswd

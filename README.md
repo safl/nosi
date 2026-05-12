@@ -50,6 +50,33 @@ user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
 Layout, cijoe scripts, and cloud-init userdata structure mirror
 `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
+## Userspace PCI / KVM / containers
+
+Every `sysdev` image is set up so an unprivileged `odus` shell can do
+userspace-PCI work and pass devices through to local VMs or containers
+without `sudo`:
+
+- IOMMU is enabled at boot (`intel_iommu=on amd_iommu=on iommu=pt`).
+- `vfio-pci` and `uio_pci_generic` are auto-loaded at boot.
+- A udev rule hands `/dev/vfio/*` to the `kvm` group; `odus` is a member.
+- `/dev/kvm` is in the `kvm` group by default; `odus` is a member.
+- Hugepages are not reserved at build (depends on host RAM); allocate at
+  runtime with e.g. `sudo sysctl -w vm.nr_hugepages=512` for 1 GiB of
+  2 MiB pages.
+
+Typical one-liners after binding a device to `vfio-pci`:
+
+    # qemu: pass PCIe device 01:00.0 into a guest
+    qemu-system-x86_64 -enable-kvm -m 4G \
+        -device vfio-pci,host=01:00.0 ...
+
+    # podman: same device into a container
+    podman run --rm -it \
+        --device=/dev/vfio/$(readlink /sys/bus/pci/devices/0000:01:00.0/iommu_group | xargs basename) \
+        --device=/dev/vfio/vfio \
+        --group-add keep-groups \
+        <image>
+
 ## Default credentials
 
 - Operator: `odus` / `odus` (passwordless sudo, shell `/bin/bash`)
