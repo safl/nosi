@@ -147,6 +147,56 @@ runcmd:
     RULES
   - grubby --update-kernel=ALL --args="intel_iommu=on amd_iommu=on iommu=pt"
 
+  - |
+    cat > /usr/local/bin/nosi-pci-mode <<'SCRIPT'
+    #!/bin/sh
+    # nosi-pci-mode: switch IOMMU on (vfio) or off (uio).
+    # Reboot required for the change to take effect.
+    # Usage: nosi-pci-mode {vfio|uio|status}
+    set -eu
+
+    case "${1:-status}" in
+        status)
+            echo "cmdline: $(cat /proc/cmdline)"
+            case " $(cat /proc/cmdline) " in
+                *' intel_iommu=on '*|*' amd_iommu=on '*) echo "mode: vfio (IOMMU on)" ;;
+                *' intel_iommu=off '*|*' amd_iommu=off '*) echo "mode: uio (IOMMU off)" ;;
+                *) echo "mode: unset" ;;
+            esac
+            exit 0
+            ;;
+        vfio)
+            add="intel_iommu=on amd_iommu=on iommu=pt"
+            del="intel_iommu=off amd_iommu=off"
+            ;;
+        uio)
+            add="intel_iommu=off amd_iommu=off"
+            del="intel_iommu=on amd_iommu=on iommu=pt"
+            ;;
+        *)
+            echo "usage: $0 {vfio|uio|status}" >&2
+            exit 2
+            ;;
+    esac
+
+    if command -v grubby >/dev/null 2>&1; then
+        sudo grubby --update-kernel=ALL --remove-args="$del" >/dev/null || true
+        sudo grubby --update-kernel=ALL --args="$add"
+    else
+        cfg=/etc/default/grub
+        for a in $del; do
+            sudo sed -i "s/\b${a}\b//g; s/  */ /g; s/ \"/\"/g" "$cfg"
+        done
+        for a in $add; do
+            grep -q "$a" "$cfg" || \
+                sudo sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${a}\"/" "$cfg"
+        done
+        sudo update-grub
+    fi
+    echo "Kernel cmdline updated to '$1' mode. Reboot for changes to take effect."
+    SCRIPT
+    chmod 0755 /usr/local/bin/nosi-pci-mode
+
   # Fedora's sshd_config defaults to PasswordAuthentication=no; flip on
   # so the baked `odus:odus` works without an SSH key.
   - |

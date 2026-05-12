@@ -64,6 +64,16 @@ without `sudo`:
   runtime with e.g. `sudo sysctl -w vm.nr_hugepages=512` for 1 GiB of
   2 MiB pages.
 
+Switching IOMMU on/off (vfio vs uio modes) is a one-liner:
+
+    nosi-pci-mode status      # show current mode + cmdline
+    nosi-pci-mode vfio        # IOMMU on, intended for vfio-pci binding
+    nosi-pci-mode uio         # IOMMU off, intended for uio_pci_generic
+    sudo reboot               # required for cmdline change to apply
+
+The helper auto-detects `grubby` (Fedora) vs `update-grub`
+(Debian/Ubuntu), so the same command works on all variants.
+
 Typical one-liners after binding a device to `vfio-pci`:
 
     # qemu: pass PCIe device 01:00.0 into a guest
