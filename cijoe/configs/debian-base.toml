@@ -1,11 +1,11 @@
-# csi base image — Debian 13 (trixie)
+# nosi base image — Debian 13 (trixie)
 #
 # Usage (from repo root, the Makefile cd's into cijoe/):
 #   make build VARIANT=debian-base
 
-[csi]
+[nosi]
 variant = "debian-base"
-hostname = "csi-debian"
+hostname = "nosi-debian"
 timezone = "UTC"
 
 [cijoe.transport.qemu_guest]
@@ -23,24 +23,24 @@ img_bin = "qemu-img"
 [qemu.systems.x86_64]
 bin = "/usr/bin/qemu-system-x86_64"
 
-[qemu.guests.csi-debian-base-x86_64]
-path = "{{ local.env.HOME }}/system_imaging/guests/csi-debian-base-x86_64"
+[qemu.guests.nosi-debian-base-x86_64]
+path = "{{ local.env.HOME }}/system_imaging/guests/nosi-debian-base-x86_64"
 system_label = "x86_64"
-system_image_name = "csi-debian-base-x86_64"
+system_image_name = "nosi-debian-base-x86_64"
 system_args.kwa = { cpu = "host", smp = 4, m = "4G", accel = "kvm" }
 system_args.tcp_forward = { host = 4200, guest = 22 }
 
-[system-imaging.images.csi-debian-base-x86_64]
+[system-imaging.images.nosi-debian-base-x86_64]
 system_label = "x86_64"
 
 cloud.url = "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
 cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/debian-13-generic-amd64.qcow2"
 # Relative paths resolve from repo root (diskimage_build.py uses Path.cwd().parent).
-cloud.metadata_path = "csi-media/auxiliary/cloudinit-metadata.meta"
-cloud.userdata_path = "csi-media/auxiliary/cloudinit-base-debian.user"
+cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
+cloud.userdata_path = "nosi-media/auxiliary/cloudinit-base-debian.user"
 
-disk.path = "{{ local.env.HOME }}/system_imaging/disk/csi-debian-base-x86_64.qcow2"
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-base-x86_64.qcow2"
 
-publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/csi-debian-base-x86_64.img"
-publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/csi-debian-base-x86_64.img.gz"
+publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-base-x86_64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-base-x86_64.img.gz"
 publish.gzip_level = 9

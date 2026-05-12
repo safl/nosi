@@ -1,11 +1,11 @@
 #cloud-config
-# csi base — Fedora 43. PiKVM-style defaults: operator account `odus` with
+# nosi base — Fedora 43. PiKVM-style defaults: operator account `odus` with
 # password `odus`, root locked, SSH password auth on. Per-instance SSH
 # identity: host keys stripped at end of cloud-init, regenerated on first
 # boot.
 
-hostname: csi-fedora
-fqdn: csi-fedora.local
+hostname: nosi-fedora
+fqdn: nosi-fedora.local
 manage_etc_hosts: true
 
 timezone: UTC
@@ -72,7 +72,7 @@ runcmd:
     case "$arch" in
         x86_64)  target=x86_64-unknown-linux-gnu ;;
         aarch64) target=aarch64-unknown-linux-gnu ;;
-        *) echo "csi: unsupported arch $arch" >&2; exit 1 ;;
+        *) echo "nosi: unsupported arch $arch" >&2; exit 1 ;;
     esac
     tmp=$(mktemp -d)
     curl -fsSL "https://github.com/astral-sh/uv/releases/latest/download/uv-${target}.tar.gz" \
@@ -82,7 +82,7 @@ runcmd:
     uv --version
 
   - |
-    cat > /etc/profile.d/csi-localbin.sh <<'PROF'
+    cat > /etc/profile.d/nosi-localbin.sh <<'PROF'
     if [ -d "$HOME/.local/bin" ]; then
         case ":$PATH:" in
             *":$HOME/.local/bin:"*) : ;;
@@ -90,7 +90,7 @@ runcmd:
         esac
     fi
     PROF
-    chmod 0644 /etc/profile.d/csi-localbin.sh
+    chmod 0644 /etc/profile.d/nosi-localbin.sh
 
   - mkdir -p /etc/containers && touch /etc/containers/nodocker
   - systemctl enable podman.socket
@@ -99,8 +99,8 @@ runcmd:
   # so the baked `odus:odus` works without an SSH key.
   - |
     printf 'PasswordAuthentication yes\nPermitRootLogin no\n' \
-        > /etc/ssh/sshd_config.d/00-csi.conf
-    chmod 0644 /etc/ssh/sshd_config.d/00-csi.conf
+        > /etc/ssh/sshd_config.d/00-nosi.conf
+    chmod 0644 /etc/ssh/sshd_config.d/00-nosi.conf
 
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups wheel odus
@@ -118,9 +118,9 @@ runcmd:
   - dnf clean all
   - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "csi fedora-base baked in $UPTIME seconds — powering off"
+final_message: "nosi fedora-base baked in $UPTIME seconds — powering off"
 
 power_state:
   mode: poweroff
   timeout: 60
-  message: "csi build complete"
+  message: "nosi build complete"

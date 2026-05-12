@@ -1,4 +1,4 @@
-# csi
+# nosi
 
 Automated builder for headless system images consumed by [bty](https://github.com/safl/bty).
 Mirrors the structure of bty's own `cijoe/` + `bty-media/` layout and
@@ -18,7 +18,7 @@ top of the bases.
 ## How it works
 
 Each variant pairs a TOML config in `cijoe/configs/` with a cloud-init
-user-data file in `csi-media/auxiliary/`. A cijoe task drives the build:
+user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
 
 1. Downloads the upstream cloud image (Debian / Ubuntu / Fedora qcow2).
 2. Resizes the boot disk so cloud-init has room to install our packages.
@@ -91,7 +91,7 @@ Consumers flash directly without any registry client:
       scripts/
         diskimage_build.py              # download → resize → seed → boot → snapshot
         img_gz_publish.py               # qcow2 → raw → .img.gz + sha256
-    csi-media/
+    nosi-media/
       auxiliary/
         cloudinit-metadata.meta         # shared NoCloud meta-data
         cloudinit-base-debian.user      # per-variant cloud-init user-data

@@ -5,7 +5,7 @@ VARIANT ?= debian-base
 .PHONY: help deps build all clean
 
 help:
-	@echo "csi — headless system image builder for bty"
+	@echo "nosi — headless system image builder for bty"
 	@echo
 	@echo "Targets:"
 	@echo "  deps              Install cijoe via pipx"
@@ -20,8 +20,8 @@ help:
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
-	@echo "  ~/system_imaging/disk/csi-$(VARIANT)-x86_64.qcow2"
-	@echo "  ~/system_imaging/disk/csi-$(VARIANT)-x86_64.img.gz (+ .sha256)"
+	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.qcow2"
+	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.img.gz (+ .sha256)"
 
 deps:
 	pipx install cijoe

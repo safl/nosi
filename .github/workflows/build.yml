@@ -6,7 +6,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Weekly rebuild to pick up upstream package updates even when csi hasn't
+    # Weekly rebuild to pick up upstream package updates even when nosi hasn't
     # changed. Sunday 03:00 UTC, well clear of weekday CI traffic.
     - cron: '0 3 * * 0'
 
@@ -69,12 +69,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: csi-${{ matrix.variant }}
+          name: nosi-${{ matrix.variant }}
           path: |
-            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2
-            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.qcow2.sha256
-            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.img.gz
-            ~/system_imaging/disk/csi-${{ matrix.variant }}-x86_64.img.gz.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.qcow2
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.qcow2.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz.sha256
             cijoe/cijoe-output/
           if-no-files-found: warn
           retention-days: 14
@@ -89,7 +89,7 @@ jobs:
         run: |
           # Use GHA-provided SHA rather than `git rev-parse`: cijoe ran parts
           # of the build as root, which trips git's safe.directory check
-          # ("dubious ownership in /__w/csi/csi") when the rolling-tag step
+          # ("dubious ownership in /__w/nosi/nosi") when the rolling-tag step
           # then runs as the runner user.
           date_tag=$(date -u +'%Y.%m.%d')
           short=${SHA:0:7}
@@ -117,11 +117,11 @@ jobs:
           # absolute paths to prevent leaking host paths into the artefact).
           # GHA's working-directory: doesn't expand ~, hence the cd here.
           cd "$HOME/system_imaging/disk"
-          gz="csi-${IMG}-x86_64.img.gz"
+          gz="nosi-${IMG}-x86_64.img.gz"
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
-              --artifact-type application/vnd.csi.disk-image.v1+gzip \
-              "${gz}:application/vnd.csi.disk-image.layer.v1+gzip" \
+              --artifact-type application/vnd.nosi.disk-image.v1+gzip \
+              "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip" \
               "${gz}.sha256:text/plain"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
@@ -132,7 +132,7 @@ jobs:
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
-          gz="$HOME/system_imaging/disk/csi-${IMG}-x86_64.img.gz"
+          gz="$HOME/system_imaging/disk/nosi-${IMG}-x86_64.img.gz"
           sha=$(awk '{print $1}' "${gz}.sha256")
           size=$(numfmt --to=iec "$(stat -c%s "${gz}")")
           {

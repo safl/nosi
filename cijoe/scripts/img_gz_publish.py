@@ -1,11 +1,11 @@
 """
-Publish a baked csi qcow2 as a dd-able .img.gz
+Publish a baked nosi qcow2 as a dd-able .img.gz
 ==============================================
 
 Converts the qcow2 produced by ``diskimage_build`` to raw, gzip-compresses
 the result, and writes a sha256sum alongside.
 
-Why gzip rather than zstd: csi base images are flashed once during operator
+Why gzip rather than zstd: nosi base images are flashed once during operator
 setup, not on a per-job hot path. Gzip's universal flasher / OS / tooling
 support wins over zstd's marginal speed advantage on a one-shot setup; bty
 itself made the same call for the images it ships. bty's flash code accepts
@@ -37,7 +37,7 @@ def add_args(parser: ArgumentParser):
         type=str,
         default=None,
         help="Override the system-imaging image to publish. Defaults to "
-        "csi-<variant>-x86_64 (variant from [csi] in the cijoe config).",
+        "nosi-<variant>-x86_64 (variant from [nosi] in the cijoe config).",
     )
 
 
@@ -91,6 +91,6 @@ def main(args, cijoe):
 
 
 def _default_image_name(cijoe) -> str:
-    csi = cijoe.getconf("csi", {})
-    variant = csi.get("variant", "debian-base")
-    return f"csi-{variant}-x86_64"
+    nosi = cijoe.getconf("nosi", {})
+    variant = nosi.get("variant", "debian-base")
+    return f"nosi-{variant}-x86_64"

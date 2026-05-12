@@ -1,5 +1,5 @@
 """
-Build a csi base disk image from a cloud image
+Build a nosi base disk image from a cloud image
 ==============================================
 
 Downloads the upstream cloud image (Debian / Ubuntu / Fedora), resizes the
@@ -29,7 +29,7 @@ from cijoe.qemu.wrapper import Guest
 
 
 # Bake-time disk size for the build VM. The cloud image grows to fill, we
-# install the csi package set (~1 GB), then trim caches. 12 GiB gives plenty
+# install the nosi package set (~1 GB), then trim caches. 12 GiB gives plenty
 # of transient headroom for apt/dnf working space. cloud-init's growpart
 # expands the rootfs to the operator's actual disk on first boot of the
 # flashed instance.
@@ -42,7 +42,7 @@ def add_args(parser: ArgumentParser):
         type=str,
         default=None,
         help="Override the system-imaging image to build. Defaults to "
-        "csi-<variant>-x86_64 (variant from [csi] in the cijoe config).",
+        "nosi-<variant>-x86_64 (variant from [nosi] in the cijoe config).",
     )
 
 
@@ -147,6 +147,6 @@ def main(args, cijoe):
 
 
 def _default_image_name(cijoe) -> str:
-    csi = cijoe.getconf("csi", {})
-    variant = csi.get("variant", "debian-base")
-    return f"csi-{variant}-x86_64"
+    nosi = cijoe.getconf("nosi", {})
+    variant = nosi.get("variant", "debian-base")
+    return f"nosi-{variant}-x86_64"
