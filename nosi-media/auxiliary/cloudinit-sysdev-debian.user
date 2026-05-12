@@ -154,7 +154,7 @@ runcmd:
   # root so the only login channel is `odus`. Rotate the password before
   # exposing to anything beyond a trusted network.
   - passwd -l root
-  - useradd --create-home --shell /bin/bash --groups sudo odus
+  - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
   - echo 'odus:odus' | chpasswd
   - |
     printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus

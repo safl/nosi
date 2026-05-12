@@ -138,7 +138,7 @@ runcmd:
   - systemctl enable podman.socket
 
   - passwd -l root
-  - useradd --create-home --shell /bin/bash --groups sudo odus
+  - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
   - echo 'odus:odus' | chpasswd
   - |
     printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
