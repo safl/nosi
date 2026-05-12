@@ -1,6 +1,6 @@
 #cloud-config
 # nosi base : Ubuntu 26.04 LTS (resolute). Default credentials: operator
-# account `odus` with password `odus`, root locked, SSH password auth on.
+# account `odus` with password `odus.321`, root locked, SSH password auth on.
 # Per-instance SSH identity: host keys stripped at end of cloud-init,
 # regenerated on first boot.
 
@@ -107,21 +107,20 @@ runcmd:
     chmod 0644 /etc/profile.d/nosi-rust.sh
     /usr/local/cargo/bin/rustc --version
 
-  # Python LSP / linter / formatter stack for helix:
-  #   - ruff (linter + formatter, includes built-in `ruff server` LSP)
-  #   - pyright (type-checking LSP)
-  # Installed into a shared venv at /opt/python-tools, exposed via symlinks
-  # in /usr/local/bin so every user gets them on PATH without setup.
+  # Shared /opt/python-tools venv (see debian variant for rationale):
+  # ruff + pyright LSPs + devbind + hugepages.
   - |
     set -eu
     python3 -m venv /opt/python-tools
     /opt/python-tools/bin/pip install --no-cache-dir --upgrade pip
-    /opt/python-tools/bin/pip install --no-cache-dir ruff pyright
-    for bin in ruff pyright pyright-langserver; do
+    /opt/python-tools/bin/pip install --no-cache-dir ruff pyright devbind hugepages
+    for bin in ruff pyright pyright-langserver devbind hugepages; do
         ln -sf /opt/python-tools/bin/$bin /usr/local/bin/$bin
     done
     ruff --version
     pyright --version
+    devbind --help >/dev/null 2>&1 || true
+    hugepages --help >/dev/null 2>&1 || true
 
   - |
     cat > /etc/profile.d/nosi-localbin.sh <<'PROF'
@@ -248,7 +247,7 @@ runcmd:
         hp_mib=$(( hp_count * hp_size_kb / 1024 ))
         hugepgs="${hp_count} x ${hp_size_kb} kB = ${hp_mib} MiB"
     else
-        hugepgs="0 (sudo sysctl -w vm.nr_hugepages=N to allocate)"
+        hugepgs="0 (use 'hugepages' to allocate)"
     fi
 
     cpu_model="$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
@@ -270,7 +269,9 @@ runcmd:
       nvme:      ${nvme_count}
 
       Helpers:
-        nosi-pci-mode {vfio|uio|status}   flip IOMMU mode (reboot to apply)
+        nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
+        devbind                           bind/unbind PCI device to a driver
+        hugepages                         inspect / reserve hugepages
 
     EOM
     SCRIPT
@@ -294,11 +295,25 @@ runcmd:
 
   - passwd -l root
   - useradd --create-home --shell /bin/bash --groups sudo,kvm odus
-  - echo 'odus:odus' | chpasswd
+  - echo 'odus:odus.321' | chpasswd
   - |
     printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
     chown root:root /etc/sudoers.d/odus
     chmod 0440 /etc/sudoers.d/odus
+
+  # Minimize background daemons / timers (see debian variant for rationale).
+  - |
+    set -eu
+    DEBIAN_FRONTEND=noninteractive apt-get -y purge unattended-upgrades || true
+    apt-get -y autoremove --purge || true
+    systemctl mask \
+        apt-daily.service apt-daily.timer \
+        apt-daily-upgrade.service apt-daily-upgrade.timer \
+        fwupd.service fwupd-refresh.service fwupd-refresh.timer \
+        motd-news.service motd-news.timer \
+        man-db.service man-db.timer \
+        e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
+        2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*
   - ': > /etc/machine-id'

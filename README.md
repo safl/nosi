@@ -87,9 +87,25 @@ Typical one-liners after binding a device to `vfio-pci`:
         --group-add keep-groups \
         <image>
 
+## Background daemons (minimized)
+
+Stock cloud images carry a bag of timers/services that wake periodically
+to refresh `apt`/`dnf` indexes, firmware metadata, motd, man-db cache, fs
+scrubbing, etc. On a dev-flashed bare-metal box they cause unexpected IO
+and lock the package manager at random times. The build masks them:
+
+- Debian/Ubuntu: `apt-daily*`, `apt-daily-upgrade*`, `fwupd-refresh*`,
+  `motd-news*`, `man-db.*`, `e2scrub_*`. `unattended-upgrades` is purged
+  outright.
+- Fedora: `dnf-makecache*`, `fwupd-refresh*`, `man-db-cache-update*`,
+  `mlocate-updatedb*`.
+
+Re-enable any of these post-flash with
+`sudo systemctl unmask <unit> && sudo systemctl enable --now <unit>`.
+
 ## Default credentials
 
-- Operator: `odus` / `odus` (passwordless sudo, shell `/bin/bash`)
+- Operator: `odus` / `odus.321` (passwordless sudo, shell `/bin/bash`)
 - Root: locked
 - SSH: password auth enabled on first boot
 - **Rotate `odus`'s password before exposing the box to anything beyond a
