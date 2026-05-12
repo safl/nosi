@@ -382,6 +382,24 @@ runcmd:
   # built-in NoCloud absence which is fine; defaults from this run stay).
   - cloud-init clean --logs --seed || true
 
+  # Deep cleanup: trim non-English locales, systemd journal, build logs,
+  # stray Python bytecode, and drop apt orphans + uninstallable archives
+  # before the final cache wipe below.
+  - |
+    set -eu
+    # Drop translations for everything except the English / C locales.
+    if [ -d /usr/share/locale ]; then
+        find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+            ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'C.*' \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/installer /var/log/journal/* /var/log/dpkg.log* /var/log/apt
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    apt-get -y autoremove --purge
+    apt-get -y autoclean
+
   # Trim caches for a smaller image.
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*

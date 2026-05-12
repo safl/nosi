@@ -328,6 +328,21 @@ runcmd:
   - rm -f /var/lib/dbus/machine-id
   - cloud-init clean --logs --seed || true
 
+  # Deep cleanup (see debian variant for rationale).
+  - |
+    set -eu
+    if [ -d /usr/share/locale ]; then
+        find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+            ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'C.*' \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/installer /var/log/journal/* /var/log/dpkg.log* /var/log/apt
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    apt-get -y autoremove --purge
+    apt-get -y autoclean
+
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 

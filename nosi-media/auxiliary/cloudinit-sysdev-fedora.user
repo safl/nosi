@@ -319,6 +319,17 @@ runcmd:
   - rm -f /var/lib/dbus/machine-id
   - cloud-init clean --logs --seed || true
 
+  # Deep cleanup (see debian variant for rationale). Fedora's locale
+  # data lives in a single archive (/usr/lib/locale/locale-archive) and
+  # is awkward to trim safely; skipped here.
+  - |
+    set -eu
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/journal/* /var/log/dnf.log* /var/log/dnf.rpm.log*
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    dnf -y autoremove
+
   - dnf clean all
   - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
