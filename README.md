@@ -1,6 +1,7 @@
 # nosi
 
 [![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)
+[![docs](https://github.com/safl/nosi/actions/workflows/docs.yml/badge.svg)](https://safl.github.io/nosi/)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![release](https://img.shields.io/badge/release-rolling-orange.svg)](#releasing)
 
@@ -42,7 +43,7 @@ world-readable.
 
 ## Documentation
 
-Full docs live under `docs/`:
+Rendered at <https://safl.github.io/nosi/>. Sources under `docs/src/`:
 
 - **[Overview](docs/src/overview.md)** -- bases + flavors, build pipeline.
 - **[Quick start](docs/src/quickstart.md)** -- build locally, flash, pull from GHCR.
