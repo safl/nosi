@@ -17,14 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: astral-sh/setup-uv@v8
-        with:
-          python-version: "3.12"
-
-      - name: Install LaTeX (for PDF build)
+      - name: Install pipx + LaTeX (for PDF build)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            pipx \
             texlive-latex-recommended \
             texlive-latex-extra \
             texlive-fonts-recommended \
@@ -34,7 +31,10 @@ jobs:
             make
 
       - name: Install docs tooling
-        run: uv tool install ./docs/tooling
+        run: |
+          pipx install ./docs/tooling
+          pipx ensurepath
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build HTML
         working-directory: docs
