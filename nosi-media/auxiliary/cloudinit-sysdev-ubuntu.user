@@ -21,6 +21,14 @@ resize_rootfs: true
 # Ubuntu cloud images already include universe in their default sources,
 # so helix / zellij / btop / podman-docker resolve without extra config.
 
+# Drop Install-Recommends to keep the image lean -- our explicit packages:
+# list already names everything we want, and Recommends were inflating
+# the gz by GBs on debian/ubuntu compared to fedora's weak-deps default.
+apt:
+  conf: |
+    APT::Install-Recommends "false";
+    APT::Install-Suggests "false";
+
 package_update: true
 package_upgrade: false
 

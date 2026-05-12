@@ -23,6 +23,15 @@ growpart:
 
 resize_rootfs: true
 
+# cloud-init's apt module pulls Install-Recommends by default, which
+# inflates the image by GBs on a dev-flavor package list this size.
+# Drop Recommends + Suggests; the explicit packages: list already names
+# everything we want.
+apt:
+  conf: |
+    APT::Install-Recommends "false";
+    APT::Install-Suggests "false";
+
 package_update: true
 package_upgrade: false
 

@@ -18,6 +18,15 @@ growpart:
 
 resize_rootfs: true
 
+# Mirror the apt Install-Recommends=false story for dnf: skip weak
+# dependencies so the installed set matches the explicit packages: list.
+# bootcmd runs before the packages: phase, so dnf picks up the setting.
+bootcmd:
+  - |
+    if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
+        echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
+    fi
+
 package_update: true
 package_upgrade: false
 
