@@ -1,9 +1,16 @@
 # nosi
 
-Automated builds of **Niche Operating System Images**. Niche because
-they ship pre-loaded with software fit for systems development in C,
-Python, and Rust, plus a handful of dev tools of a certain opinionated
-flavor: `helix`, `zellij`, `btop`, `uv`, `cargo`/`rustup`, `podman` +
+[![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)
+[![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![release](https://img.shields.io/badge/release-rolling-orange.svg)](#releasing)
+
+**nosi** = **N**iche **O**perating **S**ystem **I**mages.
+*(Also accepted: **N**ot **O**marchy **S**ystem **I**mages, if you're feeling cheeky. Same urge to bake an opinionated dev setup into someone else's distro, different crowd.)*
+
+Automated builds of operating-system images, niche because they ship
+pre-loaded with software fit for systems development in C, Python, and
+Rust, plus a handful of dev tools of a certain opinionated flavor:
+`helix`, `zellij`, `btop`, `uv`, `cargo`/`rustup`, `podman` +
 `podman-docker`; LSPs `clangd`, `pyright`, `ruff`, `rust-analyzer`;
 `gdb`, `valgrind`; ...
 
