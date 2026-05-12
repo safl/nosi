@@ -1,10 +1,13 @@
 # nosi
 
-Automated builds of operating-system images for quickly bringing up
-bare-metal systems for development work.
+Automated builds of **Niche Operating System Images** — niche because
+they're pre-loaded with software fit for systems development in C and
+Python, plus a handful of dev tools of a certain opinionated flavor
+(`helix`, `zellij`, `btop`, `uv`, `podman` + `podman-docker`, …).
 
-The images are vanilla disk images — flash them with `dd`, Balena Etcher,
-or any tool that handles `.img.gz`. The companion project
+The output is a vanilla disk image — flash it with `dd`, Balena Etcher,
+or any tool that handles `.img.gz`, and you have a ready-to-SSH
+bare-metal dev box. The companion project
 [bty](https://github.com/safl/bty) makes deployment especially convenient
 (content-addressed pull from a registry, MAC-keyed binding, USB / PXE
 workflows) but isn't required to use the images.

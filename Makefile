@@ -5,7 +5,7 @@ VARIANT ?= debian-base
 .PHONY: help deps build all clean
 
 help:
-	@echo "nosi — automated builds of operating-system images for bare-metal dev work"
+	@echo "nosi — automated builds of Niche Operating System Images (C / Python dev fit)"
 	@echo
 	@echo "Targets:"
 	@echo "  deps              Install cijoe via pipx"
