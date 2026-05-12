@@ -142,7 +142,7 @@ jobs:
             echo "|---|---|"
             echo "| Pull ref | \`ghcr.io/${REPO}/${IMG}:${ROLLING}\` |"
             echo "| Latest alias | \`ghcr.io/${REPO}/${IMG}:latest\` |"
-            echo "| Blob digest (bty catalog) | \`sha256:${sha}\` |"
+            echo "| Blob digest (content-addressed pull) | \`sha256:${sha}\` |"
             echo "| Size | ${size} |"
             echo
             echo "Flash directly:"

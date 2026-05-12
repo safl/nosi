@@ -1,8 +1,13 @@
 # nosi
 
-Automated builds of operating system images for [bty](https://github.com/safl/bty).
-Mirrors the structure of bty's own `cijoe/` + `bty-media/` layout and
-`jellyfin-kiosk-appliance-builder`.
+Automated builds of operating-system images for quickly bringing up
+bare-metal systems for development work.
+
+The images are vanilla disk images — flash them with `dd`, Balena Etcher,
+Raspberry Pi Imager, or any tool that handles `.img.gz`. The companion
+project [bty](https://github.com/safl/bty) makes deployment especially
+convenient (content-addressed pull from a registry, MAC-keyed binding,
+USB / PXE workflows) but isn't required to use the images.
 
 ## Scope
 
@@ -25,27 +30,33 @@ user-data file in `nosi-media/auxiliary/`. A cijoe task drives the build:
 3. Generates a NoCloud seed ISO from the variant's user-data + shared
    meta-data.
 4. Boots QEMU with the seed; cloud-init installs the package list, drops in
-   `uv`, enables `podman.socket`, creates the `odus` operator account
-   with default credentials, locks root, strips SSH host keys and
-   machine-id, and powers off.
+   `uv`, enables `podman.socket`, creates the `odus` operator account with
+   default credentials, locks root, strips SSH host keys and machine-id,
+   and powers off.
 5. Compacts the baked qcow2 and gzip-publishes it as a dd-able `.img.gz`
-   with a SHA-256 sidecar for bty's catalog.
+   with a SHA-256 sidecar.
+
+Layout, cijoe scripts, and cloud-init userdata structure all mirror
+`safl/bty`'s internal `cijoe/` + `bty-media/` pattern, originally
+modelled on `safl/jellyfin-kiosk-appliance-builder`.
 
 ## Default credentials
 
 - Operator: `odus` / `odus` (passwordless sudo, shell `/bin/bash`)
 - Root: locked
 - SSH: password auth enabled on first boot
-- **Rotate `odus`'s password before exposing the appliance to anything
-  beyond a trusted network.**
+- **Rotate `odus`'s password before exposing the box to anything beyond a
+  trusted network.**
 
-SSH host keys are *not* baked: they're stripped at end of build, and
-sshd's stock systemd preset regenerates a unique set on first boot. The
-machine-id is wiped the same way.
+SSH host keys are *not* baked: they're stripped at end of build, and sshd's
+stock systemd preset regenerates a unique set on first boot. The
+machine-id is wiped the same way, so every flashed instance has its own
+identity.
 
-If bty injects a fresh NoCloud seed at flash time (e.g. with a different
-user / SSH key), cloud-init runs again on first boot of the flashed
-instance and applies it on top of these defaults.
+If a downstream provisioner (bty, a kickstart pipeline, your own scripted
+seeding, …) injects a fresh NoCloud seed at flash time, cloud-init runs
+again on first boot of the flashed instance and applies it on top of these
+defaults.
 
 ## Quick start
 
@@ -54,8 +65,8 @@ instance and applies it on top of these defaults.
     make all                           # build every variant
 
 Local builds need `qemu-system-x86_64` + KVM accessible. CI runs natively
-on `ubuntu-24.04` runners with a udev rule that makes `/dev/kvm` world-
-readable; pattern lifted from bty's release workflow.
+on `ubuntu-24.04` runners with a udev rule that makes `/dev/kvm`
+world-readable.
 
 ## Releasing
 
@@ -67,10 +78,12 @@ Rolling, not semver. Every publish gets:
 Publishes fire on push to `main`, weekly cron (Sunday 03:00 UTC), or
 manual `workflow_dispatch`. PRs build but don't publish.
 
-bty consumes by **blob digest**, not tag; each per-build digest is printed
-on the workflow summary page and lives forever.
+Each per-build SHA-256 (the OCI blob digest) is printed on the workflow
+summary page and lives forever — that's the canonical reference for any
+consumer that wants reproducible flashing (bty does this by default; any
+content-addressed tool can do the same).
 
-Consumers flash directly without any registry client:
+Flashing directly, without any registry client:
 
     curl -sL 'https://ghcr.io/v2/<owner>/<repo>/<variant>/blobs/sha256:<digest>' \
         | gunzip -d \
