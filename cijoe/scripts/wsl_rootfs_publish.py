@@ -48,6 +48,7 @@ Retargetable: False
 from __future__ import annotations
 
 import errno
+import json
 import logging as log
 import os
 from argparse import ArgumentParser
@@ -244,26 +245,26 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
     cleanup.append(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
 
     try:
-        # Force partition rescan + wait for udev to populate the p1 node.
-        # Ubuntu cloud images put the rootfs at p1 (sda14/sda15 are the
-        # bios_grub + EFI tail partitions). A short udev settle loop is
-        # more reliable than a fixed sleep.
+        # Force partition rescan, then probe lsblk until partitions appear
+        # and pick the rootfs (largest ext4). Ubuntu cloud images today
+        # land it on p1 with p14/p15 as BIOS-boot + ESP tail partitions,
+        # but layouts shift across releases and other distros use other
+        # numbering -- detection rather than a hardcode keeps the script
+        # honest as the matrix grows.
         cijoe.run_local(f"sudo partprobe {NBD_DEV} >/dev/null 2>&1 || true")
-        err, _ = cijoe.run_local(
-            f"for i in 1 2 3 4 5; do "
-            f"[ -b {NBD_DEV}p1 ] && exit 0; "
-            f"sleep 1; "
-            f"done; exit 1"
-        )
-        if err:
-            log.error(f"{NBD_DEV}p1 did not appear within 5s")
-            return err
+        rootfs_part = _find_rootfs_partition(cijoe, work_path, NBD_DEV)
+        if not rootfs_part:
+            log.error(
+                f"No ext4 partition found on {NBD_DEV}; "
+                "cannot identify the rootfs to mount."
+            )
+            return errno.ENODEV
 
         cijoe.run_local(f"sudo mkdir -p {mnt}")
-        log.info(f"Mounting {NBD_DEV}p1 at {mnt}")
-        err, _ = cijoe.run_local(f"sudo mount {NBD_DEV}p1 {mnt}")
+        log.info(f"Mounting {rootfs_part} at {mnt}")
+        err, _ = cijoe.run_local(f"sudo mount {rootfs_part} {mnt}")
         if err:
-            log.error(f"mount {NBD_DEV}p1 failed")
+            log.error(f"mount {rootfs_part} failed")
             return err
         cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
         cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
@@ -323,6 +324,51 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
     finally:
         for cmd in reversed(cleanup):
             cijoe.run_local(cmd)
+
+
+def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
+    """Locate the rootfs partition on `nbd_dev`.
+
+    Strategy: ask lsblk for its JSON view of the device, find ext4
+    partitions, pick the largest. For Ubuntu cloud images there's
+    exactly one ext4 partition (the rootfs); BIOS-boot is unformatted
+    and ESP is vfat, so neither competes. For other distros the same
+    "largest ext4" heuristic typically holds; if/when a btrfs/xfs
+    cloud-image variant lands in scope, expand the accepted fstype set.
+
+    Polls up to `attempts` times with 1s sleeps to ride out the udev
+    settle window after qemu-nbd attach.
+
+    Returns the partition path (e.g. /dev/nbd0p1) or None if no
+    candidate appears within the timeout.
+    """
+    out_file = work_path.with_suffix(".lsblk.json")
+    try:
+        for _ in range(attempts):
+            err, _ = cijoe.run_local(f"lsblk -J -b {nbd_dev} > {out_file}")
+            if err == 0 and out_file.exists():
+                try:
+                    data = json.loads(out_file.read_text())
+                except json.JSONDecodeError:
+                    data = {}
+                candidates = []
+                for dev in data.get("blockdevices", []):
+                    for part in dev.get("children") or []:
+                        if part.get("type") != "part":
+                            continue
+                        if part.get("fstype") != "ext4":
+                            continue
+                        size = part.get("size")
+                        if size is None:
+                            continue
+                        candidates.append((int(size), part["name"]))
+                if candidates:
+                    candidates.sort(reverse=True)
+                    return f"/dev/{candidates[0][1]}"
+            cijoe.run_local("sleep 1")
+        return None
+    finally:
+        out_file.unlink(missing_ok=True)
 
 
 def _default_image_name(cijoe) -> str:
