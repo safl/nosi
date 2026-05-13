@@ -38,10 +38,15 @@ packages:
   - sudo
   - systemd-resolved
   - btop
+  - fd-find              # /usr/bin/fd on Fedora (no rename needed)
+  - fzf
   - git
+  - git-delta            # `delta` pager, wired into /etc/gitconfig
   - htop
   - meson
   - ninja-build
+  - ripgrep
+  - unzip                # yazi ships as a zip in its releases
   - bind-utils
   - curl
   - jq
@@ -163,6 +168,62 @@ runcmd:
     install -m 0755 -t /usr/local/bin "$tmp/zellij"
     rm -rf "$tmp"
     /usr/local/bin/zellij --version
+
+  # Install lazygit from upstream release (see debian variant for rationale).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  larch=Linux_x86_64 ;;
+        aarch64) larch=Linux_arm64 ;;
+        *) echo "nosi: unsupported arch $arch for lazygit" >&2; exit 1 ;;
+    esac
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/jesseduffield/lazygit/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_${larch}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/lazygit"
+    rm -rf "$tmp"
+    /usr/local/bin/lazygit --version
+
+  # Install yazi from upstream release (see debian variant for rationale).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  yarch=x86_64-unknown-linux-musl ;;
+        aarch64) yarch=aarch64-unknown-linux-musl ;;
+        *) echo "nosi: unsupported arch $arch for yazi" >&2; exit 1 ;;
+    esac
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/yazi.zip" \
+        "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${yarch}.zip"
+    unzip -q -d "$tmp" "$tmp/yazi.zip"
+    install -m 0755 -t /usr/local/bin \
+        "$tmp/yazi-${yarch}/yazi" \
+        "$tmp/yazi-${yarch}/ya"
+    rm -rf "$tmp"
+    /usr/local/bin/yazi --version
+
+  # System-wide delta-as-git-pager. (Fedora's fd-find ships /usr/bin/fd
+  # directly, so no symlink needed unlike the Debian/Ubuntu variants.)
+  - |
+    set -eu
+    cat > /etc/gitconfig <<'GITCONF'
+    # nosi: system-wide git defaults.
+    [core]
+        pager = delta
+    [interactive]
+        diffFilter = delta --color-only
+    [delta]
+        navigate = true
+        line-numbers = true
+    [merge]
+        conflictstyle = zdiff3
+    GITCONF
+    chmod 0644 /etc/gitconfig
 
   # Shared /opt/python-tools venv (see debian variant for rationale):
   # ruff + pyright LSPs + devbind + hugepages.
@@ -313,6 +374,7 @@ runcmd:
       ram:       ${ram_gib} GiB
       nvme:      ${nvme_count}
 
+      Tools:     rg fd fzf lazygit delta yazi
       Helpers:
         nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
         devbind                           bind/unbind PCI device to a driver

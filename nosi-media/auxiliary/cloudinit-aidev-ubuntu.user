@@ -41,10 +41,16 @@ packages:
   - sudo
   - systemd-resolved
   - btop
+  - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
+  - fzf
   - git
+  - git-delta            # `delta` pager, wired into /etc/gitconfig
   - htop
   - meson
   - ninja-build
+  - ripgrep
+  - unzip                # yazi ships as a zip in its releases
+  - fontconfig           # fc-cache for the JetBrainsMono Nerd Font install
   - curl
   - dnsutils
   - jq
@@ -177,6 +183,80 @@ runcmd:
     install -m 0755 -t /usr/local/bin "$tmp/zellij"
     rm -rf "$tmp"
     /usr/local/bin/zellij --version
+
+  # Install lazygit from upstream release (see debian sysdev for rationale).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  larch=Linux_x86_64 ;;
+        aarch64) larch=Linux_arm64 ;;
+        *) echo "nosi: unsupported arch $arch for lazygit" >&2; exit 1 ;;
+    esac
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/jesseduffield/lazygit/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_${larch}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/lazygit"
+    rm -rf "$tmp"
+    /usr/local/bin/lazygit --version
+
+  # Install yazi from upstream release (see debian sysdev for rationale).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  yarch=x86_64-unknown-linux-musl ;;
+        aarch64) yarch=aarch64-unknown-linux-musl ;;
+        *) echo "nosi: unsupported arch $arch for yazi" >&2; exit 1 ;;
+    esac
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/yazi.zip" \
+        "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${yarch}.zip"
+    unzip -q -d "$tmp" "$tmp/yazi.zip"
+    install -m 0755 -t /usr/local/bin \
+        "$tmp/yazi-${yarch}/yazi" \
+        "$tmp/yazi-${yarch}/ya"
+    rm -rf "$tmp"
+    /usr/local/bin/yazi --version
+
+  # fd symlink + system-wide delta-as-git-pager. See debian sysdev variant.
+  - |
+    set -eu
+    if [ -x /usr/bin/fdfind ] && [ ! -e /usr/local/bin/fd ]; then
+        ln -s /usr/bin/fdfind /usr/local/bin/fd
+    fi
+    cat > /etc/gitconfig <<'GITCONF'
+    # nosi: system-wide git defaults.
+    [core]
+        pager = delta
+    [interactive]
+        diffFilter = delta --color-only
+    [delta]
+        navigate = true
+        line-numbers = true
+    [merge]
+        conflictstyle = zdiff3
+    GITCONF
+    chmod 0644 /etc/gitconfig
+
+  # Install JetBrainsMono Nerd Font system-wide. The font itself only
+  # matters for rendering paths that exist on the box: X/Wayland apps
+  # (e.g. wslg on WSL2), the framebuffer console with a tool that loads
+  # OTF, or X-forwarded SSH. SSH-only operators get no benefit from the
+  # font being on the server -- their local terminal does the rendering.
+  # We ship it on aidev because WSL is a primary target and wslg is the
+  # most likely rendering path.
+  - |
+    set -eu
+    dest=/usr/local/share/fonts/JetBrainsMonoNerdFont
+    mkdir -p "$dest"
+    curl -fsSL https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz \
+        | tar -xJ -C "$dest"
+    fc-cache -f >/dev/null 2>&1 || true
+    fc-list 2>/dev/null | grep -i 'JetBrainsMono Nerd' | head -n1 || true
 
   - |
     set -eu
@@ -391,6 +471,7 @@ runcmd:
       ram:       ${ram_gib} GiB
       nvme:      ${nvme_count}
 
+      Tools:         rg fd fzf lazygit delta yazi
       Agentic CLIs:  claude  codex  gemini  opencode  pi
       Helpers:
         nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
