@@ -42,12 +42,33 @@ See [](release.md) for the rolling-release model and tag scheme.
 ## Import a WSL2 rootfs (`ubuntu-aidev` only)
 
 `ubuntu-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
-GHCR repo (`<variant>-wsl`). To stand up a WSL distro from it (PowerShell):
+GHCR repo (`<variant>-wsl`). Paste-once flow in PowerShell -- no manual
+digest lookup, resolves the `:latest` tag and lands the tarball with
+its canonical filename:
 
 ```powershell
-curl.exe -sL 'https://ghcr.io/v2/safl/nosi/ubuntu-aidev-wsl/blobs/sha256:<digest>' `
-    -o nosi-aidev.tar.gz
-wsl --import nosi-aidev C:\WSL\nosi-aidev nosi-aidev.tar.gz
+# Pull the latest nosi-ubuntu-aidev WSL rootfs from GHCR
+$repo = 'safl/nosi/ubuntu-aidev-wsl'
+$tarball = 'nosi-ubuntu-aidev-wsl.tar.gz'
+$token = (Invoke-RestMethod "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull").token
+$accept = 'application/vnd.oci.image.manifest.v1+json'
+$manifest = Invoke-RestMethod -Headers @{Authorization="Bearer $token"; Accept=$accept} `
+    "https://ghcr.io/v2/$repo/manifests/latest"
+$digest = ($manifest.layers | Where-Object { $_.mediaType -like '*wsl-rootfs.layer*' }).digest
+Invoke-WebRequest -Headers @{Authorization="Bearer $token"} `
+    "https://ghcr.io/v2/$repo/blobs/$digest" -OutFile $tarball
+
+# Import into WSL2 and launch
+wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" $tarball
+wsl -d nosi-aidev
+```
+
+Or, if you have [`oras`](https://oras.land) installed (e.g. via
+`scoop install oras`), the same flow is two lines:
+
+```powershell
+oras pull "ghcr.io/safl/nosi/ubuntu-aidev-wsl:latest"
+wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-aidev-wsl.tar.gz
 wsl -d nosi-aidev
 ```
 
