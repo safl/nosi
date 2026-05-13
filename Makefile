@@ -24,11 +24,14 @@ help:
 	@echo "  debian-sysdev       Debian 13 trixie"
 	@echo "  ubuntu-sysdev       Ubuntu 26.04 resolute"
 	@echo "  fedora-sysdev       Fedora 44"
+	@echo "  ubuntu-aidev        Ubuntu 26.04 + NVIDIA + agentic CLIs"
+	@echo "                      (additionally publishes a WSL .tar.gz)"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
 	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.qcow2"
 	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.img.gz (+ .sha256)"
+	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-wsl.tar.gz    (aidev only, + .sha256)"
 
 deps:
 	pipx install cijoe
@@ -44,6 +47,7 @@ all:
 	$(MAKE) build VARIANT=debian-sysdev
 	$(MAKE) build VARIANT=ubuntu-sysdev
 	$(MAKE) build VARIANT=fedora-sysdev
+	$(MAKE) build VARIANT=ubuntu-aidev
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive

@@ -5,14 +5,18 @@ doc: |
 
   1. Download the upstream cloud image for the variant.
   2. Resize the boot disk so cloud-init has room to install packages.
-  3. Build a NoCloud seed.iso from
-     nosi-media/auxiliary/cloudinit-sysdev-<distro>.user + the shared meta-data.
+  3. Build a NoCloud seed.iso from the variant's cloudinit-<flavor>-<distro>.user
+     in nosi-media/auxiliary/ + the shared meta-data.
   4. Boot QEMU; cloud-init installs the package set, sets up the default
      `odus` operator account, strips SSH host keys and machine-id, and
      powers off.
   5. Compact and checksum the baked qcow2.
   6. ``img_gz_publish`` converts qcow2 -> raw -> gzip-compressed .img.gz
      with a sha256 sidecar, for direct ``dd`` flashing.
+  7. ``wsl_rootfs_publish`` (aidev only -- gated on a [publish_wsl] block
+     in the variant's config) derives a WSL2 rootfs tarball from the same
+     bake by stripping kernel/grub/firmware/cloud-init and tar-ing the
+     result. No-op for sysdev variants.
 
   Variant is selected via ``-c configs/<variant>.toml``; ``[nosi].variant``
   drives the image-name lookup and download URLs.
@@ -23,3 +27,6 @@ steps:
 
 - name: img_gz_publish
   uses: img_gz_publish
+
+- name: wsl_rootfs_publish
+  uses: wsl_rootfs_publish
