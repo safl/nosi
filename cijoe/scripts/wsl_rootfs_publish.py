@@ -329,26 +329,31 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
 def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
     """Locate the rootfs partition on `nbd_dev`.
 
-    Strategy: ask lsblk for its JSON view of the device, find ext4
-    partitions, pick the largest. For Ubuntu cloud images there's
-    exactly one ext4 partition (the rootfs); BIOS-boot is unformatted
-    and ESP is vfat, so neither competes. For other distros the same
-    "largest ext4" heuristic typically holds; if/when a btrfs/xfs
-    cloud-image variant lands in scope, expand the accepted fstype set.
+    Strategy: ask `sudo lsblk` for its JSON view of the device (sudo so
+    libblkid can read the partition superblock to populate `fstype` --
+    /dev/nbd0p* default to root:disk 0660 and the runner user isn't in
+    `disk`). Filter for an ext4 partition, pick the largest. For
+    Ubuntu cloud images there's exactly one ext4 partition (the
+    rootfs); BIOS-boot is unformatted and ESP is vfat, so neither
+    competes. If/when a btrfs/xfs cloud-image variant lands in scope,
+    expand the accepted fstype set.
 
     Polls up to `attempts` times with 1s sleeps to ride out the udev
-    settle window after qemu-nbd attach.
+    settle window after qemu-nbd attach. On final failure logs the raw
+    lsblk view so the next run can diagnose without redeploying.
 
     Returns the partition path (e.g. /dev/nbd0p1) or None if no
     candidate appears within the timeout.
     """
     out_file = work_path.with_suffix(".lsblk.json")
+    last_data = None
     try:
         for _ in range(attempts):
-            err, _ = cijoe.run_local(f"lsblk -J -b {nbd_dev} > {out_file}")
+            err, _ = cijoe.run_local(f"sudo lsblk -J -b {nbd_dev} > {out_file}")
             if err == 0 and out_file.exists():
                 try:
                     data = json.loads(out_file.read_text())
+                    last_data = data
                 except json.JSONDecodeError:
                     data = {}
                 candidates = []
@@ -366,6 +371,14 @@ def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
                     candidates.sort(reverse=True)
                     return f"/dev/{candidates[0][1]}"
             cijoe.run_local("sleep 1")
+        # Detection failed -- dump what lsblk actually sees so the next
+        # bake's log tells us the layout/fstype-set we need to handle.
+        log.error(
+            "Last `sudo lsblk -J -b` view of %s: %s",
+            nbd_dev,
+            json.dumps(last_data) if last_data is not None else "(no output)",
+        )
+        cijoe.run_local(f"sudo lsblk -O -b {nbd_dev} || true")
         return None
     finally:
         out_file.unlink(missing_ok=True)
