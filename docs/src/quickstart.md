@@ -26,15 +26,39 @@ gunzip -d nosi-debian-sysdev-x86_64.img.gz \
 Boot the target, SSH in as `odus` / `odus.321` (see [](credentials.md)),
 rotate the password if it's reachable beyond a trusted network.
 
-## Pull a published image
+## Pull and flash a published image
 
-Each push to `main` publishes to GHCR; the workflow run summary lists the
-blob digest. Flash without any registry client:
+Each push to `main` publishes to GHCR; the rolling `:latest` tag always
+points at the most recent build. The snippet below resolves `:latest`
+to a specific blob digest, fetches the blob, and stream-decompresses it
+to your target device. No manual digest lookup needed. Requires `curl`
+and `jq` on the puller.
 
-```
-curl -sL 'https://ghcr.io/v2/safl/nosi/<variant>/blobs/sha256:<digest>' \
+```bash
+VARIANT='debian-sysdev'   # debian-sysdev | ubuntu-sysdev | fedora-sysdev | ubuntu-aidev
+
+REPO="safl/nosi/${VARIANT}"
+TOKEN=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:${REPO}:pull" \
+    | jq -r .token)
+DIGEST=$(curl -fsSL -H "Authorization: Bearer $TOKEN" \
+    -H "Accept: application/vnd.oci.image.manifest.v1+json" \
+    "https://ghcr.io/v2/${REPO}/manifests/latest" \
+    | jq -r '.layers[] | select(.mediaType|test("disk-image.layer")) | .digest')
+
+# stream-decompress and dd in one shot
+curl -fsSL -H "Authorization: Bearer $TOKEN" \
+    "https://ghcr.io/v2/${REPO}/blobs/${DIGEST}" \
     | gunzip -d \
     | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+To download only (no flash), replace the final `curl | gunzip | dd`
+with:
+
+```bash
+curl -fsSL -H "Authorization: Bearer $TOKEN" \
+    "https://ghcr.io/v2/${REPO}/blobs/${DIGEST}" \
+    -o "nosi-${VARIANT}-x86_64.img.gz"
 ```
 
 See [](release.md) for the rolling-release model and tag scheme.
