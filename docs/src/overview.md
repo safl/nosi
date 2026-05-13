@@ -55,10 +55,11 @@ user-data file under `nosi-media/auxiliary/`. A
    with a SHA-256 sidecar.
 6. For variants that declare a `[publish_wsl]` block (today: just
    `ubuntu-aidev`), `wsl_rootfs_publish` derives a WSL2 rootfs tarball
-   from the same bake: `virt-customize` purges the
-   kernel/grub/firmware/cloud-init/netplan/NM plumbing, `virt-tar-out`
-   extracts the rootfs to a `.tar`, and gzip + sha256 produces the
-   final `.tar.gz`. No-op for sysdev variants.
+   from the same bake: attach the qcow2 via `qemu-nbd`, mount the
+   detected ext4 rootfs partition, chroot in to apt-purge the
+   kernel/grub/firmware/cloud-init/netplan/NM plumbing, `tar` the
+   stripped rootfs out (`--xattrs --acls --numeric-owner`), and gzip +
+   sha256-seal. No-op for sysdev variants.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
@@ -71,7 +72,7 @@ cijoe/
   tasks/build.yaml                  # cijoe workflow
   scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
   scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
-  scripts/wsl_rootfs_publish.py     # qcow2 -> virt-customize strip -> .tar.gz
+  scripts/wsl_rootfs_publish.py     # qcow2 -> qemu-nbd + chroot strip -> .tar.gz
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data

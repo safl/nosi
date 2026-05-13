@@ -263,10 +263,12 @@ single QEMU bake:
 | wsl     | `nosi-ubuntu-aidev-wsl.tar.gz`          | `wsl --import`          |
 
 The WSL artifact is derived **after** the bake by `wsl_rootfs_publish`:
-the baked qcow2 is copied, then `virt-customize` apt-purges the kernel,
-bootloader, firmware, cloud-init, netplan, and NetworkManager, and
-`virt-tar-out` streams the stripped rootfs to a `.tar` which is then
-gzip + sha256-sealed.
+the baked qcow2 is copied, attached to a host NBD device via
+`qemu-nbd`, the rootfs partition mounted and chrooted into to apt-purge
+the kernel, bootloader, firmware, cloud-init, netplan, and
+NetworkManager. The stripped rootfs is then `tar`-ed out
+(`--xattrs --acls --numeric-owner`, with bind-mounted `/proc /sys /dev /run`
+excluded) and gzip + sha256-sealed.
 
 Notable things that **survive** into the WSL rootfs: `qemu` + `ovmf`
 (WSL2 exposes `/dev/kvm` via nested virt), the full container stack
