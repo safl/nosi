@@ -6,20 +6,30 @@ For the aidev flavor we want a single bake to feed two derived artifacts:
 the flashable .img.gz produced by ``img_gz_publish``, and a WSL2 rootfs
 tarball consumable by ``wsl --import``. This script handles the latter.
 
-Pipeline:
+Pipeline (qemu-nbd + chroot; no libguestfs):
 
   1. Copy the baked qcow2 to a per-build scratch file (we do not mutate
      the .img.gz source-of-truth).
-  2. ``virt-customize`` (libguestfs) into the scratch: apt-purge the
-     kernel, bootloader, firmware, cloud-init, netplan, and
+  2. ``modprobe nbd`` and ``qemu-nbd --connect`` the scratch qcow2 onto
+     a host NBD block device.
+  3. Mount the rootfs partition, bind-mount /dev /proc /sys /run from
+     the host, and ``chroot`` in to run a strip script that apt-purges
+     the kernel, bootloader, firmware, cloud-init, netplan, and
      NetworkManager. qemu + podman/buildah + the rest of the userspace
      stay (WSL2 exposes /dev/kvm via nested virt, and containers are a
      primary use case). Vendor GPU/NIC drivers aren't installed in
      aidev today; when they are, they'll need to be added to the strip
      list since WSL gets GPU access via the Windows-side driver rather
      than an in-rootfs kernel module.
-  3. ``virt-tar-out`` the stripped rootfs to .tar.
-  4. gzip -<level> + sha256sum sidecar; drop the .tar + scratch qcow2.
+  4. ``tar`` the stripped rootfs into a .tar (xattrs + acls preserved,
+     bind-mount dirs excluded).
+  5. Unmount, disconnect nbd, gzip + sha256, drop the .tar + scratch.
+
+We use qemu-nbd rather than libguestfs because libguestfs's appliance
+networking (passt) reliably fails on hosted GitHub-Actions runners --
+``passt exited with status 1`` before any of our scripts run. qemu-nbd
+needs only ``qemu-utils`` (already installed for the bake) and the
+loadable ``nbd`` kernel module (shipped on Ubuntu hosted runners).
 
 Reads the ``publish_wsl`` section of
 ``system-imaging.images.<image_name>``:
@@ -39,6 +49,7 @@ from __future__ import annotations
 
 import errno
 import logging as log
+import os
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -77,18 +88,19 @@ WSL_PURGE_GLOBS = [
 ]
 
 
-# Strip script run inside the libguestfs appliance via virt-customize --run.
-# Written to a host-side tmp file rather than shipped as --run-command
-# strings to keep shell quoting simple and the intent readable.
+# Strip script run inside the chroot. apt commands tolerate non-zero
+# exits (postrm hooks for kernel packages call update-initramfs /
+# update-grub which can fail harmlessly inside a chroot that we're
+# about to discard anyway) -- the apt state changes we care about
+# happen before the postrm calls.
 STRIP_SCRIPT_TEMPLATE = """\
 #!/bin/sh
-set -eu
+set -u
 export DEBIAN_FRONTEND=noninteractive
 
-# Pkgs deliberately allowed-to-fail individually: if a glob matches nothing
-# (e.g. mlnx-ofed-kernel-* on a bake that never installed MLNX_OFED) apt
-# returns non-zero. Run as a single shell-glob call against dpkg state
-# instead so missing globs are silent.
+# Expand the purge globs against installed dpkg state so non-matching
+# globs are silent (e.g. mlnx-ofed-kernel-* on a bake that never
+# installed MLNX_OFED would otherwise fail apt's argument check).
 to_purge=""
 for glob in {globs}; do
     matches=$(dpkg-query -W -f='${{Package}}\\n' "$glob" 2>/dev/null || true)
@@ -96,12 +108,15 @@ for glob in {globs}; do
     to_purge="$to_purge $matches"
 done
 if [ -n "$to_purge" ]; then
-    apt-get -y purge $to_purge
+    apt-get -y purge $to_purge || true
 fi
-apt-get -y autoremove --purge
-apt-get clean
+apt-get -y autoremove --purge || true
+apt-get clean || true
 
-# Scrub state that references the now-gone kernel/bootloader/init plumbing.
+# Scrub state that references the now-gone kernel/bootloader/init
+# plumbing. /boot is wiped wholesale (no kernel under WSL); /lib/modules
+# and /lib/firmware likewise. cloud-init's state directories get a hard
+# rm in case the apt purge raced their postrm.
 rm -rf \\
     /boot/* \\
     /var/cache/apt/archives/* \\
@@ -117,13 +132,14 @@ rm -rf \\
     /etc/default/grub \\
     /var/log/installer
 
-# Old initrds left behind by linux-image's postrm if the apt run was
-# truncated; harmless but bloats the tarball.
-rm -f /boot/initrd.img* /boot/vmlinuz* /boot/config-* /boot/System.map-*
-
 # Drop SSH host keys (regenerated on first WSL boot if sshd is started).
 rm -f /etc/ssh/ssh_host_*
 """
+
+
+# Block device that qemu-nbd will use. /dev/nbd0 is the conventional
+# default; the script disconnects any stale binding before reusing it.
+NBD_DEV = "/dev/nbd0"
 
 
 def add_args(parser: ArgumentParser):
@@ -172,27 +188,16 @@ def main(args, cijoe):
         log.error("Failed to copy baked qcow2")
         return err
 
-    strip_script_path = work_path.with_suffix(".strip.sh")
-    strip_script_path.write_text(
+    strip_script_host = work_path.with_suffix(".strip.sh")
+    strip_script_host.write_text(
         STRIP_SCRIPT_TEMPLATE.format(globs=" ".join(WSL_PURGE_GLOBS))
     )
+    strip_script_host.chmod(0o755)
 
-    log.info("Stripping HW + boot plumbing via virt-customize")
-    err, _ = cijoe.run_local(
-        f"virt-customize -a {work_path} --run {strip_script_path}"
-    )
+    mnt = Path(f"/mnt/nosi-wsl-{os.getpid()}")
+    err = _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path)
+    strip_script_host.unlink(missing_ok=True)
     if err:
-        log.error("virt-customize strip failed")
-        return err
-
-    log.info(f"Extracting rootfs to {tar_path} via virt-tar-out")
-    # virt-tar-out streams the contents of / from the guest into a tar
-    # archive on the host. Excludes are handled inside the script above
-    # (we cleaned /boot, /lib/modules, etc.); virt-tar-out itself doesn't
-    # accept --exclude.
-    err, _ = cijoe.run_local(f"virt-tar-out -a {work_path} / {tar_path}")
-    if err:
-        log.error("virt-tar-out failed")
         return err
 
     log.info(f"Compressing {tar_path} -> {gz_path} (gzip -{level})")
@@ -206,14 +211,118 @@ def main(args, cijoe):
         log.error("Failed computing sha256sum")
         return err
 
-    # Drop large intermediates: the .tar (uncompressed, ~3-6 GiB), the
-    # scratch qcow2, and the strip script. Only the .tar.gz + .sha256 have
-    # downstream consumers.
+    # Drop large intermediates: the .tar (uncompressed, ~3-6 GiB) and
+    # the scratch qcow2. Only the .tar.gz + .sha256 have downstream
+    # consumers.
     tar_path.unlink(missing_ok=True)
     work_path.unlink(missing_ok=True)
-    strip_script_path.unlink(missing_ok=True)
 
     return 0
+
+
+def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
+    """Attach the qcow2 to nbd, chroot-strip, tar the rootfs out.
+
+    Cleanup (unmount + nbd-disconnect) runs in a finally so a mid-flow
+    failure doesn't leave kernel-side state pinned. Returns 0 on
+    success, non-zero on failure.
+    """
+    # nbd module is loadable on Ubuntu hosted runners but typically not
+    # auto-loaded. max_part=8 enables in-kernel partition scan so
+    # /dev/nbd0p1 et al. show up after connect.
+    cijoe.run_local("sudo modprobe nbd max_part=8")
+    # Clear any stale prior binding -- harmless when nbd0 is free.
+    cijoe.run_local(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
+
+    log.info(f"Attaching {work_path} to {NBD_DEV} via qemu-nbd")
+    err, _ = cijoe.run_local(f"sudo qemu-nbd --connect={NBD_DEV} {work_path}")
+    if err:
+        log.error("qemu-nbd connect failed")
+        return err
+
+    cleanup = []  # commands to run in reverse on the way out
+    cleanup.append(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
+
+    try:
+        # Force partition rescan + wait for udev to populate the p1 node.
+        # Ubuntu cloud images put the rootfs at p1 (sda14/sda15 are the
+        # bios_grub + EFI tail partitions). A short udev settle loop is
+        # more reliable than a fixed sleep.
+        cijoe.run_local(f"sudo partprobe {NBD_DEV} >/dev/null 2>&1 || true")
+        err, _ = cijoe.run_local(
+            f"for i in 1 2 3 4 5; do "
+            f"[ -b {NBD_DEV}p1 ] && exit 0; "
+            f"sleep 1; "
+            f"done; exit 1"
+        )
+        if err:
+            log.error(f"{NBD_DEV}p1 did not appear within 5s")
+            return err
+
+        cijoe.run_local(f"sudo mkdir -p {mnt}")
+        log.info(f"Mounting {NBD_DEV}p1 at {mnt}")
+        err, _ = cijoe.run_local(f"sudo mount {NBD_DEV}p1 {mnt}")
+        if err:
+            log.error(f"mount {NBD_DEV}p1 failed")
+            return err
+        cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
+        cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
+
+        # Bind-mount the kernel API filesystems so the chroot's apt /
+        # dpkg postrm scripts can find /dev/null, /proc/self, /sys etc.
+        binds = ("dev", "proc", "sys", "run")
+        for sub in binds:
+            err, _ = cijoe.run_local(
+                f"sudo mount --bind /{sub} {mnt}/{sub}"
+            )
+            if err:
+                log.error(f"bind-mount {sub} failed")
+                return err
+            cleanup.append(f"sudo umount {mnt}/{sub} 2>/dev/null || true")
+
+        # Copy strip script in and run via chroot.
+        strip_in_guest = f"{mnt}/tmp/nosi-strip.sh"
+        err, _ = cijoe.run_local(
+            f"sudo cp {strip_script_host} {strip_in_guest}"
+        )
+        if err:
+            return err
+        cijoe.run_local(f"sudo chmod 0755 {strip_in_guest}")
+
+        log.info("Stripping HW + boot plumbing via chroot")
+        err, _ = cijoe.run_local(f"sudo chroot {mnt} /tmp/nosi-strip.sh")
+        if err:
+            log.error("chroot strip script failed")
+            return err
+
+        cijoe.run_local(f"sudo rm -f {strip_in_guest}")
+
+        # Tar out the stripped rootfs. --numeric-owner avoids embedding
+        # the host's /etc/passwd into the archive. We exclude the
+        # bind-mount points so the host's /proc /sys /dev /run don't
+        # bleed in. lost+found is ext4-specific scaffolding.
+        log.info(f"Tar-ing stripped rootfs to {tar_path}")
+        err, _ = cijoe.run_local(
+            f"sudo tar --xattrs --acls --numeric-owner "
+            f"--exclude='./proc/*' --exclude='./sys/*' "
+            f"--exclude='./dev/*' --exclude='./run/*' "
+            f"--exclude='./tmp/*' --exclude='./lost+found' "
+            f"-cf {tar_path} -C {mnt} ."
+        )
+        if err:
+            log.error("tar of stripped rootfs failed")
+            return err
+
+        # Hand the tar back to the runner user so the subsequent
+        # gzip/sha256/chown chain runs unprivileged.
+        cijoe.run_local(
+            f"sudo chown $(id -u):$(id -g) {tar_path}"
+        )
+
+        return 0
+    finally:
+        for cmd in reversed(cleanup):
+            cijoe.run_local(cmd)
 
 
 def _default_image_name(cijoe) -> str:

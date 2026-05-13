@@ -24,8 +24,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    # aidev's npm-global installs + WSL post-bake (virt-customize +
-    # virt-tar-out + gzip of a multi-GiB rootfs) add ~10-15 min over the
+    # aidev's npm-global installs + WSL post-bake (qemu-nbd mount, chroot
+    # strip, tar + gzip of a multi-GiB rootfs) add ~10-15 min over the
     # sysdev runtime, which is tight against the prior 60 min ceiling.
     # Bump uniformly rather than per-variant to keep the matrix simple.
     timeout-minutes: 90
@@ -46,17 +46,6 @@ jobs:
             genisoimage \
             pipx \
             cpu-checker
-
-      - name: Install libguestfs-tools (aidev WSL strip)
-        # virt-customize + virt-tar-out drive the WSL rootfs derivation in
-        # ``wsl_rootfs_publish``. Only aidev variants use it; sysdev runs
-        # save ~30s of install by skipping.
-        if: matrix.variant == 'ubuntu-aidev'
-        run: |
-          sudo apt-get install -y --no-install-recommends libguestfs-tools
-          # libguestfs needs a readable host kernel to build its appliance;
-          # the GHA runner's /boot/vmlinuz is 0600 by default.
-          sudo chmod +r /boot/vmlinuz-*
 
       - name: Cache upstream cloud image
         # Cloud images are 500MB-2GB downloads; on a fresh runner that's the
