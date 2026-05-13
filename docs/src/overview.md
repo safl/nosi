@@ -35,7 +35,7 @@ Two flavors ship today: `sysdev` (C / Python / Rust systems work) and
 `ubuntu-aidev` is the first variant with two deployment targets from one
 bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2 rootfs
 `.tar.gz` consumable by `wsl --import`. The WSL artifact is published to
-a sibling GHCR repo named `<variant>-wsl`. See [](flavors.md#aidev).
+a sibling GHCR repo named `<variant>-wsl`. See [](#aidev).
 
 FreeBSD and Windows variants are planned.
 
