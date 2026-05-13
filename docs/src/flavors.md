@@ -8,6 +8,7 @@ There is no actual filesystem inheritance between flavors -- each variant
 is a self-contained build that happens to share its conceptual ancestry
 with siblings.
 
+(sysdev)=
 ## `sysdev` -- C / Python / Rust systems work
 
 The intent: a freshly flashed box you can SSH into and start writing /
@@ -183,6 +184,7 @@ and lock the package manager at random times. `sysdev` masks them:
 Re-enable any of these post-flash with
 `sudo systemctl unmask <unit> && sudo systemctl enable --now <unit>`.
 
+(aidev)=
 ## `aidev` -- agentic-AI command-line tooling on top of `sysdev`
 
 Conceptually a strict superset of `sysdev`: every package, every helper,
