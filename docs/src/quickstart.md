@@ -26,6 +26,7 @@ gunzip -d nosi-debian-sysdev-x86_64.img.gz \
 Boot the target, SSH in as `odus` / `odus.321` (see [](credentials.md)),
 rotate the password if it's reachable beyond a trusted network.
 
+(pull-and-flash)=
 ## Pull and flash a published image
 
 Each push to `main` publishes to GHCR; the rolling `:latest` tag always

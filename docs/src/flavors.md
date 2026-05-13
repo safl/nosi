@@ -51,7 +51,7 @@ round-trip.
 - `gh` -- GitHub CLI
 - `oras` -- OCI Registry as Storage; the canonical tool for pulling
   nosi's own published images from GHCR (see
-  [](quickstart.md#pull-and-flash-a-published-image))
+  [](#pull-and-flash))
 - `jq` -- JSON wrangler (also the no-oras fallback for the GHCR pull
   flow)
 - `just` -- task runner (`justfile` sister to `make`-as-task-runner)
