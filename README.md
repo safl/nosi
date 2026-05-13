@@ -27,8 +27,9 @@ Two flavors today:
   toolchains and editors (`clang`, `gcc`, `rustup` + `rust-analyzer`,
   `uv`, `helix`, `zellij`), shell flair (`rg`, `fd`, `fzf`, `lazygit`,
   `yazi`, `git-delta` wired as the system-wide git pager, `direnv`,
-  `just`, `gh`, `shellcheck`), LSPs that round out helix coverage
-  (`clangd`, `rust-analyzer`, `ruff`, `pyright`, `taplo`, `marksman`),
+  `just`, `gh`, `shellcheck`, `oras` + `jq` for pulling nosi's own
+  images from GHCR), LSPs that round out helix coverage (`clangd`,
+  `rust-analyzer`, `ruff`, `pyright`, `taplo`, `marksman`),
   hardware/storage inspection (`dmidecode`, `lshw`, `nvme-cli`,
   `pciutils`, `smartmontools`, `usbutils`), container stack (`podman`,
   `buildah`, `skopeo`, `podman-docker`), local QEMU (`qemu-system-x86`,

@@ -29,10 +29,32 @@ rotate the password if it's reachable beyond a trusted network.
 ## Pull and flash a published image
 
 Each push to `main` publishes to GHCR; the rolling `:latest` tag always
-points at the most recent build. The snippet below resolves `:latest`
-to a specific blob digest, fetches the blob, and stream-decompresses it
-to your target device. No manual digest lookup needed. Requires `curl`
-and `jq` on the puller.
+points at the most recent build. [`oras`](https://oras.land) handles
+the manifest dance, picks up the canonical filename from the OCI title
+annotation we set at push time, and lands the file in the directory of
+your choice. It's pre-installed at `/usr/local/bin/oras` on every nosi
+image; elsewhere it's a single-binary install from
+[oras-project/oras/releases](https://github.com/oras-project/oras/releases).
+
+```bash
+# pull the latest of any variant into the current dir
+# (lands as nosi-<variant>-x86_64.img.gz + .sha256)
+oras pull ghcr.io/safl/nosi/debian-sysdev:latest
+
+# flash
+gunzip -d nosi-debian-sysdev-x86_64.img.gz \
+    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+Available variants: `debian-sysdev`, `ubuntu-sysdev`, `fedora-sysdev`,
+`ubuntu-aidev` (flashable), plus `ubuntu-aidev-wsl` (WSL2 rootfs --
+see below). Use `oras pull -o /path/to/dir <ref>` to land the pull in
+a specific directory; `oras repo tags ghcr.io/safl/nosi/<variant>` to
+enumerate the rolling tags for a variant.
+
+### Fallback (no oras, just `curl` + `jq`)
+
+If `oras` isn't an option on the puller, the same flow in shell:
 
 ```bash
 VARIANT='debian-sysdev'   # debian-sysdev | ubuntu-sysdev | fedora-sysdev | ubuntu-aidev
@@ -52,23 +74,25 @@ curl -fsSL -H "Authorization: Bearer $TOKEN" \
     | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
-To download only (no flash), replace the final `curl | gunzip | dd`
-with:
-
-```bash
-curl -fsSL -H "Authorization: Bearer $TOKEN" \
-    "https://ghcr.io/v2/${REPO}/blobs/${DIGEST}" \
-    -o "nosi-${VARIANT}-x86_64.img.gz"
-```
-
 See [](release.md) for the rolling-release model and tag scheme.
 
 ## Import a WSL2 rootfs (`ubuntu-aidev` only)
 
 `ubuntu-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
-GHCR repo (`<variant>-wsl`). Paste-once flow in PowerShell -- no manual
-digest lookup, resolves the `:latest` tag and lands the tarball with
-its canonical filename:
+GHCR repo (`<variant>-wsl`).
+
+With [`oras`](https://oras.land) on Windows (e.g. `scoop install oras`
+or download the [Windows release](https://github.com/oras-project/oras/releases)):
+
+```powershell
+oras pull "ghcr.io/safl/nosi/ubuntu-aidev-wsl:latest"
+wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-aidev-wsl.tar.gz
+wsl -d nosi-aidev
+```
+
+### Fallback (PowerShell-native, no oras install)
+
+If you don't want to install `oras` on the Windows side:
 
 ```powershell
 # Pull the latest nosi-ubuntu-aidev WSL rootfs from GHCR
@@ -84,15 +108,6 @@ Invoke-WebRequest -Headers @{Authorization="Bearer $token"} `
 
 # Import into WSL2 and launch
 wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" $tarball
-wsl -d nosi-aidev
-```
-
-Or, if you have [`oras`](https://oras.land) installed (e.g. via
-`scoop install oras`), the same flow is two lines:
-
-```powershell
-oras pull "ghcr.io/safl/nosi/ubuntu-aidev-wsl:latest"
-wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-aidev-wsl.tar.gz
 wsl -d nosi-aidev
 ```
 

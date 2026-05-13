@@ -275,6 +275,30 @@ runcmd:
     /usr/local/bin/marksman --version 2>/dev/null \
         || /usr/local/bin/marksman --help >/dev/null
 
+  # Install oras (OCI Registry as Storage) from upstream release.
+  # Single static Go binary. Primary tool for pulling nosi's own
+  # published images from GHCR (`oras pull` resolves :latest and
+  # writes blobs with their canonical filenames via the OCI title
+  # annotation we set at push time), and generally useful for any
+  # OCI-registry workflow.
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  oarch=linux_amd64 ;;
+        aarch64) oarch=linux_arm64 ;;
+        *) echo "nosi: unsupported arch $arch for oras" >&2; exit 1 ;;
+    esac
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/oras-project/oras/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ver}/oras_${ver}_${oarch}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/oras"
+    rm -rf "$tmp"
+    /usr/local/bin/oras version
+
   # Wire up fd (Debian/Ubuntu ship the binary as /usr/bin/fdfind to avoid
   # colliding with an unrelated `fd` package; symlink it to the canonical
   # name) and the system-wide /etc/gitconfig that enables `delta` as the
@@ -499,7 +523,7 @@ runcmd:
       ram:       ${ram_gib} GiB
       nvme:      ${nvme_count}
 
-      Tools:     rg fd fzf lazygit delta yazi
+      Tools:     rg fd fzf lazygit delta yazi oras gh just direnv
       Helpers:
         nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
         devbind                           bind/unbind PCI device to a driver

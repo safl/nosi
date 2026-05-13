@@ -49,6 +49,11 @@ round-trip.
   system-wide via `/etc/gitconfig` (override per-user in `~/.gitconfig`
   if you prefer the stock pager)
 - `gh` -- GitHub CLI
+- `oras` -- OCI Registry as Storage; the canonical tool for pulling
+  nosi's own published images from GHCR (see
+  [](quickstart.md#pull-and-flash-a-published-image))
+- `jq` -- JSON wrangler (also the no-oras fallback for the GHCR pull
+  flow)
 - `just` -- task runner (`justfile` sister to `make`-as-task-runner)
 - `direnv` -- per-directory env vars via `.envrc`; bash hook lives at
   `/etc/profile.d/nosi-direnv.sh`

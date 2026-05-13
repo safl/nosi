@@ -255,6 +255,25 @@ runcmd:
     /usr/local/bin/marksman --version 2>/dev/null \
         || /usr/local/bin/marksman --help >/dev/null
 
+  # Install oras from upstream release (see debian sysdev for rationale).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  oarch=linux_amd64 ;;
+        aarch64) oarch=linux_arm64 ;;
+        *) echo "nosi: unsupported arch $arch for oras" >&2; exit 1 ;;
+    esac
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/oras-project/oras/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ver}/oras_${ver}_${oarch}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 -t /usr/local/bin "$tmp/oras"
+    rm -rf "$tmp"
+    /usr/local/bin/oras version
+
   # fd symlink + system-wide delta-as-git-pager. See debian sysdev variant.
   - |
     set -eu
@@ -518,7 +537,7 @@ runcmd:
       ram:       ${ram_gib} GiB
       nvme:      ${nvme_count}
 
-      Tools:         rg fd fzf lazygit delta yazi
+      Tools:         rg fd fzf lazygit delta yazi oras gh just direnv
       Agentic CLIs:  claude  codex  gemini  opencode  pi
       Helpers:
         nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
