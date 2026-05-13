@@ -332,11 +332,15 @@ def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
     Strategy: ask `sudo lsblk` for its JSON view of the device (sudo so
     libblkid can read the partition superblock to populate `fstype` --
     /dev/nbd0p* default to root:disk 0660 and the runner user isn't in
-    `disk`). Filter for an ext4 partition, pick the largest. For
-    Ubuntu cloud images there's exactly one ext4 partition (the
-    rootfs); BIOS-boot is unformatted and ESP is vfat, so neither
-    competes. If/when a btrfs/xfs cloud-image variant lands in scope,
-    expand the accepted fstype set.
+    `disk`). Explicitly request `NAME,FSTYPE,SIZE,TYPE` -- the default
+    `lsblk -J` column set omits `fstype` and our filter then rejects
+    everything. Filter for ext4 partitions and pick the largest:
+    Ubuntu 26.04 cloud images now have *two* ext4 partitions, the
+    rootfs (p1, label `cloudimg-rootfs`, ~12 GiB) and a separate
+    /boot (p13, label `BOOT`, ~1 GiB); the size heuristic picks the
+    rootfs unambiguously. BIOS-boot is unformatted, ESP is vfat, so
+    neither competes. If/when a btrfs/xfs cloud-image variant lands
+    in scope, expand the accepted fstype set.
 
     Polls up to `attempts` times with 1s sleeps to ride out the udev
     settle window after qemu-nbd attach. On final failure logs the raw
@@ -349,7 +353,9 @@ def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
     last_data = None
     try:
         for _ in range(attempts):
-            err, _ = cijoe.run_local(f"sudo lsblk -J -b {nbd_dev} > {out_file}")
+            err, _ = cijoe.run_local(
+                f"sudo lsblk -J -b -o NAME,FSTYPE,SIZE,TYPE {nbd_dev} > {out_file}"
+            )
             if err == 0 and out_file.exists():
                 try:
                     data = json.loads(out_file.read_text())
