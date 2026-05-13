@@ -109,7 +109,12 @@ for glob in {globs}; do
     to_purge="$to_purge $matches"
 done
 if [ -n "$to_purge" ]; then
-    apt-get -y purge $to_purge || true
+    # --allow-remove-essential: shim-signed and grub-efi-amd64-signed
+    # are flagged Essential on Ubuntu cloud images; without this flag
+    # apt aborts the whole purge ("Essential packages were removed and
+    # -y was used without --allow-remove-essential"), leaving the
+    # entire kernel/firmware/grub tree on disk.
+    apt-get -y --allow-remove-essential purge $to_purge || true
 fi
 apt-get -y autoremove --purge || true
 apt-get clean || true
@@ -224,8 +229,10 @@ def main(args, cijoe):
 def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
     """Attach the qcow2 to nbd, chroot-strip, tar the rootfs out.
 
-    Cleanup (unmount + nbd-disconnect) runs in a finally so a mid-flow
-    failure doesn't leave kernel-side state pinned. Returns 0 on
+    Cleanup runs in two layers: bind mounts are dropped before tar
+    runs (otherwise the host's volatile /sys etc. trip tar's
+    "file changed as we read it" check even with --exclude), the
+    rootfs mount + nbd-disconnect happen in finally. Returns 0 on
     success, non-zero on failure.
     """
     # nbd module is loadable on Ubuntu hosted runners but typically not
@@ -241,8 +248,13 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
         log.error("qemu-nbd connect failed")
         return err
 
-    cleanup = []  # commands to run in reverse on the way out
-    cleanup.append(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
+    # Two cleanup buckets: bind-mount unmounts that happen *before* tar
+    # (so the rootfs view is static while we read it), and the rest
+    # (rootfs umount + nbd disconnect) that happen in finally.
+    bind_cleanup = []
+    post_cleanup = [
+        f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true",
+    ]
 
     try:
         # Force partition rescan, then probe lsblk until partitions appear
@@ -266,8 +278,8 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
         if err:
             log.error(f"mount {rootfs_part} failed")
             return err
-        cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
-        cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
+        post_cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
+        post_cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
 
         # Bind-mount the kernel API filesystems so the chroot's apt /
         # dpkg postrm scripts can find /dev/null, /proc/self, /sys etc.
@@ -279,7 +291,7 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
             if err:
                 log.error(f"bind-mount {sub} failed")
                 return err
-            cleanup.append(f"sudo umount {mnt}/{sub} 2>/dev/null || true")
+            bind_cleanup.append(f"sudo umount {mnt}/{sub} 2>/dev/null || true")
 
         # Copy strip script in and run via chroot.
         strip_in_guest = f"{mnt}/tmp/nosi-strip.sh"
@@ -298,10 +310,20 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
 
         cijoe.run_local(f"sudo rm -f {strip_in_guest}")
 
+        # Drop bind mounts *before* tar so the rootfs view is static --
+        # the host's /sys et al. are too volatile to read concurrently
+        # ("tar: ./sys: file changed as we read it" -> nonzero exit
+        # even with the right --exclude). The mount points stay as
+        # empty dirs in the rootfs, which is what WSL needs (it mounts
+        # its own runtime fs's there on boot).
+        for cmd in reversed(bind_cleanup):
+            cijoe.run_local(cmd)
+        bind_cleanup.clear()
+
         # Tar out the stripped rootfs. --numeric-owner avoids embedding
-        # the host's /etc/passwd into the archive. We exclude the
-        # bind-mount points so the host's /proc /sys /dev /run don't
-        # bleed in. lost+found is ext4-specific scaffolding.
+        # the host's /etc/passwd into the archive. The exclude list is
+        # defense-in-depth (the bind mounts are already gone, so the
+        # mount-point dirs are empty) plus ./tmp/* and lost+found.
         log.info(f"Tar-ing stripped rootfs to {tar_path}")
         err, _ = cijoe.run_local(
             f"sudo tar --xattrs --acls --numeric-owner "
@@ -322,7 +344,10 @@ def _strip_and_tar(cijoe, work_path, strip_script_host, mnt, tar_path):
 
         return 0
     finally:
-        for cmd in reversed(cleanup):
+        # If we bailed before unmounting the binds, do it here.
+        for cmd in reversed(bind_cleanup):
+            cijoe.run_local(cmd)
+        for cmd in reversed(post_cleanup):
             cijoe.run_local(cmd)
 
 
