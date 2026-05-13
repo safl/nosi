@@ -19,8 +19,9 @@ is **no actual layered inheritance** (no Yocto / Nix style composition);
 the word "flavor" describes a curated package list and configuration,
 nothing more.
 
-Today only the `sysdev` flavor ships. The bare `*-base` variants and other
-flavors are on the roadmap.
+Two flavors ship today: `sysdev` (C / Python / Rust systems work) and
+`aidev` (sysdev superset plus agentic-AI command-line tooling). The bare
+`*-base` variants are still on the roadmap.
 
 ## Variants
 
@@ -29,6 +30,12 @@ flavors are on the roadmap.
 | `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
 | `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
 | `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
+| `ubuntu-aidev`   | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | aidev    |
+
+`ubuntu-aidev` is the first variant with two deployment targets from one
+bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2 rootfs
+`.tar.gz` consumable by `wsl --import`. The WSL artifact is published to
+a sibling GHCR repo named `<variant>-wsl`. See [](flavors.md#aidev).
 
 FreeBSD and Windows variants are planned.
 
@@ -46,6 +53,12 @@ user-data file under `nosi-media/auxiliary/`. A
    up the `odus` operator account, strips machine identity, powers off.
 5. Compact the baked qcow2 and gzip-publish it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
+6. For variants that declare a `[publish_wsl]` block (today: just
+   `ubuntu-aidev`), `wsl_rootfs_publish` derives a WSL2 rootfs tarball
+   from the same bake: `virt-customize` purges the
+   kernel/grub/firmware/cloud-init/netplan/NM plumbing, `virt-tar-out`
+   extracts the rootfs to a `.tar`, and gzip + sha256 produces the
+   final `.tar.gz`. No-op for sysdev variants.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
@@ -58,10 +71,11 @@ cijoe/
   tasks/build.yaml                  # cijoe workflow
   scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
   scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
+  scripts/wsl_rootfs_publish.py     # qcow2 -> virt-customize strip -> .tar.gz
 nosi-media/
   auxiliary/
-    cloudinit-metadata.meta         # shared NoCloud meta-data
-    cloudinit-sysdev-<distro>.user  # per-variant cloud-init user-data
+    cloudinit-metadata.meta             # shared NoCloud meta-data
+    cloudinit-<flavor>-<distro>.user    # per-variant cloud-init user-data
 docs/
   src/                              # sphinx markdown sources (this tree)
   tooling/                          # nosi-docs package (pyproject + cli)

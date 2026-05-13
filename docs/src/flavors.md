@@ -10,9 +10,9 @@ with siblings.
 
 ## `sysdev` -- C / Python / Rust systems work
 
-The only flavor shipped today. The intent: a freshly flashed box you can
-SSH into and start writing / building / debugging systems code without a
-second package-manager round-trip.
+The intent: a freshly flashed box you can SSH into and start writing /
+building / debugging systems code without a second package-manager
+round-trip.
 
 ### What's baked in
 
@@ -37,6 +37,16 @@ second package-manager round-trip.
 **Editor / terminal stack**
 
 - `helix`, `zellij`, `btop`, `htop`
+
+**Shell-side flair**
+
+- `rg` (ripgrep), `fd` (fd-find), `fzf` -- helix's pickers and the rest
+  of the terminal flow expect these
+- `lazygit` -- TUI git client (installed from upstream release)
+- `yazi` -- TUI file manager (installed from upstream release)
+- `delta` -- syntax-highlighted diff/log/show pager, wired
+  system-wide via `/etc/gitconfig` (override per-user in `~/.gitconfig`
+  if you prefer the stock pager)
 
 **Containers**
 
@@ -156,6 +166,113 @@ and lock the package manager at random times. `sysdev` masks them:
 
 Re-enable any of these post-flash with
 `sudo systemctl unmask <unit> && sudo systemctl enable --now <unit>`.
+
+## `aidev` -- agentic-AI command-line tooling on top of `sysdev`
+
+Conceptually a strict superset of `sysdev`: every package, every helper,
+every daemon-prune carries over. On top of that, `aidev` lands the
+agentic-AI CLIs operators reach for when working alongside model-driven
+tooling, plus Node and a distro RDMA userspace.
+
+Today only `ubuntu-aidev` ships -- Ubuntu is the lowest-friction base
+for the vendor ecosystem an AI engineer is most likely to want to plug
+in later (NVIDIA, Mellanox/DOCA, NIM containers, Triton/TensorRT, etc.).
+The image itself is **GPU-vendor-neutral**: no driver is baked in. The
+`x86_64` flashable artifact is a clean canvas across x86/nvidia,
+x86/amd, and CPU-only deployments; the operator picks the vendor stack
+post-flash.
+
+### What's added on top of `sysdev`
+
+**Node and npm**
+
+- `nodejs`, `npm` from Ubuntu main (Node 22.x LTS). `npm`'s global
+  prefix is repointed to `/usr/local` so agentic CLIs survive any
+  Ubuntu npm reinstall.
+
+**Agentic command-line tools**
+
+- `claude` -- Anthropic Claude Code CLI (`@anthropic-ai/claude-code`)
+- `codex` -- OpenAI Codex CLI (`@openai/codex`)
+- `gemini` -- Google Gemini CLI (`@google/gemini-cli`)
+- `opencode` -- sst/opencode (`opencode-ai`)
+- `pi` -- pi.dev (curl-piped installer from `https://pi.dev/install.sh`)
+
+The four npm-shipped CLIs install system-wide; `pi` lands wherever its
+installer chooses (root path on bake).
+
+**RDMA userspace (vendor-neutral)**
+
+- `rdma-core`, `libibverbs1`, `libmlx5-1`, `ibverbs-utils`,
+  `infiniband-diags`, `perftest`
+
+Enough for ibverbs-capable apps to run end-to-end on any RDMA NIC the
+operator drops in later. The kernel-tied side of an RDMA stack
+(MLNX_OFED, kernel modules) stays opt-in.
+
+**Operator account groups**
+
+`odus` is added to `render` and `video` (on top of the `sysdev` defaults
+of `sudo` and `kvm`), so DRM render-node access works without `sudo`
+when an operator later installs an Intel/AMD/NVIDIA driver.
+
+**JetBrainsMono Nerd Font**
+
+Installed system-wide under `/usr/local/share/fonts/JetBrainsMonoNerdFont`
+(from upstream's Nerd Fonts release). The font itself only matters for
+rendering paths that exist on the box: X/Wayland apps (`wslg` on WSL2 is
+the primary case here), the framebuffer console with an OTF-aware tool,
+or X-forwarded SSH. For pure-SSH access set your *local* terminal's font
+to a Nerd Font instead -- the font on the server doesn't matter to your
+local renderer. `aidev` ships it because WSL is a primary target and
+`wslg` is the most likely rendering path; `sysdev` does not.
+
+### Two deployment targets, one bake
+
+`ubuntu-aidev` is the first variant with two outputs derived from a
+single QEMU bake:
+
+| Target  | Artifact                                | Consumer                |
+| ------- | --------------------------------------- | ----------------------- |
+| x86_64  | `nosi-ubuntu-aidev-x86_64.img.gz`       | `dd`, bty, Etcher       |
+| wsl     | `nosi-ubuntu-aidev-wsl.tar.gz`          | `wsl --import`          |
+
+The WSL artifact is derived **after** the bake by `wsl_rootfs_publish`:
+the baked qcow2 is copied, then `virt-customize` apt-purges the kernel,
+bootloader, firmware, cloud-init, netplan, and NetworkManager, and
+`virt-tar-out` streams the stripped rootfs to a `.tar` which is then
+gzip + sha256-sealed.
+
+Notable things that **survive** into the WSL rootfs: `qemu` + `ovmf`
+(WSL2 exposes `/dev/kvm` via nested virt), the full container stack
+(`podman`, `buildah`, `skopeo`, `podman-docker`), the agentic CLIs, the
+RDMA userspace, and the standard `sysdev` development toolchain. The
+two `/etc/wsl.conf` and `/etc/wsl-distribution.conf` files are written
+unconditionally by cloud-init -- inert on the flashable artifact, used
+on the WSL one (`systemd=true`, default user `odus`).
+
+### Login banner
+
+Same `nosi-motd.service` as `sysdev`, with the header swapped to
+`nosi aidev`:
+
+```
+  nosi aidev   Ubuntu 26.04 LTS (resolute)   Linux 6.x.x   x86_64
+
+  hostname:  nosi-aidev
+  ip:        192.168.1.42 (eth0)
+  iommu:     vfio (IOMMU on)
+  hugepgs:   0 (use 'hugepages' to allocate)
+  cpu:       Intel(R) Xeon(R) ...
+  ram:       64 GiB
+  nvme:      0
+
+  Agentic CLIs:  claude  codex  gemini  opencode  pi
+  Helpers:
+    nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
+    devbind                           bind/unbind PCI device to a driver
+    hugepages                         inspect / reserve hugepages
+```
 
 ## Roadmap flavors
 

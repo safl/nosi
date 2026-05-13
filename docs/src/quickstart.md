@@ -38,3 +38,19 @@ curl -sL 'https://ghcr.io/v2/safl/nosi/<variant>/blobs/sha256:<digest>' \
 ```
 
 See [](release.md) for the rolling-release model and tag scheme.
+
+## Import a WSL2 rootfs (`ubuntu-aidev` only)
+
+`ubuntu-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
+GHCR repo (`<variant>-wsl`). To stand up a WSL distro from it (PowerShell):
+
+```powershell
+curl.exe -sL 'https://ghcr.io/v2/safl/nosi/ubuntu-aidev-wsl/blobs/sha256:<digest>' `
+    -o nosi-aidev.tar.gz
+wsl --import nosi-aidev C:\WSL\nosi-aidev nosi-aidev.tar.gz
+wsl -d nosi-aidev
+```
+
+The imported distro boots with `systemd=true` and default user `odus`
+(matching the flashable variant). The first boot regenerates SSH host
+keys and the machine-id; `nosi-motd.service` writes the banner.

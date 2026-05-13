@@ -26,6 +26,11 @@ required.
 | `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
 | `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
 | `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
+| `ubuntu-aidev`   | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | aidev    |
+
+`ubuntu-aidev` additionally publishes a WSL2 rootfs tarball at
+`ghcr.io/<owner>/<repo>/ubuntu-aidev-wsl` (consumable by `wsl --import`)
+derived from the same bake.
 
 ## Quick start
 
@@ -33,7 +38,9 @@ required.
     make build VARIANT=debian-sysdev   # build one variant
     make all                           # build every variant
 
-Local builds need `qemu-system-x86_64` + KVM accessible.
+Local builds need `qemu-system-x86_64` + KVM accessible. Building
+`ubuntu-aidev` also needs `libguestfs-tools` (for the WSL post-bake
+strip + tar-out).
 
 ## Releasing
 

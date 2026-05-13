@@ -7,6 +7,12 @@ nosi is **rolling**, not semver. Every publish gets:
 - `ghcr.io/<owner>/<repo>/<variant>:latest` -- moves to the most recent
   publish
 
+Variants that produce a WSL rootfs alongside the flashable image
+(`ubuntu-aidev` today) push that artifact to a sibling repo named
+`<variant>-wsl` with the same tag scheme. Keeping the WSL tarball under
+its own repo means bty's flashable catalog stays cleanly scoped to disk
+images.
+
 ## When publishes fire
 
 - push to `main`
@@ -55,5 +61,17 @@ oras push \
 oras tag ghcr.io/<repo>/<variant>:<rolling-tag> latest
 ```
 
+The WSL rootfs target pushes the same way with its own artifact type:
+
+```
+oras push \
+    ghcr.io/<repo>/<variant>-wsl:<rolling-tag> \
+    --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
+    <variant>-wsl.tar.gz:application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
+    <variant>-wsl.tar.gz.sha256:text/plain
+oras tag ghcr.io/<repo>/<variant>-wsl:<rolling-tag> latest
+```
+
 Custom `artifactType` keeps `docker pull` from misinterpreting these as
-container images.
+container images, and separates the two artifact classes (disk image vs
+WSL rootfs) for downstream tooling that may filter on it.
