@@ -6,7 +6,7 @@
 [![release](https://img.shields.io/badge/release-rolling-orange.svg)](#releasing)
 
 **nosi** = **N**iche **O**perating **S**ystem **I**mages.
-*(Also accepted: **N**ot **O**marchy **S**ystem **I**mages, if you're feeling cheeky. Same urge to bake an opinionated dev setup into someone else's distro, different crowd.)*
+*(Pronounced "nosy" -- a nosy person can't help poking their nose in everywhere, and I can't help putting these images on every machine I touch.)*
 
 Automated builds of operating-system images, pre-loaded with software fit
 for systems development in C, Python, and Rust.

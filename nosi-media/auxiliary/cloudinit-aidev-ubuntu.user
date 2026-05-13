@@ -41,14 +41,18 @@ packages:
   - sudo
   - systemd-resolved
   - btop
+  - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
   - fzf
+  - gh                   # GitHub CLI
   - git
   - git-delta            # `delta` pager, wired into /etc/gitconfig
   - htop
+  - just                 # task runner (sister to make-as-task-runner)
   - meson
   - ninja-build
   - ripgrep
+  - shellcheck           # bash linter; complements bash-language-server below
   - unzip                # yazi ships as a zip in its releases
   - fontconfig           # fc-cache for the JetBrainsMono Nerd Font install
   - curl
@@ -222,6 +226,35 @@ runcmd:
     rm -rf "$tmp"
     /usr/local/bin/yazi --version
 
+  # Install taplo (TOML LSP) from upstream release (see debian sysdev).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  tarch=x86_64 ;;
+        aarch64) tarch=aarch64 ;;
+        *) echo "nosi: unsupported arch $arch for taplo" >&2; exit 1 ;;
+    esac
+    curl -fsSL "https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-${tarch}.gz" \
+        | gunzip > /usr/local/bin/taplo
+    chmod 0755 /usr/local/bin/taplo
+    /usr/local/bin/taplo --version
+
+  # Install marksman (Markdown LSP) from upstream release (see debian sysdev).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  march=x64 ;;
+        aarch64) march=arm64 ;;
+        *) echo "nosi: unsupported arch $arch for marksman" >&2; exit 1 ;;
+    esac
+    curl -fsSL "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${march}" \
+        -o /usr/local/bin/marksman
+    chmod 0755 /usr/local/bin/marksman
+    /usr/local/bin/marksman --version 2>/dev/null \
+        || /usr/local/bin/marksman --help >/dev/null
+
   # fd symlink + system-wide delta-as-git-pager. See debian sysdev variant.
   - |
     set -eu
@@ -280,15 +313,25 @@ runcmd:
     PROF
     chmod 0644 /etc/profile.d/nosi-localbin.sh
 
+  # direnv bash hook (see debian sysdev for rationale).
+  - |
+    cat > /etc/profile.d/nosi-direnv.sh <<'PROF'
+    if command -v direnv >/dev/null 2>&1; then
+        eval "$(direnv hook bash)"
+    fi
+    PROF
+    chmod 0644 /etc/profile.d/nosi-direnv.sh
+
   - mkdir -p /etc/containers && touch /etc/containers/nodocker
   - systemctl enable podman.socket
 
-  # --- aidev: agentic CLIs (npm-globally installed) ----------------------
+  # --- aidev: agentic CLIs + Node-based LSPs (npm-globally installed) ---
   # System-wide install under /usr/lib/node_modules with shims in
   # /usr/local/bin. npm's global prefix on Ubuntu is /usr by default; we
   # repoint to /usr/local so apt-managed /usr files stay untouched and the
-  # CLIs survive an Ubuntu npm purge. Package names verified against
-  # current vendor docs.
+  # CLIs survive an Ubuntu npm purge. The bash + yaml LSPs ship here
+  # (not on sysdev) because they require Node, which sysdev intentionally
+  # doesn't carry.
   - |
     set -eu
     mkdir -p /usr/local/lib/node_modules
@@ -297,12 +340,16 @@ runcmd:
         @anthropic-ai/claude-code \
         @openai/codex \
         @google/gemini-cli \
-        opencode-ai
+        opencode-ai \
+        bash-language-server \
+        yaml-language-server
     # Sanity: each CLI should print its version.
     claude --version 2>/dev/null || claude-code --version 2>/dev/null || true
     codex --version 2>/dev/null || true
     gemini --version 2>/dev/null || true
     opencode --version 2>/dev/null || true
+    bash-language-server --version 2>/dev/null || true
+    yaml-language-server --version 2>/dev/null || true
 
   # pi (https://pi.dev). Curl-piped installer, run as root so the binary
   # lands in a system path. The installer is opaque w.r.t. version

@@ -38,14 +38,19 @@ packages:
   - sudo
   - systemd-resolved
   - btop
+  - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fd on Fedora (no rename needed)
   - fzf
+  - gh                   # GitHub CLI
   - git
   - git-delta            # `delta` pager, wired into /etc/gitconfig
   - htop
+  - just                 # task runner (sister to make-as-task-runner)
   - meson
   - ninja-build
   - ripgrep
+  - ShellCheck           # bash linter; sysdev's substitute for the
+                         # Node-based bash-language-server (aidev only)
   - unzip                # yazi ships as a zip in its releases
   - bind-utils
   - curl
@@ -207,6 +212,35 @@ runcmd:
     rm -rf "$tmp"
     /usr/local/bin/yazi --version
 
+  # Install taplo (TOML LSP) from upstream release (see debian variant).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  tarch=x86_64 ;;
+        aarch64) tarch=aarch64 ;;
+        *) echo "nosi: unsupported arch $arch for taplo" >&2; exit 1 ;;
+    esac
+    curl -fsSL "https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-${tarch}.gz" \
+        | gunzip > /usr/local/bin/taplo
+    chmod 0755 /usr/local/bin/taplo
+    /usr/local/bin/taplo --version
+
+  # Install marksman (Markdown LSP) from upstream release (see debian variant).
+  - |
+    set -eu
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  march=x64 ;;
+        aarch64) march=arm64 ;;
+        *) echo "nosi: unsupported arch $arch for marksman" >&2; exit 1 ;;
+    esac
+    curl -fsSL "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${march}" \
+        -o /usr/local/bin/marksman
+    chmod 0755 /usr/local/bin/marksman
+    /usr/local/bin/marksman --version 2>/dev/null \
+        || /usr/local/bin/marksman --help >/dev/null
+
   # System-wide delta-as-git-pager. (Fedora's fd-find ships /usr/bin/fd
   # directly, so no symlink needed unlike the Debian/Ubuntu variants.)
   - |
@@ -250,6 +284,15 @@ runcmd:
     fi
     PROF
     chmod 0644 /etc/profile.d/nosi-localbin.sh
+
+  # direnv bash hook (see debian variant for rationale).
+  - |
+    cat > /etc/profile.d/nosi-direnv.sh <<'PROF'
+    if command -v direnv >/dev/null 2>&1; then
+        eval "$(direnv hook bash)"
+    fi
+    PROF
+    chmod 0644 /etc/profile.d/nosi-direnv.sh
 
   - mkdir -p /etc/containers && touch /etc/containers/nodocker
   - systemctl enable podman.socket

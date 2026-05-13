@@ -47,6 +47,22 @@ round-trip.
 - `delta` -- syntax-highlighted diff/log/show pager, wired
   system-wide via `/etc/gitconfig` (override per-user in `~/.gitconfig`
   if you prefer the stock pager)
+- `gh` -- GitHub CLI
+- `just` -- task runner (`justfile` sister to `make`-as-task-runner)
+- `direnv` -- per-directory env vars via `.envrc`; bash hook lives at
+  `/etc/profile.d/nosi-direnv.sh`
+- `shellcheck` -- bash linter (sysdev's substitute for the Node-based
+  `bash-language-server` -- see the [aidev section](#aidev) for that)
+
+**LSPs that round out helix coverage**
+
+- `taplo` (TOML) and `marksman` (Markdown) -- both single-binary
+  upstream installs, no runtime deps. They join `clangd`, `rust-analyzer`,
+  `ruff`, and `pyright` (already part of the LSP stack above).
+- Two more LSPs that depend on Node (`bash-language-server`,
+  `yaml-language-server`) are intentionally not on `sysdev`; they ship
+  with [`aidev`](#aidev) instead, alongside the Node runtime that
+  flavor already needs for its agentic CLIs.
 
 **Containers**
 
@@ -187,8 +203,9 @@ post-flash.
 **Node and npm**
 
 - `nodejs`, `npm` from Ubuntu main (Node 22.x LTS). `npm`'s global
-  prefix is repointed to `/usr/local` so agentic CLIs survive any
-  Ubuntu npm reinstall.
+  prefix is repointed to `/usr/local` so the agentic CLIs and Node-based
+  LSPs survive any Ubuntu npm reinstall. `sysdev` deliberately does
+  not ship Node -- it stays a strict no-Node-runtime flavor.
 
 **Agentic command-line tools**
 
@@ -200,6 +217,14 @@ post-flash.
 
 The four npm-shipped CLIs install system-wide; `pi` lands wherever its
 installer chooses (root path on bake).
+
+**Node-based LSPs (aidev-only addition to the sysdev LSP stack)**
+
+- `bash-language-server` -- bash LSP. `sysdev` covers shell linting
+  via the lighter `shellcheck` distro package instead.
+- `yaml-language-server` -- YAML LSP.
+
+Both ride on the Node runtime aidev installs for the agentic CLIs.
 
 **RDMA userspace (vendor-neutral)**
 
