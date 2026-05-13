@@ -100,13 +100,19 @@ work and pass devices through to local VMs or containers without `sudo`:
 - Hugepages are not reserved at build (depends on host RAM); allocate at
   runtime with the `hugepages` helper.
 
-#### Flipping IOMMU on/off
+#### Switching the IOMMU substrate
+
+[`iommu`](https://pypi.org/project/iommu/) (safl/iommu) is the canonical
+interface. The image bakes `pt` (IOMMU on, host-owned devices in
+passthrough); switch with one of:
 
 ```
-nosi-pci-mode status      # show current mode + cmdline
-nosi-pci-mode vfio        # IOMMU on, intended for vfio-pci binding
-nosi-pci-mode uio         # IOMMU off, intended for uio_pci_generic
-sudo reboot               # required for cmdline change to apply
+iommu                      # = iommu show -- current mode + cmdline
+sudo iommu off-for-uio     # IOMMU off; uio_pci_generic ready
+sudo iommu off-for-vfio    # IOMMU off + vfio noiommu knob; vfio-pci without isolation
+sudo iommu strict          # IOMMU on, translating every DMA
+sudo iommu pt              # IOMMU on, host-owned devices in passthrough (default)
+sudo reboot                # required for cmdline change to apply
 ```
 
 Auto-detects `grubby` (Fedora) vs `update-grub` (Debian/Ubuntu).
@@ -161,16 +167,16 @@ boot by `nosi-motd.service`:
 
   hostname:  nosi-debian
   ip:        192.168.1.42 (enp0s3)
-  iommu:     vfio (IOMMU on)
+  iommu:     pt
   hugepgs:   0 (use 'hugepages' to allocate)
   cpu:       Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz x 24
   ram:       64 GiB
   nvme:      0
 
   Helpers:
-    nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
-    devbind                           bind/unbind PCI device to a driver
-    hugepages                         inspect / reserve hugepages
+    iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
+    devbind                                           bind/unbind PCI device to a driver
+    hugepages                                         inspect / reserve hugepages
 ```
 
 ### Background daemons (minimized)
@@ -295,7 +301,7 @@ Same `nosi-motd.service` as `sysdev`, with the header swapped to
 
   hostname:  nosi-aidev
   ip:        192.168.1.42 (eth0)
-  iommu:     vfio (IOMMU on)
+  iommu:     pt
   hugepgs:   0 (use 'hugepages' to allocate)
   cpu:       Intel(R) Xeon(R) ...
   ram:       64 GiB
@@ -303,9 +309,9 @@ Same `nosi-motd.service` as `sysdev`, with the header swapped to
 
   Agentic CLIs:  claude  codex  gemini  opencode  pi
   Helpers:
-    nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
-    devbind                           bind/unbind PCI device to a driver
-    hugepages                         inspect / reserve hugepages
+    iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
+    devbind                                           bind/unbind PCI device to a driver
+    hugepages                                         inspect / reserve hugepages
 ```
 
 ## Roadmap flavors

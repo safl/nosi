@@ -290,19 +290,20 @@ runcmd:
     chmod 0644 /etc/gitconfig
 
   # Shared /opt/python-tools venv (see debian variant for rationale):
-  # ruff + pyright LSPs + devbind + hugepages.
+  # ruff + pyright LSPs + devbind + hugepages + iommu.
   - |
     set -eu
     python3 -m venv /opt/python-tools
     /opt/python-tools/bin/pip install --no-cache-dir --upgrade pip
-    /opt/python-tools/bin/pip install --no-cache-dir ruff pyright devbind hugepages
-    for bin in ruff pyright pyright-langserver devbind hugepages; do
+    /opt/python-tools/bin/pip install --no-cache-dir ruff pyright devbind hugepages iommu
+    for bin in ruff pyright pyright-langserver devbind hugepages iommu; do
         ln -sf /opt/python-tools/bin/$bin /usr/local/bin/$bin
     done
     ruff --version
     pyright --version
     devbind --help >/dev/null 2>&1 || true
     hugepages --help >/dev/null 2>&1 || true
+    iommu --help >/dev/null 2>&1 || true
 
   - |
     cat > /etc/profile.d/nosi-localbin.sh <<'PROF'
@@ -352,56 +353,6 @@ runcmd:
     fi
     update-grub
 
-  - |
-    cat > /usr/local/bin/nosi-pci-mode <<'SCRIPT'
-    #!/bin/sh
-    # nosi-pci-mode: switch IOMMU on (vfio) or off (uio).
-    # Reboot required for the change to take effect.
-    # Usage: nosi-pci-mode {vfio|uio|status}
-    set -eu
-
-    case "${1:-status}" in
-        status)
-            echo "cmdline: $(cat /proc/cmdline)"
-            case " $(cat /proc/cmdline) " in
-                *' intel_iommu=on '*|*' amd_iommu=on '*) echo "mode: vfio (IOMMU on)" ;;
-                *' intel_iommu=off '*|*' amd_iommu=off '*) echo "mode: uio (IOMMU off)" ;;
-                *) echo "mode: unset" ;;
-            esac
-            exit 0
-            ;;
-        vfio)
-            add="intel_iommu=on amd_iommu=on iommu=pt"
-            del="intel_iommu=off amd_iommu=off"
-            ;;
-        uio)
-            add="intel_iommu=off amd_iommu=off"
-            del="intel_iommu=on amd_iommu=on iommu=pt"
-            ;;
-        *)
-            echo "usage: $0 {vfio|uio|status}" >&2
-            exit 2
-            ;;
-    esac
-
-    if command -v grubby >/dev/null 2>&1; then
-        sudo grubby --update-kernel=ALL --remove-args="$del" >/dev/null || true
-        sudo grubby --update-kernel=ALL --args="$add"
-    else
-        cfg=/etc/default/grub
-        for a in $del; do
-            sudo sed -i "s/\b${a}\b//g; s/  */ /g; s/ \"/\"/g" "$cfg"
-        done
-        for a in $add; do
-            grep -q "$a" "$cfg" || \
-                sudo sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${a}\"/" "$cfg"
-        done
-        sudo update-grub
-    fi
-    echo "Kernel cmdline updated to '$1' mode. Reboot for changes to take effect."
-    SCRIPT
-    chmod 0755 /usr/local/bin/nosi-pci-mode
-
   # /etc/motd banner regenerated each boot by nosi-motd.service.
   # (See debian variant for the full script + service body.)
   - |
@@ -426,11 +377,8 @@ runcmd:
     EOF
     [ -z "$ips" ] && ips="(none)"
 
-    case " $(cat /proc/cmdline) " in
-        *' intel_iommu=on '*|*' amd_iommu=on '*) iommu="vfio (IOMMU on)" ;;
-        *' intel_iommu=off '*|*' amd_iommu=off '*) iommu="uio  (IOMMU off)" ;;
-        *) iommu="unset" ;;
-    esac
+    iommu="$(iommu show 2>/dev/null | awk '/^mode:/ {print $2}')"
+    [ -z "$iommu" ] && iommu="unset"
 
     hp_count="$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)"
     hp_size_kb="$(awk '/Hugepagesize:/ {print $2}' /proc/meminfo)"
@@ -461,9 +409,9 @@ runcmd:
 
       Tools:     rg fd fzf lazygit delta yazi oras gh just direnv
       Helpers:
-        nosi-pci-mode {vfio|uio|status}   flip IOMMU on/off (reboot to apply)
-        devbind                           bind/unbind PCI device to a driver
-        hugepages                         inspect / reserve hugepages
+        iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
+        devbind                                           bind/unbind PCI device to a driver
+        hugepages                                         inspect / reserve hugepages
 
     EOM
     SCRIPT

@@ -22,10 +22,12 @@ pre-installed, vfio-pci / uio_pci_generic / IOMMU are wired up so a
 freshly-flashed box can immediately do userspace NVMe development.
 
 The Python helpers shipped in `sysdev` --
-[`devbind`](https://pypi.org/project/devbind/) and
-[`hugepages`](https://pypi.org/project/hugepages/) -- are part of the
-xNVMe ecosystem and are the canonical interface for changing PCI driver
-bindings and managing hugepages on nosi images.
+[`devbind`](https://pypi.org/project/devbind/),
+[`hugepages`](https://pypi.org/project/hugepages/), and
+[`iommu`](https://pypi.org/project/iommu/) -- are the canonical
+interface for changing PCI driver bindings, managing hugepages, and
+switching the IOMMU substrate on nosi images. The first two are part of
+the xNVMe ecosystem; `iommu` is a sibling tool with the same shape.
 
 ## cijoe -- the build orchestrator
 
