@@ -306,7 +306,7 @@ runcmd:
     hugepages --help >/dev/null 2>&1 || true
     iommu --help >/dev/null 2>&1 || true
 
-  # Bash completions for the userspace-PCI helpers (see debian variant).
+  # Bash completions for the user space PCI helpers (see debian variant).
   - |
     set -eu
     for t in iommu devbind hugepages; do
@@ -361,7 +361,7 @@ runcmd:
     fi
     update-grub
 
-  # memlock for vfio-pci / DPDK / SPDK (see debian variant for rationale).
+  # memlock raised for DPDK/SPDK and xNVMe/uPCIe via vfio-pci (see debian variant for rationale).
   - |
     cat > /etc/security/limits.d/nosi-memlock.conf <<'LIMITS'
     *  soft  memlock  unlimited
@@ -491,7 +491,7 @@ runcmd:
         echo "## free -h"
         free -h
         echo
-        echo "## prlimit (memlock is the relevant one for vfio-pci / DPDK / SPDK)"
+        echo "## prlimit (memlock matters for DPDK/SPDK and xNVMe/uPCIe via vfio-pci)"
         prlimit 2>/dev/null || true
         echo
         echo "## CPU (first block of /proc/cpuinfo)"

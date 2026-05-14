@@ -1,7 +1,7 @@
 #cloud-config
 # nosi aidev : Ubuntu 26.04 LTS (resolute). Same baseline as sysdev-ubuntu
 # plus Node.js and a set of agentic-AI command-line tools (claude-code,
-# codex, gemini-cli, opencode, pi). Distro RDMA userspace is included so
+# codex, gemini-cli, opencode, pi). Distro RDMA user space is included so
 # ibverbs-capable apps work out of the box on any vendor. No GPU vendor
 # stack is baked in -- aidev stays neutral across x86/nvidia, x86/amd,
 # and CPU-only deployments; operators install the vendor driver of their
@@ -102,7 +102,7 @@ packages:
   # NodeSource. Including npm explicitly since Install-Recommends is off.
   - nodejs
   - npm
-  # Mellanox userspace: distro-shipped RDMA stack. Enough for ibverbs apps
+  # Mellanox user space: distro-shipped RDMA stack. Enough for ibverbs apps
   # and basic InfiniBand/RoCE bring-up; MLNX_OFED proper is opt-in via the
   # DOCA repo (operator can add it post-flash if they need kernel-tied
   # functionality).
@@ -323,7 +323,7 @@ runcmd:
     pyright --version
     iommu --help >/dev/null 2>&1 || true
 
-  # Bash completions for the userspace-PCI helpers (see sysdev-debian).
+  # Bash completions for the user space PCI helpers (see sysdev-debian).
   - |
     set -eu
     for t in iommu devbind hugepages; do
@@ -443,7 +443,7 @@ runcmd:
     fi
     update-grub
 
-  # memlock for vfio-pci / DPDK / SPDK (see sysdev-debian for rationale).
+  # memlock raised for DPDK/SPDK and xNVMe/uPCIe via vfio-pci (see sysdev-debian for rationale).
   - |
     cat > /etc/security/limits.d/nosi-memlock.conf <<'LIMITS'
     *  soft  memlock  unlimited
@@ -573,7 +573,7 @@ runcmd:
         echo "## free -h"
         free -h
         echo
-        echo "## prlimit (memlock is the relevant one for vfio-pci / DPDK / SPDK)"
+        echo "## prlimit (memlock matters for DPDK/SPDK and xNVMe/uPCIe via vfio-pci)"
         prlimit 2>/dev/null || true
         echo
         echo "## CPU (first block of /proc/cpuinfo)"
@@ -601,7 +601,7 @@ runcmd:
 
   - passwd -l root
   # odus gets render+video on top of the sysdev sudo+kvm so it can drive
-  # the NVIDIA userspace stack without sudo.
+  # the NVIDIA user space stack without sudo.
   - useradd --create-home --shell /bin/bash --groups sudo,kvm,render,video odus
   - |
     set -eu

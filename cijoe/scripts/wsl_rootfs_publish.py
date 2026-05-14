@@ -15,7 +15,7 @@ Pipeline (qemu-nbd + chroot; no libguestfs):
   3. Mount the rootfs partition, bind-mount /dev /proc /sys /run from
      the host, and ``chroot`` in to run a strip script that apt-purges
      the kernel, bootloader, firmware, cloud-init, netplan, and
-     NetworkManager. qemu + podman/buildah + the rest of the userspace
+     NetworkManager. qemu + podman/buildah + the rest of the user space
      stay (WSL2 exposes /dev/kvm via nested virt, and containers are a
      primary use case). Vendor GPU/NIC drivers aren't installed in
      aidev today; when they are, they'll need to be added to the strip

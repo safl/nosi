@@ -15,11 +15,12 @@ In a lab where nosi and bty are used together, the workflow is:
 2. The bty catalog references the image by blob digest.
 3. bty re-flashes targets to that digest, locally or via PXE.
 
-## xnvme -- userspace NVMe
+## xnvme -- user space NVMe
 
 The `sysdev` flavor leans toward xNVMe-adjacent work: NVMe-CLI is
 pre-installed, vfio-pci / uio_pci_generic / IOMMU are wired up so a
-freshly-flashed box can immediately do userspace NVMe development.
+freshly-flashed box can immediately do user space NVMe development with
+DPDK/SPDK and xNVMe/uPCIe.
 
 The Python helpers shipped in `sysdev` --
 [`devbind`](https://pypi.org/project/devbind/),

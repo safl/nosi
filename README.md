@@ -33,12 +33,12 @@ Two flavors today:
   hardware/storage inspection (`dmidecode`, `lshw`, `nvme-cli`,
   `pciutils`, `smartmontools`, `usbutils`), container stack (`podman`,
   `buildah`, `skopeo`, `podman-docker`), local QEMU (`qemu-system-x86`,
-  `ovmf`), userspace-PCI plumbing (`vfio-pci`, `uio_pci_generic`, IOMMU
-  helpers).
+  `ovmf`), user space PCI plumbing (`vfio-pci`, `uio_pci_generic`, IOMMU
+  helpers) for DPDK/SPDK and xNVMe/uPCIe workflows.
 - **`aidev`** -- `sysdev` superset, plus Node and a curated set of
   agentic-AI CLIs (`claude`, `codex`, `gemini`, `opencode`, `pi`),
   Node-based LSPs (`bash-language-server`, `yaml-language-server`),
-  distro RDMA userspace, and the JetBrainsMono Nerd Font. Ships as both
+  distro RDMA user space, and the JetBrainsMono Nerd Font. Ships as both
   a flashable `.img.gz` and a WSL2 rootfs `.tar.gz` derived from the
   same bake; the WSL tarball goes to a sibling GHCR repo named
   `<variant>-wsl`.

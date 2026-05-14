@@ -325,7 +325,8 @@ runcmd:
     chmod 0644 /etc/gitconfig
 
   # Shared /opt/python-tools venv with the opinionated helix LSP /
-  # linter / formatter stack and the userspace-PCI helpers:
+  # linter / formatter stack and the user space PCI helpers
+  # (DPDK/SPDK and xNVMe/uPCIe ergonomics):
   #   - ruff (linter + formatter, includes built-in `ruff server` LSP)
   #   - pyright (type-checking LSP)
   #   - devbind (sysfs-based PCI driver-binding manager, github.com/xnvme/devbind)
@@ -347,7 +348,7 @@ runcmd:
     hugepages --help >/dev/null 2>&1 || true
     iommu --help >/dev/null 2>&1 || true
 
-  # Bash completions for the userspace-PCI helpers. Each tool ships
+  # Bash completions for the user space PCI helpers. Each tool ships
   # `--print-completion bash`; the autoloader from the `bash-completion`
   # package sources /etc/bash_completion.d/* on interactive shells, so
   # tab-completion is live on first login with zero per-user setup.
@@ -389,7 +390,7 @@ runcmd:
   # Userspace PCI prerequisites for passing PCI devices through to qemu
   # guests or to podman containers (SPDK / DPDK / xNVMe / GPU-style work):
   #   - Preload vfio-pci and uio_pci_generic so devices can be bound to
-  #     a userspace driver immediately.
+  #     a user space driver (DPDK/SPDK and xNVMe/uPCIe) immediately.
   #   - udev rule hands /dev/vfio/* to the kvm group, which odus is in,
   #     so passthrough works without sudo.
   #   - GRUB cmdline gets intel_iommu / amd_iommu / iommu=pt so vfio
@@ -422,11 +423,12 @@ runcmd:
     fi
     update-grub
 
-  # memlock: VFIO_IOMMU_MAP_DMA pins userspace pages against RLIMIT_MEMLOCK.
+  # memlock: VFIO_IOMMU_MAP_DMA pins user space pages against RLIMIT_MEMLOCK.
   # Stock Debian sets the soft limit at 64 MiB which is the exact threshold
-  # DPDK/SPDK warns at and below which `devbind --list` will fire its
-  # memlock-too-low diagnostic. limits.conf drop-in raises both to unlimited
-  # system-wide so vfio-pci consumers don't trip on first boot.
+  # DPDK/SPDK and xNVMe/uPCIe warn at and below which `devbind --list`
+  # will fire its memlock-too-low diagnostic. limits.conf drop-in raises
+  # both to unlimited system-wide so vfio-pci consumers don't trip on first
+  # boot.
   - |
     cat > /etc/security/limits.d/nosi-memlock.conf <<'LIMITS'
     *  soft  memlock  unlimited
@@ -565,7 +567,7 @@ runcmd:
         echo "## free -h"
         free -h
         echo
-        echo "## prlimit (memlock is the relevant one for vfio-pci / DPDK / SPDK)"
+        echo "## prlimit (memlock matters for DPDK/SPDK and xNVMe/uPCIe via vfio-pci)"
         prlimit 2>/dev/null || true
         echo
         echo "## CPU (first block of /proc/cpuinfo)"

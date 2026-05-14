@@ -88,10 +88,11 @@ round-trip.
 - `dmidecode`, `hdparm`, `lshw`, `nvme-cli`, `pciutils`, `smartmontools`,
   `usbutils`
 
-### Userspace PCI / KVM / containers
+### User space PCI / KVM / containers
 
-`sysdev` is set up so an unprivileged `odus` shell can do userspace-PCI
-work and pass devices through to local VMs or containers without `sudo`:
+`sysdev` is set up so an unprivileged `odus` shell can do user space PCI
+work (DPDK/SPDK and xNVMe/uPCIe) and pass devices through to local VMs
+or containers without `sudo`:
 
 - IOMMU is enabled at boot (`intel_iommu=on amd_iommu=on iommu=pt`).
 - `vfio-pci` and `uio_pci_generic` are auto-loaded at boot.
@@ -117,7 +118,7 @@ sudo reboot                # required for cmdline change to apply
 
 Auto-detects `grubby` (Fedora) vs `update-grub` (Debian/Ubuntu).
 
-#### Binding a device to a userspace driver
+#### Binding a device to a user space driver
 
 [`devbind`](https://pypi.org/project/devbind/) (xnvme/devbind) is the
 canonical interface:
@@ -201,7 +202,7 @@ Re-enable any of these post-flash with
 Conceptually a strict superset of `sysdev`: every package, every helper,
 every daemon-prune carries over. On top of that, `aidev` lands the
 agentic-AI CLIs operators reach for when working alongside model-driven
-tooling, plus Node and a distro RDMA userspace.
+tooling, plus Node and a distro RDMA user space.
 
 Today only `ubuntu-aidev` ships -- Ubuntu is the lowest-friction base
 for the vendor ecosystem an AI engineer is most likely to want to plug
@@ -239,7 +240,7 @@ installer chooses (root path on bake).
 
 Both ride on the Node runtime aidev installs for the agentic CLIs.
 
-**RDMA userspace (vendor-neutral)**
+**RDMA user space (vendor-neutral)**
 
 - `rdma-core`, `libibverbs1`, `libmlx5-1`, `ibverbs-utils`,
   `infiniband-diags`, `perftest`
@@ -286,7 +287,7 @@ excluded) and gzip + sha256-sealed.
 Notable things that **survive** into the WSL rootfs: `qemu` + `ovmf`
 (WSL2 exposes `/dev/kvm` via nested virt), the full container stack
 (`podman`, `buildah`, `skopeo`, `podman-docker`), the agentic CLIs, the
-RDMA userspace, and the standard `sysdev` development toolchain. The
+RDMA user space, and the standard `sysdev` development toolchain. The
 two `/etc/wsl.conf` and `/etc/wsl-distribution.conf` files are written
 unconditionally by cloud-init -- inert on the flashable artifact, used
 on the WSL one (`systemd=true`, default user `odus`).
