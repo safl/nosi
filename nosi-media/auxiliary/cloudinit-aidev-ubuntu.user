@@ -443,6 +443,14 @@ runcmd:
     fi
     update-grub
 
+  # memlock for vfio-pci / DPDK / SPDK (see sysdev-debian for rationale).
+  - |
+    cat > /etc/security/limits.d/nosi-memlock.conf <<'LIMITS'
+    *  soft  memlock  unlimited
+    *  hard  memlock  unlimited
+    LIMITS
+    chmod 0644 /etc/security/limits.d/nosi-memlock.conf
+
   # /etc/motd banner regenerated each boot by nosi-motd.service.
   - |
     cat > /usr/local/bin/nosi-motd <<'SCRIPT'
@@ -564,6 +572,9 @@ runcmd:
         echo
         echo "## free -h"
         free -h
+        echo
+        echo "## prlimit (memlock is the relevant one for vfio-pci / DPDK / SPDK)"
+        prlimit 2>/dev/null || true
         echo
         echo "## CPU (first block of /proc/cpuinfo)"
         awk '/^$/ {exit} 1' /proc/cpuinfo
