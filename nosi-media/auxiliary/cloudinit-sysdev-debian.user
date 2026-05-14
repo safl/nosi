@@ -48,6 +48,7 @@ packages:
   # from upstream tarballs in runcmd; distro packages skew old and Ubuntu
   # 26.04 dropped helix from universe at one point). taplo + marksman
   # LSPs are installed from upstream in runcmd (single native binaries).
+  - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
@@ -346,6 +347,16 @@ runcmd:
     hugepages --help >/dev/null 2>&1 || true
     iommu --help >/dev/null 2>&1 || true
 
+  # Bash completions for the userspace-PCI helpers. Each tool ships
+  # `--print-completion bash`; the autoloader from the `bash-completion`
+  # package sources /etc/bash_completion.d/* on interactive shells, so
+  # tab-completion is live on first login with zero per-user setup.
+  - |
+    set -eu
+    for t in iommu devbind hugepages; do
+        $t --print-completion bash > /etc/bash_completion.d/$t 2>/dev/null || true
+    done
+
   # System-wide `pipx ensurepath` equivalent.
   - |
     cat > /etc/profile.d/nosi-localbin.sh <<'PROF'
@@ -494,6 +505,76 @@ runcmd:
     WantedBy=multi-user.target
     UNIT
   - systemctl enable nosi-motd.service
+
+  # nosi-firstboot-inventory: forensic snapshot to /var/log/nosi-firstboot.txt
+  # on first boot only. lspci / lsblk / iommu / devbind / hugepages / ip /
+  # cmdline / CPU / RAM. Useful to diff against later state when something
+  # broke and you want to know what changed since flash. Runs exactly once:
+  # ConditionPathExists=!/var/log/nosi-firstboot.txt short-circuits later
+  # boots once the file is written.
+  - |
+    cat > /usr/local/bin/nosi-firstboot-inventory <<'SCRIPT'
+    #!/bin/sh
+    set -eu
+    out=/var/log/nosi-firstboot.txt
+    {
+        echo "# nosi-firstboot-inventory $(date -Iseconds)"
+        echo
+        echo "## /etc/os-release"
+        cat /etc/os-release 2>/dev/null || true
+        echo
+        echo "## uname -a"
+        uname -a
+        echo
+        echo "## /proc/cmdline"
+        cat /proc/cmdline
+        echo
+        echo "## ip -br a"
+        ip -br a 2>/dev/null || true
+        echo
+        echo "## lsblk"
+        lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT 2>/dev/null || true
+        echo
+        echo "## lspci -nn"
+        lspci -nn 2>/dev/null || true
+        echo
+        echo "## nvme list"
+        nvme list 2>/dev/null || true
+        echo
+        echo "## iommu show"
+        iommu show 2>/dev/null || true
+        echo
+        echo "## devbind --list"
+        devbind --list 2>/dev/null || true
+        echo
+        echo "## hugepages info"
+        hugepages info 2>/dev/null || true
+        echo
+        echo "## free -h"
+        free -h
+        echo
+        echo "## CPU (first block of /proc/cpuinfo)"
+        awk '/^$/ {exit} 1' /proc/cpuinfo
+    } > "$out"
+    SCRIPT
+    chmod 0755 /usr/local/bin/nosi-firstboot-inventory
+
+    cat > /etc/systemd/system/nosi-firstboot-inventory.service <<'UNIT'
+    [Unit]
+    Description=Capture first-boot inventory to /var/log/nosi-firstboot.txt
+    After=network-online.target nosi-motd.service
+    Wants=network-online.target
+    ConditionPathExists=!/var/log/nosi-firstboot.txt
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/bin/nosi-firstboot-inventory
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+  - systemctl enable nosi-firstboot-inventory.service
 
   # Operator account: `odus` with password `odus.321`, passwordless sudo. Lock
   # root so the only login channel is `odus`. Rotate the password before

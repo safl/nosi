@@ -37,6 +37,7 @@ packages:
   - openssh-server
   - sudo
   - systemd-resolved
+  - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fd on Fedora (no rename needed)
@@ -294,6 +295,13 @@ runcmd:
     hugepages --help >/dev/null 2>&1 || true
     iommu --help >/dev/null 2>&1 || true
 
+  # Bash completions for the userspace-PCI helpers (see debian variant).
+  - |
+    set -eu
+    for t in iommu devbind hugepages; do
+        $t --print-completion bash > /etc/bash_completion.d/$t 2>/dev/null || true
+    done
+
   - |
     cat > /etc/profile.d/nosi-localbin.sh <<'PROF'
     if [ -d "$HOME/.local/bin" ]; then
@@ -409,6 +417,71 @@ runcmd:
     WantedBy=multi-user.target
     UNIT
   - systemctl enable nosi-motd.service
+
+  # nosi-firstboot-inventory (see debian variant for full rationale).
+  - |
+    cat > /usr/local/bin/nosi-firstboot-inventory <<'SCRIPT'
+    #!/bin/sh
+    set -eu
+    out=/var/log/nosi-firstboot.txt
+    {
+        echo "# nosi-firstboot-inventory $(date -Iseconds)"
+        echo
+        echo "## /etc/os-release"
+        cat /etc/os-release 2>/dev/null || true
+        echo
+        echo "## uname -a"
+        uname -a
+        echo
+        echo "## /proc/cmdline"
+        cat /proc/cmdline
+        echo
+        echo "## ip -br a"
+        ip -br a 2>/dev/null || true
+        echo
+        echo "## lsblk"
+        lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT 2>/dev/null || true
+        echo
+        echo "## lspci -nn"
+        lspci -nn 2>/dev/null || true
+        echo
+        echo "## nvme list"
+        nvme list 2>/dev/null || true
+        echo
+        echo "## iommu show"
+        iommu show 2>/dev/null || true
+        echo
+        echo "## devbind --list"
+        devbind --list 2>/dev/null || true
+        echo
+        echo "## hugepages info"
+        hugepages info 2>/dev/null || true
+        echo
+        echo "## free -h"
+        free -h
+        echo
+        echo "## CPU (first block of /proc/cpuinfo)"
+        awk '/^$/ {exit} 1' /proc/cpuinfo
+    } > "$out"
+    SCRIPT
+    chmod 0755 /usr/local/bin/nosi-firstboot-inventory
+
+    cat > /etc/systemd/system/nosi-firstboot-inventory.service <<'UNIT'
+    [Unit]
+    Description=Capture first-boot inventory to /var/log/nosi-firstboot.txt
+    After=network-online.target nosi-motd.service
+    Wants=network-online.target
+    ConditionPathExists=!/var/log/nosi-firstboot.txt
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/bin/nosi-firstboot-inventory
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+  - systemctl enable nosi-firstboot-inventory.service
 
   # Fedora's sshd_config defaults to PasswordAuthentication=no; flip on
   # so the baked `odus:odus.321` works without an SSH key.
