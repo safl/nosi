@@ -20,6 +20,27 @@ timezone: UTC
 
 ssh_pwauth: true
 
+# Operator account: `odus` with password `odus.321`, passwordless sudo. Created
+# here (cloud-init users-module) rather than in runcmd because users-module
+# calls `useradd -p HASH`, which writes the hash straight to /etc/shadow
+# without going through PAM (so pam_pwquality cannot reject `odus.321` for
+# containing the username), without depending on `openssl` being installed at
+# runcmd time, and without the runcmd hazard that a single non-zero exit
+# silently skips later items. Hash is `openssl passwd -6 -salt nosiOpRator
+# odus.321`; salt is fixed so identical bakes produce identical /etc/shadow.
+# render+video on top of sysdev's sudo+kvm so odus can drive a GPU /dev/dri
+# device without sudo once the operator installs a vendor stack. Root is
+# locked in runcmd below.
+users:
+  - default
+  - name: odus
+    gecos: nosi operator
+    shell: /bin/bash
+    groups: [sudo, kvm, render, video]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
 growpart:
   mode: auto
   devices: ["/"]
@@ -703,18 +724,11 @@ runcmd:
   - systemctl enable systemd-timesyncd.service
   - systemctl enable nosi-clock-from-http.service
 
+  # odus itself is created by the top-level `users:` block (hashed_passwd
+  # written straight to /etc/shadow, plus render+video groups for the GPU
+  # user space stack). All that's left here is locking root so the only
+  # login channel is odus.
   - passwd -l root
-  # odus gets render+video on top of the sysdev sudo+kvm so it can drive
-  # the NVIDIA user space stack without sudo.
-  - useradd --create-home --shell /bin/bash --groups sudo,kvm,render,video odus
-  - |
-    set -eu
-    hash=$(openssl passwd -6 'odus.321')
-    printf 'odus:%s\n' "$hash" | chpasswd -e
-  - |
-    printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
-    chown root:root /etc/sudoers.d/odus
-    chmod 0440 /etc/sudoers.d/odus
 
   # --- snapd removal : same logic as sysdev-ubuntu -----------------------
   - |

@@ -12,6 +12,26 @@ timezone: UTC
 
 ssh_pwauth: true
 
+# Operator account: `odus` with password `odus.321`, passwordless sudo. Created
+# here (cloud-init users-module) rather than in runcmd because users-module
+# calls `useradd -p HASH`, which writes the hash straight to /etc/shadow
+# without going through PAM (so pam_pwquality cannot reject `odus.321` for
+# containing the username), without depending on `openssl` being installed at
+# runcmd time, and without the runcmd hazard that a single non-zero exit
+# silently skips later items. Hash is `openssl passwd -6 -salt nosiOpRator
+# odus.321`; salt is fixed so identical bakes produce identical /etc/shadow.
+# `wheel` is Fedora's sudo group. Root is locked in runcmd below. Rotate the
+# password before exposing the appliance to anything beyond a trusted network.
+users:
+  - default
+  - name: odus
+    gecos: nosi operator
+    shell: /bin/bash
+    groups: [wheel, kvm]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
 growpart:
   mode: auto
   devices: ["/"]
@@ -601,21 +621,10 @@ runcmd:
         > /etc/ssh/sshd_config.d/00-nosi.conf
     chmod 0644 /etc/ssh/sshd_config.d/00-nosi.conf
 
+  # odus itself is created by the top-level `users:` block (hashed_passwd
+  # written straight to /etc/shadow). All that's left here is locking root
+  # so the only login channel is odus.
   - passwd -l root
-  - useradd --create-home --shell /bin/bash --groups wheel,kvm odus
-  # chpasswd without -e pipes the password through PAM, where
-  # pam_pwquality on Fedora rejects 'odus.321' for containing the
-  # username "odus" and silently leaves the account password-locked.
-  # Pre-hash with openssl (SHA-512) and hand chpasswd the encrypted
-  # form via -e so PAM is not consulted.
-  - |
-    set -eu
-    hash=$(openssl passwd -6 'odus.321')
-    printf 'odus:%s\n' "$hash" | chpasswd -e
-  - |
-    printf 'odus ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/odus
-    chown root:root /etc/sudoers.d/odus
-    chmod 0440 /etc/sudoers.d/odus
 
   # Minimize background daemons / timers. Fedora doesn't ship
   # unattended-upgrades, but it has dnf-makecache + fwupd + mlocate +
