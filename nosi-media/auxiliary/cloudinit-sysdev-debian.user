@@ -111,6 +111,14 @@ packages:
   # Lake-P et al.), iwlwifi, regulatory.db, etc. Debian 13 cloud images
   # already enable the non-free-firmware component by default.
   - firmware-misc-nonfree
+  # CPU microcode (early-load via initramfs). intel-microcode and
+  # amd64-microcode both live in non-free-firmware in Debian 13;
+  # post-install hooks regenerate initramfs so the microcode prepend
+  # cpio is in place for the next boot. Errata fixes here are silently
+  # load-bearing for stability on consumer Intel SKUs (e.g. Alder Lake-N
+  # in the GMKtec NucBox G5) and recent AMD parts (Zen3+ in the G10).
+  - intel-microcode
+  - amd64-microcode
   # local virtualisation
   - ovmf
   - qemu-system-x86
@@ -422,6 +430,58 @@ runcmd:
         printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$EXTRA" >> /etc/default/grub
     fi
     update-grub
+
+  # Realtek r8125 (out-of-tree) via DKMS. Mainline r8169 covers RTL8125 on
+  # the kernels we ship, but specific 2.5GbE boards (notably the dual-2.5GbE
+  # NICs on the GMKtec NucBox G10 / Ryzen 5) hit link-flap and link-drop
+  # under load on r8169 that Realtek's own r8125 driver does not.
+  #
+  # Targeted preference, NOT a blanket r8169 blacklist: Realtek's upstream
+  # tarball ships a `blacklist r8169` modprobe.d entry intended for
+  # Realtek's autorun.sh, but blanket-blacklisting r8169 would break 1GbE
+  # on systems whose only Realtek NIC is an RTL8111 (also served by r8169).
+  # We instead drop a softdep (`r8169 pre: r8125`) so r8125 loads first and
+  # claims the RTL8125 PCI IDs; r8169 then loads and serves everything else
+  # it normally would. On a box with no RTL8125 at all, r8125 stays
+  # built-but-unloaded (no matching PCI alias), the softdep is a no-op,
+  # and r8169 handles RTL8111/etc. exactly as before.
+  #
+  # DKMS rebuilds against future kernel updates. Source:
+  # github.com/awesometic/realtek-r8125-dkms (Realtek upstream repackaged
+  # for DKMS).
+  - |
+    set -eu
+    apt-get install -y dkms "linux-headers-$(uname -r)" || true
+    # Also pull the headers metapackage matching the installed image
+    # metapackage; covers the package_upgrade-bumped-kernel case where
+    # the running kernel is older than the just-installed one.
+    for img_meta in linux-image-amd64 linux-image-cloud-amd64 \
+                    linux-image-virtual linux-image-generic; do
+        if dpkg-query -W -f='${Status}' "$img_meta" 2>/dev/null \
+                | grep -q "install ok installed"; then
+            hdr_meta=$(echo "$img_meta" | sed 's/^linux-image-/linux-headers-/')
+            apt-get install -y "$hdr_meta" || true
+            break
+        fi
+    done
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/awesometic/realtek-r8125-dkms/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/awesometic/realtek-r8125-dkms/archive/refs/tags/${ver}.tar.gz" \
+        | tar -xz -C "$tmp"
+    src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)
+    install -d "/usr/src/r8125-${ver}"
+    cp -a "$src/." "/usr/src/r8125-${ver}/"
+    rm -rf "$tmp"
+    dkms add -m r8125 -v "${ver}" || true
+    dkms autoinstall
+    cat > /etc/modprobe.d/nosi-r8125.conf <<'MOD'
+    # Prefer r8125 over r8169 for RTL8125 chips ONLY. r8169 still serves
+    # RTL8111 (1GbE) + the rest of the Realtek family on the same machine.
+    softdep r8169 pre: r8125
+    MOD
+    chmod 0644 /etc/modprobe.d/nosi-r8125.conf
 
   # memlock: VFIO_IOMMU_MAP_DMA pins user space pages against RLIMIT_MEMLOCK.
   # Stock Debian sets the soft limit at 64 MiB which is the exact threshold

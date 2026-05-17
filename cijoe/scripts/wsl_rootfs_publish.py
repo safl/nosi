@@ -66,8 +66,11 @@ from pathlib import Path
 # Notable things deliberately NOT purged: qemu + ovmf (WSL2 exposes
 # /dev/kvm with nested virtualization, so the qemu workflow is alive),
 # podman + buildah + skopeo (containers under WSL2 are a primary use
-# case), and any vendor GPU/NIC kernel modules (aidev stays neutral; if
-# a vendor stack ever gets baked in, add the kernel-tied packages here).
+# case). The r8125 source tree we register with DKMS at bake time for
+# bare-metal RTL8125 NICs is purged via the dkms package + the
+# /usr/src/r8125-* glob in the strip script (no kernel under WSL).
+# Vendor GPU stacks aren't baked into aidev today; if one ever is, add
+# its kernel-tied packages here.
 WSL_PURGE_GLOBS = [
     "linux-image-*",
     "linux-headers-*",
@@ -86,6 +89,11 @@ WSL_PURGE_GLOBS = [
     "cloud-initramfs-dyn-netconf",
     "netplan.io",
     "network-manager",
+    # DKMS framework + any source trees we registered at bake time
+    # (currently just r8125 for bare-metal RTL8125 NICs). Useless under
+    # WSL where the kernel is host-provided; module builds at next kernel
+    # update would also fail noisily without headers.
+    "dkms",
 ]
 
 
@@ -136,7 +144,9 @@ rm -rf \\
     /usr/lib/firmware \\
     /etc/grub.d \\
     /etc/default/grub \\
-    /var/log/installer
+    /var/log/installer \\
+    /var/lib/dkms \\
+    /usr/src/r8125-*
 
 # Drop SSH host keys (regenerated on first WSL boot if sshd is started).
 rm -f /etc/ssh/ssh_host_*

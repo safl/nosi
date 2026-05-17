@@ -89,6 +89,12 @@ packages:
   # regulatory.db, etc. The kernel package used to pull linux-firmware via
   # weak-deps; we set install_weak_deps=False so name it explicitly.
   - linux-firmware
+  # CPU microcode (early-load via dracut). AMD microcode ships through
+  # linux-firmware above; microcode_ctl adds Intel's blobs and the
+  # dracut hook that prepends them to initramfs. Same rationale as
+  # debian variant: errata fixes load-bearing for stability on consumer
+  # Intel SKUs (e.g. Alder Lake-N in the GMKtec NucBox G5).
+  - microcode_ctl
   - edk2-ovmf
   - qemu-img
   - qemu-system-x86-core
@@ -337,6 +343,35 @@ runcmd:
     SUBSYSTEM=="vfio", OWNER="root", GROUP="kvm", MODE="0660"
     RULES
   - grubby --update-kernel=ALL --args="intel_iommu=on amd_iommu=on iommu=pt"
+
+  # Realtek r8125 (out-of-tree) via DKMS. See debian variant for the full
+  # rationale; tldr: r8125 wins for RTL8125 chips via a softdep (not a
+  # blanket r8169 blacklist), so r8169 keeps serving RTL8111 / other
+  # Realtek NICs on the same machine. On a box with no RTL8125 at all,
+  # r8125 stays built-but-unloaded. Source:
+  # github.com/awesometic/realtek-r8125-dkms.
+  # kernel-devel (with no version) tracks the latest installed kernel; we
+  # also pull the running kernel's headers in case package_upgrade staged a
+  # newer kernel that hasn't booted yet.
+  - |
+    set -eu
+    dnf install -y dkms "kernel-devel-$(uname -r)" kernel-devel
+    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/awesometic/realtek-r8125-dkms/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/awesometic/realtek-r8125-dkms/archive/refs/tags/${ver}.tar.gz" \
+        | tar -xz -C "$tmp"
+    src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)
+    install -d "/usr/src/r8125-${ver}"
+    cp -a "$src/." "/usr/src/r8125-${ver}/"
+    rm -rf "$tmp"
+    dkms add -m r8125 -v "${ver}" || true
+    dkms autoinstall
+    cat > /etc/modprobe.d/nosi-r8125.conf <<'MOD'
+    softdep r8169 pre: r8125
+    MOD
+    chmod 0644 /etc/modprobe.d/nosi-r8125.conf
 
   # memlock raised for DPDK/SPDK and xNVMe/uPCIe via vfio-pci (see debian variant for rationale).
   - |
