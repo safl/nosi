@@ -40,6 +40,8 @@ packages:
   - openssh-server
   - sudo
   - systemd-resolved
+  # NTP via systemd's own daemon. See sysdev-debian for rationale.
+  - systemd-timesyncd
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
@@ -550,6 +552,11 @@ runcmd:
         iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
         devbind                                           bind/unbind PCI device to a driver
         hugepages                                         inspect / reserve hugepages
+      Reconfigure:
+        sudo systemd-firstboot --force --prompt           interactive locale/keymap/timezone/hostname
+        sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
+        sudo hostnamectl set-hostname NAME                hostname (default: nosi-aidev)
+        sudo passwd odus                                  operator password (default: odus.321)
 
     EOM
     SCRIPT
@@ -639,6 +646,63 @@ runcmd:
     UNIT
   - systemctl enable nosi-firstboot-inventory.service
 
+  # nosi-clock-from-http: forward-only clock step from a public HTTPS
+  # Date: header when NTP has not converged. See sysdev-debian for the
+  # full rationale and the G10 verified-failure case. Inert under WSL
+  # (Windows host sets the clock; systemd is the same on Ubuntu so the
+  # unit is harmless if it ever runs at all).
+  - |
+    set -eu
+    cat > /usr/local/sbin/nosi-clock-from-http <<'SCRIPT'
+    #!/bin/sh
+    set -eu
+    URLS="https://www.google.com/generate_204 https://www.cloudflare.com/cdn-cgi/trace"
+    for url in $URLS; do
+        hdr=$(curl -sS -I --max-time 10 "$url" 2>/dev/null \
+            | tr -d '\r' \
+            | awk 'BEGIN{IGNORECASE=1} /^date:/ {sub(/^[Dd]ate:[[:space:]]*/, ""); print; exit}')
+        [ -z "$hdr" ] && continue
+        target=$(date -u -d "$hdr" +%s 2>/dev/null || true)
+        [ -z "$target" ] && continue
+        now=$(date -u +%s)
+        skew=$((target - now))
+        abs=${skew#-}
+        if [ "$abs" -le 60 ]; then
+            echo "nosi-clock-from-http: within 60s of $url; no-op"
+            exit 0
+        fi
+        if [ "$skew" -lt 0 ]; then
+            echo "nosi-clock-from-http: server time behind ours; refusing to roll backwards"
+            exit 0
+        fi
+        if date -u -s "$hdr" >/dev/null 2>&1; then
+            echo "nosi-clock-from-http: stepped clock forward by ${skew}s via $url"
+            hwclock --systohc 2>/dev/null || true
+            exit 0
+        fi
+    done
+    echo "nosi-clock-from-http: no usable Date: header from any candidate; clock unchanged"
+    exit 0
+    SCRIPT
+    chmod 0755 /usr/local/sbin/nosi-clock-from-http
+    cat > /etc/systemd/system/nosi-clock-from-http.service <<'UNIT'
+    [Unit]
+    Description=Step system clock from HTTP Date header (fallback when NTP has not converged)
+    After=network-online.target systemd-timesyncd.service chronyd.service
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/sbin/nosi-clock-from-http
+    RemainAfterExit=yes
+    TimeoutStartSec=90s
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+  - systemctl enable systemd-timesyncd.service
+  - systemctl enable nosi-clock-from-http.service
+
   - passwd -l root
   # odus gets render+video on top of the sysdev sudo+kvm so it can drive
   # the NVIDIA user space stack without sudo.
@@ -720,6 +784,11 @@ runcmd:
         -exec rm -rf {} + 2>/dev/null || true
     apt-get -y autoremove --purge
     apt-get -y autoclean
+
+  # Clock floor: see sysdev-debian for rationale. Touch /usr/lib/clock-epoch
+  # last so PID-1 systemd uses the bake mtime as the boot-time clock floor.
+  # Inert under WSL (Windows host sets the clock).
+  - touch /usr/lib/clock-epoch
 
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*

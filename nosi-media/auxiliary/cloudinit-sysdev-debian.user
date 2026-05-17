@@ -44,6 +44,13 @@ packages:
   - openssh-server
   - sudo
   - systemd-resolved
+  # NTP via systemd's own daemon. Cloud-image baseline pulls it via
+  # systemd Recommends today; name it explicitly so we survive any
+  # future upstream dependency tweak. Clock-correctness is silently
+  # load-bearing -- without it, apt-get update rejects InRelease
+  # signatures ("Not live until <future ts>"), oras pull rejects TLS
+  # NotBefore on rotated certs, etc.
+  - systemd-timesyncd
   # user daily-driver baseline (helix + zellij + lazygit + yazi installed
   # from upstream tarballs in runcmd; distro packages skew old and Ubuntu
   # 26.04 dropped helix from universe at one point). taplo + marksman
@@ -559,6 +566,11 @@ runcmd:
         iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
         devbind                                           bind/unbind PCI device to a driver
         hugepages                                         inspect / reserve hugepages
+      Reconfigure:
+        sudo systemd-firstboot --force --prompt           interactive locale/keymap/timezone/hostname
+        sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
+        sudo hostnamectl set-hostname NAME                hostname (default: nosi-debian)
+        sudo passwd odus                                  operator password (default: odus.321)
 
     EOM
     SCRIPT
@@ -653,6 +665,75 @@ runcmd:
     UNIT
   - systemctl enable nosi-firstboot-inventory.service
 
+  # nosi-clock-from-http: belt-and-braces forward-only clock step when
+  # the RTC is far enough off that NTP hasn't converged before something
+  # signature-aware runs. Verified-failure case: GMKtec NucBox G10 with
+  # a dead CMOS battery boots ~6 months in the past, the bake-time
+  # clock-epoch floor steps to the bake date (still days/weeks behind
+  # real time), and `apt-get update` rejects InRelease signatures ("Not
+  # live until <future ts>"), `oras pull` rejects TLS NotBefore on
+  # rotated certs, etc. systemd-timesyncd eventually fixes it but the
+  # boot window before NTP converges is exactly where the user-visible
+  # commands trip. This oneshot issues `curl -I` against a public HTTPS
+  # endpoint, parses the RFC-7231 Date: header, and `date -u -s`'es the
+  # clock forward IFF we're behind by more than 60s. Idempotent (no-op
+  # when within 60s); refuses to roll backwards (timesyncd is authority
+  # for that); best-effort `hwclock --systohc` so the correction
+  # survives reboot. Same idea as bty's bty-clock-from-http; ported
+  # from bty 0.19.6 with the bty.server= cmdline path dropped (nosi has
+  # no control-plane URL).
+  - |
+    set -eu
+    cat > /usr/local/sbin/nosi-clock-from-http <<'SCRIPT'
+    #!/bin/sh
+    set -eu
+    URLS="https://www.google.com/generate_204 https://www.cloudflare.com/cdn-cgi/trace"
+    for url in $URLS; do
+        hdr=$(curl -sS -I --max-time 10 "$url" 2>/dev/null \
+            | tr -d '\r' \
+            | awk 'BEGIN{IGNORECASE=1} /^date:/ {sub(/^[Dd]ate:[[:space:]]*/, ""); print; exit}')
+        [ -z "$hdr" ] && continue
+        target=$(date -u -d "$hdr" +%s 2>/dev/null || true)
+        [ -z "$target" ] && continue
+        now=$(date -u +%s)
+        skew=$((target - now))
+        abs=${skew#-}
+        if [ "$abs" -le 60 ]; then
+            echo "nosi-clock-from-http: within 60s of $url; no-op"
+            exit 0
+        fi
+        if [ "$skew" -lt 0 ]; then
+            echo "nosi-clock-from-http: server time behind ours; refusing to roll backwards"
+            exit 0
+        fi
+        if date -u -s "$hdr" >/dev/null 2>&1; then
+            echo "nosi-clock-from-http: stepped clock forward by ${skew}s via $url"
+            hwclock --systohc 2>/dev/null || true
+            exit 0
+        fi
+    done
+    echo "nosi-clock-from-http: no usable Date: header from any candidate; clock unchanged"
+    exit 0
+    SCRIPT
+    chmod 0755 /usr/local/sbin/nosi-clock-from-http
+    cat > /etc/systemd/system/nosi-clock-from-http.service <<'UNIT'
+    [Unit]
+    Description=Step system clock from HTTP Date header (fallback when NTP has not converged)
+    After=network-online.target systemd-timesyncd.service chronyd.service
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/sbin/nosi-clock-from-http
+    RemainAfterExit=yes
+    TimeoutStartSec=90s
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+  - systemctl enable systemd-timesyncd.service
+  - systemctl enable nosi-clock-from-http.service
+
   # Operator account: `odus` with password `odus.321`, passwordless sudo. Lock
   # root so the only login channel is `odus`. Rotate the password before
   # exposing to anything beyond a trusted network.
@@ -746,6 +827,16 @@ runcmd:
         -exec rm -rf {} + 2>/dev/null || true
     apt-get -y autoremove --purge
     apt-get -y autoclean
+
+  # Clock floor: systemd (PID 1) reads /usr/lib/clock-epoch's mtime at boot
+  # and uses it as the minimum acceptable system time. A flashed box with a
+  # dead CMOS battery (or RTC freshly reset to ~1970) would otherwise come
+  # up at the epoch and reject every TLS handshake ("certificate not yet
+  # valid"), breaking apt-get update / curl / cloud-init's own seed fetch.
+  # Touch it last so the mtime is as close to bake time as possible;
+  # systemd-timesyncd (already running from the cloud base) refines the
+  # clock against NTP once the network is up.
+  - touch /usr/lib/clock-epoch
 
   # Trim caches for a smaller image.
   - apt-get clean
