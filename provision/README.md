@@ -84,9 +84,8 @@ wsl -d nosi-aidev
 tarball at install time and writes `defaultUid=1000` into the Windows
 side registry, so the very first `wsl -d` lands as `odus` rather than
 root. odus sits at the standard UID 1000 (WSL/Linux convention for
-the first interactive user); operators who want a personal identity
-*rename* odus to whatever they like instead of creating a second
-account (see the rename section below).
+the first interactive user). See "Personalization" below if you want
+your own name on the prompt instead.
 
 On first interactive shell, the WSL-only profile.d snippet from step
 29 prompts for `passwd` to rotate the baked default `odus.321` to
@@ -125,3 +124,43 @@ Step 29 marks the baked `odus.321` as expired:
 Skip is detected by comparing `/etc/shadow`'s hash to the baked one,
 so re-running `apply.sh` on a system whose operator has already
 rotated does not touch the password.
+
+## Personalization
+
+nosi ships `odus` at UID 1000 as **the** appliance operator. There is
+no nosi-supplied "first launch wizard", no `nosi-rename` helper, and
+no convention for separating "the appliance" from "the human at the
+keyboard". This is deliberate: the appliance identity and the human
+identity can be the same thing, and trying to split them adds moving
+parts without solving a real problem.
+
+If you want your own name on the prompt anyway, two routes:
+
+**Just use odus.** It's a 4-letter handle, doesn't reveal anything
+about who you are, and every nosi piece (sudoers, wsl.conf, motd,
+firstboot-inventory) assumes the account is called `odus`. Lowest
+blast radius by a wide margin.
+
+**Add a second account, leave odus alone.** Standard Linux tooling,
+purely additive, doesn't touch any nosi state:
+
+```
+sudo useradd -u 1001 -m -s /bin/bash -G sudo,kvm me   # +render,video on aidev
+sudo passwd me
+
+# WSL only: have `wsl -d <distro>` land as `me` instead of odus
+sudo sed -i 's/^default=odus$/default=me/' /etc/wsl.conf
+# and, from PowerShell:
+#   wsl --terminate <distro>
+#   wsl --manage <distro> --set-default-user me
+```
+
+What we explicitly do not recommend: renaming odus with `usermod -l`.
+The Linux rename-a-user story is full of long-tail traps that
+`usermod` does not handle (`/etc/subuid` + `/etc/subgid` are keyed by
+username so rootless podman silently breaks, sudoers entries can be
+spread across `/etc/sudoers.d/*` and any miss locks you out of sudo,
+running background processes pin the old name in kernel state, mail
+spool / atjobs / cron entries are not relocated, `/run/user/1000/`
+sockets get stale, etc.). It's doable but the operator owns the full
+checklist; nosi will not ship a helper that pretends otherwise.
