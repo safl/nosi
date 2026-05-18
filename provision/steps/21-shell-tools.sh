@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# nosi/provision/steps/21-shell-tools.sh
+#
+# Wire small shell-environment niceties that depend on baseline packages
+# already being installed (direnv, fd-find, git-delta):
+#
+#   * /usr/local/bin/fd -> /usr/bin/fdfind  (Debian/Ubuntu only; the
+#     distros name the binary fdfind to avoid colliding with an unrelated
+#     `fd` package. Fedora's fd-find ships /usr/bin/fd directly, so the
+#     guarded branch is a no-op there.)
+#   * /etc/gitconfig with git-delta as the system-wide diff/log/show pager.
+#     Per-user ~/.gitconfig still wins, so this is a default, not a lock.
+#   * /etc/profile.d/nosi-localbin.sh: `pipx ensurepath` equivalent; puts
+#     $HOME/.local/bin on PATH for every interactive shell.
+#   * /etc/profile.d/nosi-direnv.sh: bash hook for direnv .envrc loading,
+#     guarded on direnv being on PATH.
+#
+# Idempotency: nosi_write_if_changed touches mtime only when content
+# differs; the fd symlink is guarded on absence.
+
+. "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
+
+nosi_info "step 21-shell-tools"
+nosi_require_root
+
+# ---- fd symlink (Debian/Ubuntu) -------------------------------------------
+
+if [ -x /usr/bin/fdfind ] && [ ! -e /usr/local/bin/fd ]; then
+    ln -s /usr/bin/fdfind /usr/local/bin/fd
+fi
+
+# ---- /etc/gitconfig with delta pager --------------------------------------
+
+nosi_write_if_changed \
+'# Managed by nosi/provision/steps/21-shell-tools.sh
+[core]
+    pager = delta
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true
+    line-numbers = true
+[merge]
+    conflictstyle = zdiff3
+' /etc/gitconfig 0644
+
+# ---- /etc/profile.d/nosi-localbin.sh --------------------------------------
+
+nosi_write_if_changed \
+'if [ -d "$HOME/.local/bin" ]; then
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) : ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+fi
+' /etc/profile.d/nosi-localbin.sh 0644
+
+# ---- /etc/profile.d/nosi-direnv.sh ----------------------------------------
+
+nosi_write_if_changed \
+'if command -v direnv >/dev/null 2>&1; then
+    eval "$(direnv hook bash)"
+fi
+' /etc/profile.d/nosi-direnv.sh 0644
+
+nosi_info "step 21-shell-tools done"

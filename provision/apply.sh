@@ -42,6 +42,11 @@ esac
 # basename under provision/steps/ minus the .sh extension.
 STEPS=(
     10-r8125-dkms
+    20-upstream-tools
+    21-shell-tools
+    22-python-tools
+    23-userspace-pci
+    24-podman-setup
     30-clock-from-http
     31-motd
     32-firstboot-inventory
