@@ -27,6 +27,8 @@ from pathlib import Path
 from cijoe.core.misc import download
 from cijoe.qemu.wrapper import Guest
 
+from userdata_render import render as render_userdata
+
 
 # Bake-time disk size for the build VM. The cloud image grows to fill, we
 # install the nosi package set (~1 GB), then trim caches. 12 GiB gives plenty
@@ -97,10 +99,17 @@ def main(args, cijoe):
     if err:
         log.error(f"Failed copying metadata {metadata_path} -> {guest_metadata}")
         return err
-    err, _ = cijoe.run_local(f"cp {userdata_path} {guest_userdata}")
-    if err:
-        log.error(f"Failed copying userdata {userdata_path} -> {guest_userdata}")
-        return err
+    # Render the cloud-init template: replace the __NOSI_PROVISION_FILES__
+    # marker (if present) with write_files: entries for every script under
+    # provision/. Templates without the marker pass through unchanged so
+    # flavors that haven't been migrated yet keep working.
+    provision_root = repo_root / "provision"
+    try:
+        rendered = render_userdata(userdata_path, provision_root)
+    except Exception as exc:  # noqa: BLE001
+        log.error(f"Failed rendering userdata {userdata_path}: {exc}")
+        return errno.EIO
+    guest_userdata.write_text(rendered)
 
     seed_img = guest.guest_path / "seed.img"
     mkisofs_cmd = " ".join(
