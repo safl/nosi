@@ -131,6 +131,16 @@ packages:
   - qemu-system-x86
   - qemu-utils
 
+# Drop the nosi provision/ tree into /opt/nosi/provision/. The
+# __NOSI_PROVISION_FILES__ marker is expanded at bake time by
+# cijoe/scripts/userdata_render.py: it replaces this comment with one
+# write_files: entry per file under provision/ (apply.sh, lib/*,
+# steps/*), chmod 0755. The runcmd: section below then invokes
+# /opt/nosi/provision/apply.sh, which is also the same script
+# operators run on a vanilla Hetzner VM to reach image parity.
+write_files:
+  # __NOSI_PROVISION_FILES__
+
 runcmd:
   - |
     set -eu
@@ -390,40 +400,13 @@ runcmd:
     fi
     update-grub
 
-  # Realtek r8125 (out-of-tree) via DKMS. See debian variant for the full
-  # rationale; tldr: r8125 wins for RTL8125 chips via a softdep (not a
-  # blanket r8169 blacklist), so r8169 keeps serving RTL8111 / other
-  # Realtek NICs on the same machine. On a box with no RTL8125 at all,
-  # r8125 stays built-but-unloaded -- no PCI alias match, softdep no-op.
-  # Source: github.com/awesometic/realtek-r8125-dkms.
-  - |
-    set -eu
-    apt-get install -y dkms "linux-headers-$(uname -r)" || true
-    for img_meta in linux-image-amd64 linux-image-cloud-amd64 \
-                    linux-image-virtual linux-image-generic; do
-        if dpkg-query -W -f='${Status}' "$img_meta" 2>/dev/null \
-                | grep -q "install ok installed"; then
-            hdr_meta=$(echo "$img_meta" | sed 's/^linux-image-/linux-headers-/')
-            apt-get install -y "$hdr_meta" || true
-            break
-        fi
-    done
-    ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-        https://github.com/awesometic/realtek-r8125-dkms/releases/latest \
-        | sed 's#.*/tag/##' | sed 's/^v//')
-    tmp=$(mktemp -d)
-    curl -fsSL "https://github.com/awesometic/realtek-r8125-dkms/archive/refs/tags/${ver}.tar.gz" \
-        | tar -xz -C "$tmp"
-    src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)
-    install -d "/usr/src/r8125-${ver}"
-    cp -a "$src/." "/usr/src/r8125-${ver}/"
-    rm -rf "$tmp"
-    dkms add -m r8125 -v "${ver}" || true
-    dkms autoinstall
-    cat > /etc/modprobe.d/nosi-r8125.conf <<'MOD'
-    softdep r8169 pre: r8125
-    MOD
-    chmod 0644 /etc/modprobe.d/nosi-r8125.conf
+  # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
+  # nosi-motd renderer + service, nosi-firstboot-inventory + service.
+  # Each step under provision/steps/ is independently idempotent and
+  # cross-distro where it makes sense. Same apply.sh runs on a vanilla
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh ubuntu-sysdev`) to
+  # reach this image's parity.
+  - /opt/nosi/provision/apply.sh ubuntu-sysdev
 
   # memlock raised for DPDK/SPDK and xNVMe/uPCIe via vfio-pci (see debian variant for rationale).
   - |
@@ -432,214 +415,6 @@ runcmd:
     *  hard  memlock  unlimited
     LIMITS
     chmod 0644 /etc/security/limits.d/nosi-memlock.conf
-
-  # /etc/motd banner regenerated each boot by nosi-motd.service.
-  # (See debian variant for the full script + service body.)
-  - |
-    cat > /usr/local/bin/nosi-motd <<'SCRIPT'
-    #!/bin/sh
-    set -eu
-
-    . /etc/os-release 2>/dev/null || true
-    distro="${PRETTY_NAME:-Linux}"
-    kernel="$(uname -r)"
-    arch="$(uname -m)"
-    host="$(hostnamectl --static 2>/dev/null || hostname)"
-
-    ips=""
-    while IFS= read -r line; do
-        iface="$(echo "$line" | awk '{print $2}')"
-        addr="$(echo "$line" | awk '{print $4}' | cut -d/ -f1)"
-        [ -z "$addr" ] && continue
-        ips="${ips}${ips:+, }${addr} (${iface})"
-    done <<EOF
-    $(ip -4 -o addr show scope global 2>/dev/null)
-    EOF
-    [ -z "$ips" ] && ips="(none)"
-
-    iommu="$(iommu show 2>/dev/null | awk '/^mode:/ {print $2}')"
-    [ -z "$iommu" ] && iommu="unset"
-
-    hp_count="$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)"
-    hp_size_kb="$(awk '/Hugepagesize:/ {print $2}' /proc/meminfo)"
-    if [ "${hp_count:-0}" -gt 0 ]; then
-        hp_mib=$(( hp_count * hp_size_kb / 1024 ))
-        hugepgs="${hp_count} x ${hp_size_kb} kB = ${hp_mib} MiB"
-    else
-        hugepgs="0 (use 'hugepages' to allocate)"
-    fi
-
-    cpu_model="$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)"
-    cpu_count="$(nproc)"
-    ram_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
-    ram_gib=$(( ram_kib / 1024 / 1024 ))
-    nvme_count="$(find /dev -maxdepth 1 -name 'nvme*n*' 2>/dev/null | wc -l)"
-
-    cat <<EOM
-
-      nosi sysdev   ${distro}   Linux ${kernel}   ${arch}
-
-      hostname:  ${host}
-      ip:        ${ips}
-      iommu:     ${iommu}
-      hugepgs:   ${hugepgs}
-      cpu:       ${cpu_model} x ${cpu_count}
-      ram:       ${ram_gib} GiB
-      nvme:      ${nvme_count}
-
-      Tools:     rg fd fzf lazygit delta yazi oras gh just direnv
-      Helpers:
-        iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
-        devbind                                           bind/unbind PCI device to a driver
-        hugepages                                         inspect / reserve hugepages
-      Reconfigure:
-        sudo systemd-firstboot --force --prompt           interactive locale/keymap/timezone/hostname
-        sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
-        sudo hostnamectl set-hostname NAME                hostname (default: nosi-ubuntu)
-        sudo passwd odus                                  operator password (default: odus.321)
-
-    EOM
-    SCRIPT
-    chmod 0755 /usr/local/bin/nosi-motd
-
-    cat > /etc/systemd/system/nosi-motd.service <<'UNIT'
-    [Unit]
-    Description=Generate nosi banner for /etc/motd
-    After=network-online.target
-    Wants=network-online.target
-
-    [Service]
-    Type=oneshot
-    ExecStart=/bin/sh -c '/usr/local/bin/nosi-motd > /etc/motd'
-    RemainAfterExit=yes
-
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-  - systemctl enable nosi-motd.service
-
-  # nosi-firstboot-inventory (see debian variant for full rationale).
-  - |
-    cat > /usr/local/bin/nosi-firstboot-inventory <<'SCRIPT'
-    #!/bin/sh
-    set -eu
-    out=/var/log/nosi-firstboot.txt
-    {
-        echo "# nosi-firstboot-inventory $(date -Iseconds)"
-        echo
-        echo "## /etc/os-release"
-        cat /etc/os-release 2>/dev/null || true
-        echo
-        echo "## uname -a"
-        uname -a
-        echo
-        echo "## /proc/cmdline"
-        cat /proc/cmdline
-        echo
-        echo "## ip -br a"
-        ip -br a 2>/dev/null || true
-        echo
-        echo "## lsblk"
-        lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT 2>/dev/null || true
-        echo
-        echo "## lspci -nn"
-        lspci -nn 2>/dev/null || true
-        echo
-        echo "## nvme list"
-        nvme list 2>/dev/null || true
-        echo
-        echo "## iommu show"
-        iommu show 2>/dev/null || true
-        echo
-        echo "## devbind --list"
-        devbind --list 2>/dev/null || true
-        echo
-        echo "## hugepages info"
-        hugepages info 2>/dev/null || true
-        echo
-        echo "## free -h"
-        free -h
-        echo
-        echo "## prlimit (memlock matters for DPDK/SPDK and xNVMe/uPCIe via vfio-pci)"
-        prlimit 2>/dev/null || true
-        echo
-        echo "## CPU (first block of /proc/cpuinfo)"
-        awk '/^$/ {exit} 1' /proc/cpuinfo
-    } > "$out"
-    SCRIPT
-    chmod 0755 /usr/local/bin/nosi-firstboot-inventory
-
-    cat > /etc/systemd/system/nosi-firstboot-inventory.service <<'UNIT'
-    [Unit]
-    Description=Capture first-boot inventory to /var/log/nosi-firstboot.txt
-    After=network-online.target nosi-motd.service
-    Wants=network-online.target
-    ConditionPathExists=!/var/log/nosi-firstboot.txt
-
-    [Service]
-    Type=oneshot
-    ExecStart=/usr/local/bin/nosi-firstboot-inventory
-    RemainAfterExit=yes
-
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-  - systemctl enable nosi-firstboot-inventory.service
-
-  # nosi-clock-from-http: forward-only clock step from a public HTTPS
-  # Date: header when NTP has not converged. See debian variant for the
-  # full rationale and the G10 verified-failure case.
-  - |
-    set -eu
-    cat > /usr/local/sbin/nosi-clock-from-http <<'SCRIPT'
-    #!/bin/sh
-    set -eu
-    URLS="https://www.google.com/generate_204 https://www.cloudflare.com/cdn-cgi/trace"
-    for url in $URLS; do
-        hdr=$(curl -sS -I --max-time 10 "$url" 2>/dev/null \
-            | tr -d '\r' \
-            | awk 'BEGIN{IGNORECASE=1} /^date:/ {sub(/^[Dd]ate:[[:space:]]*/, ""); print; exit}')
-        [ -z "$hdr" ] && continue
-        target=$(date -u -d "$hdr" +%s 2>/dev/null || true)
-        [ -z "$target" ] && continue
-        now=$(date -u +%s)
-        skew=$((target - now))
-        abs=${skew#-}
-        if [ "$abs" -le 60 ]; then
-            echo "nosi-clock-from-http: within 60s of $url; no-op"
-            exit 0
-        fi
-        if [ "$skew" -lt 0 ]; then
-            echo "nosi-clock-from-http: server time behind ours; refusing to roll backwards"
-            exit 0
-        fi
-        if date -u -s "$hdr" >/dev/null 2>&1; then
-            echo "nosi-clock-from-http: stepped clock forward by ${skew}s via $url"
-            hwclock --systohc 2>/dev/null || true
-            exit 0
-        fi
-    done
-    echo "nosi-clock-from-http: no usable Date: header from any candidate; clock unchanged"
-    exit 0
-    SCRIPT
-    chmod 0755 /usr/local/sbin/nosi-clock-from-http
-    cat > /etc/systemd/system/nosi-clock-from-http.service <<'UNIT'
-    [Unit]
-    Description=Step system clock from HTTP Date header (fallback when NTP has not converged)
-    After=network-online.target systemd-timesyncd.service chronyd.service
-    Wants=network-online.target
-
-    [Service]
-    Type=oneshot
-    ExecStart=/usr/local/sbin/nosi-clock-from-http
-    RemainAfterExit=yes
-    TimeoutStartSec=90s
-
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-  - systemctl enable systemd-timesyncd.service
-  - systemctl enable nosi-clock-from-http.service
 
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
