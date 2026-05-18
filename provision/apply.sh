@@ -51,6 +51,7 @@ STEPS=(
     26-daemon-prune
     27-snapd-purge
     28-ssh-config
+    29-rotate-password
     30-clock-from-http
     31-motd
     32-firstboot-inventory

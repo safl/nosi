@@ -20,20 +20,33 @@ timezone: UTC
 
 ssh_pwauth: true
 
-# Operator account: `odus` with password `odus.321`, passwordless sudo. Created
-# here (cloud-init users-module) rather than in runcmd because users-module
-# calls `useradd -p HASH`, which writes the hash straight to /etc/shadow
-# without going through PAM (so pam_pwquality cannot reject `odus.321` for
-# containing the username), without depending on `openssl` being installed at
-# runcmd time, and without the runcmd hazard that a single non-zero exit
-# silently skips later items. Hash is `openssl passwd -6 -salt nosiOpRator
-# odus.321`; salt is fixed so identical bakes produce identical /etc/shadow.
-# render+video on top of sysdev's sudo+kvm so odus can drive a GPU /dev/dri
-# device without sudo once the operator installs a vendor stack. Root is
-# locked in runcmd below.
+# Strip the base cloud image's default user (`ubuntu`) before cloud-init's
+# users module runs so /etc/passwd doesn't carry an unused account in the
+# flashable image or the derived WSL2 tarball. UID 1000 stays free for
+# the operator's own personal account post-flash; odus is created below
+# at UID 1001.
+bootcmd:
+  - userdel -r ubuntu 2>/dev/null || true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1001. Created here (cloud-init users-module) rather than
+# in runcmd because users-module calls `useradd -p HASH`, which writes
+# the hash straight to /etc/shadow without going through PAM (so
+# pam_pwquality cannot reject `odus.321` for containing the username),
+# without depending on `openssl` being installed at runcmd time, and
+# without the runcmd hazard that a single non-zero exit silently skips
+# later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
+# salt is fixed so identical bakes produce identical /etc/shadow.
+# `- default` is intentionally absent (bootcmd above removes the base
+# `ubuntu` user). UID 1001 leaves 1000 free for an operator's personal
+# account. render+video on top of sysdev's sudo+kvm so odus can drive a
+# GPU /dev/dri device without sudo once the operator installs a vendor
+# stack. Root is locked in runcmd below. provision step 29 expires the
+# password so the first interactive login forces a change; the WSL
+# tarball path is covered by the same step's profile.d snippet.
 users:
-  - default
   - name: odus
+    uid: 1001
     gecos: nosi operator
     shell: /bin/bash
     groups: [sudo, kvm, render, video]

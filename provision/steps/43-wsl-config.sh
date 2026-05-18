@@ -48,7 +48,7 @@ appendWindowsPath=true
 
 nosi_write_if_changed \
 '[oobe]
-defaultUid=1000
+defaultUid=1001
 defaultName=odus
 defaultGroups=sudo,kvm,render,video
 ' /etc/wsl-distribution.conf 0644

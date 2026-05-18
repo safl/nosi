@@ -12,19 +12,23 @@ timezone: UTC
 
 ssh_pwauth: true
 
-# Operator account: `odus` with password `odus.321`, passwordless sudo. Created
-# here (cloud-init users-module) rather than in runcmd because users-module
-# calls `useradd -p HASH`, which writes the hash straight to /etc/shadow
-# without going through PAM (so pam_pwquality cannot reject `odus.321` for
-# containing the username), without depending on `openssl` being installed at
-# runcmd time, and without the runcmd hazard that a single non-zero exit
-# silently skips later items. Hash is `openssl passwd -6 -salt nosiOpRator
-# odus.321`; salt is fixed so identical bakes produce identical /etc/shadow.
-# `wheel` is Fedora's sudo group. Root is locked in runcmd below. Rotate the
-# password before exposing the appliance to anything beyond a trusted network.
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1001. Created here (cloud-init users-module) rather than
+# in runcmd because users-module calls `useradd -p HASH`, which writes
+# the hash straight to /etc/shadow without going through PAM (so
+# pam_pwquality cannot reject `odus.321` for containing the username),
+# without depending on `openssl` being installed at runcmd time, and
+# without the runcmd hazard that a single non-zero exit silently skips
+# later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
+# salt is fixed so identical bakes produce identical /etc/shadow.
+# `wheel` is Fedora's sudo group. `- default` is intentionally absent
+# (bootcmd above already removed the base `fedora` user). UID 1001
+# leaves 1000 free for an operator's personal account. Root is locked
+# in runcmd below. provision step 29 expires the password so the first
+# interactive login forces a change.
 users:
-  - default
   - name: odus
+    uid: 1001
     gecos: nosi operator
     shell: /bin/bash
     groups: [wheel, kvm]
@@ -40,12 +44,17 @@ resize_rootfs: true
 
 # Mirror the apt Install-Recommends=false story for dnf: skip weak
 # dependencies so the installed set matches the explicit packages: list.
-# bootcmd runs before the packages: phase, so dnf picks up the setting.
+# Also strip the base cloud image's default user (`fedora`) before
+# cloud-init's users module runs so /etc/passwd doesn't carry an unused
+# account. UID 1000 stays free for the operator's own personal account
+# post-flash; odus is created below at UID 1001. bootcmd runs before
+# the packages: phase, so dnf picks up the setting.
 bootcmd:
   - |
     if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
         echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
     fi
+  - userdel -r fedora 2>/dev/null || true
 
 # See debian variant: upgrade the base snapshot before installing our
 # explicit packages, so the baked image picks up upstream security fixes.
