@@ -73,21 +73,42 @@ no-ops there.
 The aidev bake produces both a flashable `.img.gz` and a WSL2 rootfs
 tarball (`wsl_rootfs_publish` strips kernel/grub/firmware/cloud-init).
 
-Import on Windows:
+Install on Windows (recommended, Win11 + WSL 2.x):
 
 ```
-wsl --import nosi-aidev C:\WSL\nosi-aidev path\to\nosi-aidev.tar.gz
+wsl --install --from-file path\to\nosi-aidev.tar.gz
 wsl -d nosi-aidev
 ```
 
-`/etc/wsl.conf` already pins the default user to `odus`, so the first
-session lands as `odus` (UID 1001) rather than root. UID 1000 is left
-free deliberately so the operator can `useradd -u 1000 -m -G sudo me`
-for their personal account if they want one.
+`--from-file` reads `/etc/wsl-distribution.conf [oobe]` from the
+tarball at install time and writes `defaultUid=1001` into the Windows
+side registry, so the very first `wsl -d` lands as `odus` rather than
+root. UID 1000 is left free deliberately so the operator can
+`useradd -u 1000 -m -G sudo me` for their personal account if they
+want one.
 
 On first interactive shell, the WSL-only profile.d snippet from step
 29 prompts for `passwd` to rotate the baked default `odus.321` to
 something local. Once rotated, the prompt disappears.
+
+### Older WSL (no `--from-file`)
+
+`wsl --import` does not consult `wsl-distribution.conf`; the registry
+`DefaultUid` stays at 0 (root) and `[user] default=odus` from
+`wsl.conf` is only applied by init inside the VM after the launcher
+has already picked the user, so the first session still lands as
+root. Two ways out:
+
+```
+# Set the default user once via the Windows-side knob (recommended)
+wsl --import nosi-aidev C:\WSL\nosi-aidev path\to\nosi-aidev.tar.gz
+wsl --manage nosi-aidev --set-default-user odus
+wsl -d nosi-aidev
+
+# Or pass -u on every launch (never updates the registry)
+wsl --import nosi-aidev C:\WSL\nosi-aidev path\to\nosi-aidev.tar.gz
+wsl -d nosi-aidev -u odus
+```
 
 ## Password rotation
 
