@@ -13,7 +13,7 @@ timezone: UTC
 ssh_pwauth: true
 
 # Operator account: `odus` with password `odus.321`, passwordless sudo,
-# pinned to UID 1001. Created here (cloud-init users-module) rather than
+# pinned to UID 1000. Created here (cloud-init users-module) rather than
 # in runcmd because users-module calls `useradd -p HASH`, which writes
 # the hash straight to /etc/shadow without going through PAM (so
 # pam_pwquality cannot reject `odus.321` for containing the username),
@@ -22,13 +22,14 @@ ssh_pwauth: true
 # later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
 # salt is fixed so identical bakes produce identical /etc/shadow.
 # `wheel` is Fedora's sudo group. `- default` is intentionally absent
-# (bootcmd above already removed the base `fedora` user). UID 1001
-# leaves 1000 free for an operator's personal account. Root is locked
-# in runcmd below. provision step 29 expires the password so the first
-# interactive login forces a change.
+# (bootcmd above already removed the base `fedora` user). Root is
+# locked in runcmd below. provision step 29 expires the password so
+# the first interactive login forces a change. Operators who want a
+# personal identity rename odus rather than create a second account
+# (see provision/README.md).
 users:
   - name: odus
-    uid: 1001
+    uid: 1000
     gecos: nosi operator
     shell: /bin/bash
     groups: [wheel, kvm]
@@ -46,9 +47,9 @@ resize_rootfs: true
 # dependencies so the installed set matches the explicit packages: list.
 # Also strip the base cloud image's default user (`fedora`) before
 # cloud-init's users module runs so /etc/passwd doesn't carry an unused
-# account. UID 1000 stays free for the operator's own personal account
-# post-flash; odus is created below at UID 1001. bootcmd runs before
-# the packages: phase, so dnf picks up the setting.
+# account and so UID 1000 is free for odus (the WSL/Linux convention
+# for the first interactive user). bootcmd runs before the packages:
+# phase, so dnf picks up the setting.
 bootcmd:
   - |
     if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then

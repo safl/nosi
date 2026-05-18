@@ -81,11 +81,12 @@ wsl -d nosi-aidev
 ```
 
 `--from-file` reads `/etc/wsl-distribution.conf [oobe]` from the
-tarball at install time and writes `defaultUid=1001` into the Windows
+tarball at install time and writes `defaultUid=1000` into the Windows
 side registry, so the very first `wsl -d` lands as `odus` rather than
-root. UID 1000 is left free deliberately so the operator can
-`useradd -u 1000 -m -G sudo me` for their personal account if they
-want one.
+root. odus sits at the standard UID 1000 (WSL/Linux convention for
+the first interactive user); operators who want a personal identity
+*rename* odus to whatever they like instead of creating a second
+account (see the rename section below).
 
 On first interactive shell, the WSL-only profile.d snippet from step
 29 prompts for `passwd` to rotate the baked default `odus.321` to
