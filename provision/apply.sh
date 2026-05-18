@@ -47,9 +47,17 @@ STEPS=(
     22-python-tools
     23-userspace-pci
     24-podman-setup
+    25-iommu-cmdline
+    26-daemon-prune
+    27-snapd-purge
+    28-ssh-config
     30-clock-from-http
     31-motd
     32-firstboot-inventory
+    40-nerd-font
+    41-npm-globals
+    42-pi-cli
+    43-wsl-config
 )
 
 nosi_info "apply start: flavor=$FLAVOR distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"

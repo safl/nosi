@@ -163,24 +163,6 @@ write_files:
 
 runcmd:
 
-  # IOMMU enablement on the kernel cmdline (intel_iommu=on amd_iommu=on
-  # iommu=pt). Per-distro because update-grub vs grubby; stays here
-  # rather than in provision/steps/. vfio module preload, udev rule, and
-  # memlock are cross-distro and live in step 23-userspace-pci.
-  - |
-    set -eu
-    EXTRA="intel_iommu=on amd_iommu=on iommu=pt"
-    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
-        for arg in $EXTRA; do
-            if ! grep -q "GRUB_CMDLINE_LINUX=.*\\b${arg}\\b" /etc/default/grub; then
-                sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${arg}\"/" /etc/default/grub
-            fi
-        done
-    else
-        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$EXTRA" >> /etc/default/grub
-    fi
-    update-grub
-
   # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
@@ -193,52 +175,6 @@ runcmd:
   # written straight to /etc/shadow). All that's left here is locking root
   # so the only login channel is odus.
   - passwd -l root
-
-  # Minimize background daemons / timers. Stock cloud images carry a
-  # collection of services that wake up to refresh apt / firmware /
-  # man-db / motd; on a flashed dev box they cause unexpected IO + apt
-  # locks at random times. Mask the noisy ones and purge
-  # unattended-upgrades outright.
-  - |
-    set -eu
-    # Purge headless-useless daemons that the base image may carry:
-    #   unattended-upgrades  -- apt churn at random times
-    #   modemmanager         -- probes /dev/ttyUSB* with AT commands
-    #                           and breaks USB-serial dev work
-    #   packagekit*          -- D-Bus desktop package shim that races
-    #                           dpkg/apt for the rpm/dpkg lock
-    #   udisks2              -- D-Bus storage automounter for desktops;
-    #                           sysdev uses mount/lsblk directly
-    # Iterate so a not-present package is a no-op rather than aborting
-    # the whole apt-get call.
-    to_purge=""
-    for pkg in unattended-upgrades modemmanager packagekit packagekit-tools \
-               udisks2 accountsservice; do
-        if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null \
-                | grep -q "install ok installed"; then
-            to_purge="$to_purge $pkg"
-        fi
-    done
-    if [ -n "$to_purge" ]; then
-        DEBIAN_FRONTEND=noninteractive apt-get -y purge $to_purge
-    fi
-    apt-get -y autoremove --purge || true
-    # polkit stays installed (libs link against it and a --purge can
-    # cascade into unrelated packages) but its daemon is masked.
-    # multipathd: only meaningful with SAN multipath. networkd-dispatcher:
-    # runs hooks from /etc/networkd-dispatcher/*.d which we ship empty.
-    systemctl mask \
-        apt-daily.service apt-daily.timer \
-        apt-daily-upgrade.service apt-daily-upgrade.timer \
-        fwupd.service fwupd-refresh.service fwupd-refresh.timer \
-        motd-news.service motd-news.timer \
-        man-db.service man-db.timer \
-        e2scrub_all.service e2scrub_all.timer e2scrub_reap.service \
-        polkit.service \
-        smartd.service \
-        multipathd.service multipathd.socket \
-        networkd-dispatcher.service \
-        2>/dev/null || true
 
   # SSH host-key hygiene: openssh-server's postinst generated host keys
   # during apt install; remove them now so every flashed instance gets

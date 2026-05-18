@@ -135,12 +135,6 @@ write_files:
 
 runcmd:
 
-  # IOMMU enablement on the kernel cmdline (intel_iommu=on amd_iommu=on
-  # iommu=pt). Per-distro because grubby vs grub2-mkconfig; stays here
-  # rather than in provision/steps/. vfio module preload, udev rule, and
-  # memlock are cross-distro and live in step 23-userspace-pci.
-  - grubby --update-kernel=ALL --args="intel_iommu=on amd_iommu=on iommu=pt"
-
   # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
@@ -149,48 +143,10 @@ runcmd:
   # reach this image's parity.
   - /opt/nosi/provision/apply.sh fedora-sysdev
 
-  # Fedora's sshd_config defaults to PasswordAuthentication=no; flip on
-  # so the baked `odus:odus.321` works without an SSH key.
-  - |
-    printf 'PasswordAuthentication yes\nPermitRootLogin no\n' \
-        > /etc/ssh/sshd_config.d/00-nosi.conf
-    chmod 0644 /etc/ssh/sshd_config.d/00-nosi.conf
-
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
   # so the only login channel is odus.
   - passwd -l root
-
-  # Minimize background daemons / timers. Fedora doesn't ship
-  # unattended-upgrades, but it has dnf-makecache + fwupd + mlocate +
-  # man-db refreshers that wake up periodically.
-  - |
-    set -eu
-    # See debian variant for rationale. Purges desktop-flavored daemons
-    # the cloud base may carry but a headless sysdev box doesn't want.
-    to_remove=""
-    for pkg in ModemManager PackageKit udisks2; do
-        if rpm -q "$pkg" >/dev/null 2>&1; then
-            to_remove="$to_remove $pkg"
-        fi
-    done
-    if [ -n "$to_remove" ]; then
-        dnf -y remove $to_remove
-    fi
-    # abrt-*: Fedora's crash reporter (apport equivalent). multipathd:
-    # only meaningful with SAN multipath. Units that aren't installed
-    # are silently skipped by the 2>/dev/null swallow.
-    systemctl mask \
-        dnf-makecache.service dnf-makecache.timer \
-        fwupd.service fwupd-refresh.service fwupd-refresh.timer \
-        man-db-cache-update.service man-db-cache-update.timer \
-        mlocate-updatedb.timer \
-        polkit.service \
-        smartd.service \
-        abrtd.service abrt-ccpp.service abrt-oops.service \
-        abrt-vmcore.service abrt-journal-core.service abrt-xorg.service \
-        multipathd.service multipathd.socket \
-        2>/dev/null || true
 
   - rm -f /etc/ssh/ssh_host_*
   - ': > /etc/machine-id'
