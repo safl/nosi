@@ -25,7 +25,7 @@ provision/
     ├── 24-podman-setup.sh
     ├── 25-iommu-cmdline.sh         # intel_iommu / amd_iommu / iommu=pt
     ├── 26-daemon-prune.sh          # purge + mask headless-useless daemons
-    ├── 27-snapd-purge.sh           # ubuntu-only
+    ├── 27-snapd-disable.sh         # ubuntu-only: mask snapd, keep it re-enableable
     ├── 28-ssh-config.sh
     ├── 29-rotate-password.sh       # force first-login passwd change
     ├── 30-clock-from-http.sh

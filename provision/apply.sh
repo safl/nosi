@@ -49,7 +49,7 @@ STEPS=(
     24-podman-setup
     25-iommu-cmdline
     26-daemon-prune
-    27-snapd-purge
+    27-snapd-disable
     28-ssh-config
     29-rotate-password
     30-clock-from-http
