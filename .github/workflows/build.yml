@@ -47,6 +47,19 @@ jobs:
             pipx \
             cpu-checker
 
+      - name: Stage build artefacts on the large /mnt disk
+        # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
+        # a ~70 GiB ephemeral disk at /mnt. The build writes the qcow2, the
+        # raw intermediate, the .img.gz and (aidev) the WSL tarball under
+        # ~/system_imaging; img_gz_publish's qcow2 -> raw -> gzip needs all
+        # three on disk at once and overruns /. Point ~/system_imaging at
+        # /mnt so the multi-GiB artefacts land on the roomy disk. Done
+        # before the cache restore so the cached cloud image lands there too.
+        run: |
+          sudo mkdir -p /mnt/system_imaging
+          sudo chown "$(id -un):$(id -gn)" /mnt/system_imaging
+          ln -s /mnt/system_imaging "$HOME/system_imaging"
+
       - name: Cache upstream cloud image
         # Cloud images are 500MB-2GB downloads; on a fresh runner that's the
         # dominant cost of a cold build. Key on the variant's TOML so a
