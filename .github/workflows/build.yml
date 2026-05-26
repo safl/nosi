@@ -167,6 +167,23 @@ jobs:
           printf '%s' "$GHCR_TOKEN" \
             | oras login ghcr.io -u "$GHCR_USER" --password-stdin
 
+      - name: Bundle cijoe report into a zip
+        # Ship the build provenance (report.html + per-step cmd_*.output
+        # capturing the bake's serial console, the smoketest VM's serial
+        # console, etc.) as an extra ORAS layer so consumers can
+        # `oras pull` the image and inspect exactly how it was baked.
+        # Nobody else does this except for Docker images via labels, but
+        # raw provenance is far more useful than a label string.
+        if: env.PUBLISH == 'true'
+        env:
+          IMG: ${{ matrix.variant }}
+        run: |
+          set -eu
+          report="$HOME/system_imaging/disk/nosi-${IMG}-x86_64.cijoe-report.zip"
+          (cd cijoe/cijoe-output && zip -qr "${report}" .)
+          sha256sum "${report}" > "${report}.sha256"
+          ls -lh "${report}"
+
       - name: Push ${{ matrix.variant }} to GHCR
         if: env.PUBLISH == 'true'
         env:
@@ -180,11 +197,14 @@ jobs:
           # GHA's working-directory: doesn't expand ~, hence the cd here.
           cd "$HOME/system_imaging/disk"
           gz="nosi-${IMG}-x86_64.img.gz"
+          report="nosi-${IMG}-x86_64.cijoe-report.zip"
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.nosi.disk-image.v1+gzip \
               "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip" \
-              "${gz}.sha256:text/plain"
+              "${gz}.sha256:text/plain" \
+              "${report}:application/vnd.nosi.build-report.v1+zip" \
+              "${report}.sha256:text/plain"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Push ${{ matrix.variant }} WSL rootfs to GHCR
@@ -192,7 +212,10 @@ jobs:
         # cleanly scoped to disk-images; the WSL artifact is rootfs, not
         # a flashable disk, so colocating tags under the same repo would
         # be misleading. Gated on the artifact existing, which today
-        # means matrix.variant == 'ubuntu-aidev'.
+        # means matrix.variant == 'ubuntu-aidev'. Same build, same report,
+        # so the cijoe-report zip is attached here too for symmetry --
+        # operators who pulled the WSL artifact alone still get the
+        # provenance.
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
@@ -206,11 +229,14 @@ jobs:
               echo "No WSL tarball for ${IMG} (expected for sysdev variants)."
               exit 0
           fi
+          report="nosi-${IMG}-x86_64.cijoe-report.zip"
           oras push \
               "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" \
               --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
               "${tarball}:application/vnd.nosi.wsl-rootfs.layer.v1+gzip" \
-              "${tarball}.sha256:text/plain"
+              "${tarball}.sha256:text/plain" \
+              "${report}:application/vnd.nosi.build-report.v1+zip" \
+              "${report}.sha256:text/plain"
           oras tag "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" latest
 
       - name: Write build summary
@@ -223,6 +249,9 @@ jobs:
           gz="$HOME/system_imaging/disk/nosi-${IMG}-x86_64.img.gz"
           sha=$(awk '{print $1}' "${gz}.sha256")
           size=$(numfmt --to=iec "$(stat -c%s "${gz}")")
+          report="$HOME/system_imaging/disk/nosi-${IMG}-x86_64.cijoe-report.zip"
+          rsha=$(awk '{print $1}' "${report}.sha256")
+          rsize=$(numfmt --to=iec "$(stat -c%s "${report}")")
           {
             echo "### \`${IMG}\` (${ROLLING})"
             echo
@@ -232,6 +261,7 @@ jobs:
             echo "| Latest alias | \`ghcr.io/${REPO}/${IMG}:latest\` |"
             echo "| Blob digest (content-addressed pull) | \`sha256:${sha}\` |"
             echo "| Size | ${size} |"
+            echo "| Build report (cijoe-output zip) | ${rsize}, \`sha256:${rsha}\` |"
             echo
             echo "Flash directly:"
             echo
@@ -239,6 +269,14 @@ jobs:
             echo "curl -sL 'https://ghcr.io/v2/${REPO}/${IMG}/blobs/sha256:${sha}' \\"
             echo "    | gunzip -d \\"
             echo "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress"
+            echo '```'
+            echo
+            echo "Pull the full artefact (image + build report) for provenance:"
+            echo
+            echo '```'
+            echo "oras pull ghcr.io/${REPO}/${IMG}:${ROLLING}"
+            echo "unzip nosi-${IMG}-x86_64.cijoe-report.zip -d cijoe-report"
+            echo "xdg-open cijoe-report/report.html"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
