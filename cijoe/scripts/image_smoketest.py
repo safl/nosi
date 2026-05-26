@@ -426,11 +426,19 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
             lambda rc, out: (out == "ok", out or "missing"),
         )
 
-    # ---- aidev-only: agentic CLIs ----------------------------------------
+    # ---- aidev-only: agentic CLIs + Node-based LSPs ----------------------
+    # Binary names (NOT npm package names): step 41 installs
+    #   @anthropic-ai/claude-code -> binary `claude`
+    #   @openai/codex             -> binary `codex`
+    #   @google/gemini-cli        -> binary `gemini`
+    #   opencode-ai               -> binary `opencode`
+    # plus bash-language-server / yaml-language-server which are aidev-
+    # only because they need Node.
     if flavor == "aidev":
-        for cli in ("claude-code", "codex", "gemini-cli", "opencode"):
+        for cli in ("claude", "codex", "gemini", "opencode",
+                    "bash-language-server", "yaml-language-server"):
             check(
-                f"agentic CLI '{cli}' on PATH",
+                f"aidev binary '{cli}' on PATH",
                 f"command -v {cli} >/dev/null && echo ok",
                 lambda rc, out, _c=cli: (out == "ok", out or f"missing {_c}"),
             )
