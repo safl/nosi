@@ -96,6 +96,26 @@ def main(args, cijoe):
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
     log.info(f"smoketest workdir: {workdir}")
 
+    # Belt-and-suspenders so the smoketest can NEVER taint the artefact
+    # that ships to GHCR (the .img.gz was already produced before us, but
+    # the .qcow2 still goes out as a transient GHA upload-artifact, and a
+    # future change to the order of cijoe steps must not silently break
+    # that). Two independent defenses:
+    #
+    #   (1) chmod 0444 on the baked qcow2 across the smoketest. qcow2
+    #       backing-file semantics already open the backing read-only,
+    #       but a wrong driver / wrong cmdline / unexpected -snapshot
+    #       path would otherwise corrupt silently. With 0444 any write
+    #       attempt fails with EACCES at qemu open-time, loudly.
+    #
+    #   (2) Post-test sha256 verification against the .sha256 sidecar
+    #       diskimage_build wrote at bake time. If they ever diverge we
+    #       refuse to return 0 -- chmod could have been undone, the
+    #       sidecar would still pin the bake-time hash.
+    qcow2_orig_mode = qcow2.stat().st_mode & 0o777
+    expected_sha256 = _read_sidecar_sha256(qcow2)
+    os.chmod(qcow2, 0o444)
+
     rc = 1
     qemu_pidfile = workdir / "qemu.pid"
     key = None
@@ -115,6 +135,21 @@ def main(args, cijoe):
         rc = 0 if all(ok for ok, _name, _detail in results) else 1
     finally:
         _kill_qemu(qemu_pidfile)
+        with contextlib.suppress(Exception):
+            os.chmod(qcow2, qcow2_orig_mode)
+        # Verify the baked qcow2 still matches its bake-time sha256. If
+        # not, somehow the smoketest tainted the artefact and we MUST
+        # fail loudly -- this is the load-bearing don't-publish-the-test-
+        # image guarantee.
+        if expected_sha256:
+            actual = _file_sha256(qcow2)
+            if actual != expected_sha256:
+                log.error(
+                    f"FATAL: baked qcow2 sha256 changed during smoketest! "
+                    f"expected {expected_sha256}, got {actual}. "
+                    f"DO NOT PUBLISH this artefact."
+                )
+                rc = errno.EIO
         # Preserve the workdir on failure so the serial console and ssh key
         # are available for forensics. On success the workdir is purely
         # transient and we drop it; on failure we leave it and tell the
@@ -126,6 +161,27 @@ def main(args, cijoe):
             log.error(f"smoketest workdir preserved for forensics: {workdir}")
 
     return rc
+
+
+def _read_sidecar_sha256(path: Path) -> str:
+    """Return the hash from <path>.sha256, or empty string if missing."""
+    sidecar = Path(f"{path}.sha256")
+    if not sidecar.is_file():
+        return ""
+    try:
+        first = sidecar.read_text().strip().split()
+        return first[0] if first else ""
+    except OSError:
+        return ""
+
+
+def _file_sha256(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _default_image_name(cijoe) -> str:
