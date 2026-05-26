@@ -98,14 +98,15 @@ def main(args, cijoe):
 
     rc = 1
     qemu_pidfile = workdir / "qemu.pid"
+    key = None
     try:
         key, _key_pub = _gen_ssh_keypair(workdir)
         seed = _build_seed_iso(workdir, _key_pub.read_text().strip())
         overlay = _make_overlay(workdir, qcow2)
         _boot_overlay(cijoe, overlay, seed, qemu_pidfile, workdir / "serial.log")
 
-        if not _wait_for_ssh(SSH_HOST_PORT, args.boot_timeout):
-            log.error("Smoketest VM did not open sshd within the timeout")
+        if not _wait_for_ssh_ready(key, SSH_HOST_PORT, args.boot_timeout):
+            log.error("Smoketest VM did not become SSH-ready within the timeout")
             _dump_serial(workdir / "serial.log")
             return errno.ETIMEDOUT
 
@@ -114,8 +115,15 @@ def main(args, cijoe):
         rc = 0 if all(ok for ok, _name, _detail in results) else 1
     finally:
         _kill_qemu(qemu_pidfile)
-        with contextlib.suppress(Exception):
-            shutil.rmtree(workdir)
+        # Preserve the workdir on failure so the serial console and ssh key
+        # are available for forensics. On success the workdir is purely
+        # transient and we drop it; on failure we leave it and tell the
+        # operator where to find it.
+        if rc == 0:
+            with contextlib.suppress(Exception):
+                shutil.rmtree(workdir)
+        else:
+            log.error(f"smoketest workdir preserved for forensics: {workdir}")
 
     return rc
 
@@ -143,9 +151,11 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
         f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n"
     )
     # Authorise the per-run key on odus and disarm step 29's chage so PAM
-    # does not block key auth on a password-expired account. lock_passwd
-    # stays false (odus keeps the baked default password; we just lift the
-    # expiry). No power_state -- the VM stays up for the assertion run.
+    # does not block key auth with "Password change required but no TTY
+    # available". -d <today> is the load-bearing one (clears sp_lstchg=0
+    # so the account is not in "must change" state); -E/-M/-W also turn
+    # off future expiry policy. No power_state -- the VM stays up for
+    # the assertion run.
     (workdir / "user-data").write_text(
         "#cloud-config\n"
         "users:\n"
@@ -153,7 +163,7 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
         "    ssh_authorized_keys:\n"
         f"      - {pubkey}\n"
         "runcmd:\n"
-        "  - chage -E -1 -M -1 -W -1 odus\n"
+        "  - chage -d $(date -u +%Y-%m-%d) -E -1 -M -1 -W -1 odus\n"
     )
     seed = workdir / "smoketest-seed.iso"
     subprocess.run(
@@ -183,11 +193,16 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
     # KVM-accelerated to keep the test under a minute on hosted runners
     # that already enable /dev/kvm for the bake. virtio-net + user-mode
     # networking + hostfwd is the minimum for SSH-from-host.
+    # `-display none -monitor none` rather than `-nographic` because qemu
+    # rejects `-nographic` together with `-daemonize` ("cannot be used
+    # with -daemonize"); display-none + serial-file gives the same "no
+    # UI, log to disk" semantics while staying daemonize-compatible.
     cmd = (
-        "/usr/bin/qemu-system-x86_64 "
+        "qemu-system-x86_64 "
         "-machine type=q35,accel=kvm "
         "-cpu host -smp 2 -m 2G "
-        "-nographic -serial file:" + str(serial) + " "
+        "-display none -monitor none "
+        f"-serial file:{serial} "
         f"-drive file={overlay},if=virtio,format=qcow2 "
         f"-cdrom {seed} "
         f"-netdev user,id=n1,hostfwd=tcp:127.0.0.1:{SSH_HOST_PORT}-:22 "
@@ -199,19 +214,43 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
         raise RuntimeError(f"qemu failed to start smoketest VM (exit {err})")
 
 
-def _wait_for_ssh(port: int, timeout: int) -> bool:
+def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
+    """Wait until sshd accepts a real key-auth handshake (not just TCP).
+
+    On first boot the port opens before host keys exist (openssh-server's
+    ssh-keygen unit and cloud-init's cc_ssh race the network stack), so a
+    bare TCP probe would report "ready" while a real ssh would get hit
+    with "kex_exchange_identification: Connection reset by peer". Drive
+    a no-op ssh in a loop until it actually succeeds.
+    """
     deadline = time.monotonic() + timeout
+    last_err = "(none)"
     while time.monotonic() < deadline:
+        # TCP probe first; cheap, lets us skip ssh-handshake retries while
+        # qemu is still bringing the guest up.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
             try:
                 s.connect(("127.0.0.1", port))
-                # Got TCP; sshd banner takes another ~1s on first boot.
-                time.sleep(2)
+                tcp_open = True
+            except OSError as exc:
+                tcp_open = False
+                last_err = f"tcp: {exc}"
+        if tcp_open:
+            res = subprocess.run(
+                [
+                    "ssh", "-i", str(key), *SSH_OPTS,
+                    "-o", "BatchMode=yes",
+                    "-p", str(port),
+                    f"{SSH_USER}@127.0.0.1", "true",
+                ],
+                capture_output=True, text=True, timeout=15,
+            )
+            if res.returncode == 0:
                 return True
-            except OSError:
-                pass
-        time.sleep(2)
+            last_err = (res.stderr or res.stdout).strip().splitlines()[-1] if (res.stderr or res.stdout) else f"exit {res.returncode}"
+        time.sleep(3)
+    log.error(f"_wait_for_ssh_ready last error: {last_err}")
     return False
 
 
