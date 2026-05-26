@@ -339,6 +339,20 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         ok, detail = predicate(rc, out)
         results.append((ok, name, detail))
 
+    # ---- apply.sh completed end-to-end -----------------------------------
+    # /etc/nosi/apply-ok is written by the LAST line of apply.sh, only
+    # after every step has succeeded under `set -e`. Its absence proves
+    # apply.sh aborted somewhere -- no matter which step, no matter
+    # whether we wrote an explicit smoketest assertion for the tool that
+    # step was supposed to install. One sentinel covers every failure
+    # mode, so transient curl-404s and the like fail the build instead
+    # of seeping into a published image.
+    check(
+        "/etc/nosi/apply-ok sentinel present (apply.sh completed cleanly)",
+        "test -r /etc/nosi/apply-ok && cat /etc/nosi/apply-ok",
+        lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
+    )
+
     # ---- build identity ---------------------------------------------------
     check(
         "/etc/nosi-release has NOSI_VARIANT",
