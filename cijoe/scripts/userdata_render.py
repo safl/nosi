@@ -26,10 +26,41 @@ Retargetable: False
 from __future__ import annotations
 
 import logging as log
+import os
+import subprocess
 from argparse import ArgumentParser
+from datetime import datetime, timezone
 from pathlib import Path
 
 MARKER = "__NOSI_PROVISION_FILES__"
+
+
+def _resolve_version(repo_root: Path) -> str:
+    """Return the build identifier for this bake.
+
+    Preference order:
+      1. ``NOSI_VERSION`` env var (the CI workflow can pin it).
+      2. ``YYYY.MM.DD-<shortsha>`` from ``git -C repo_root``, matching the
+         rolling-tag format produced by ``.github/workflows/build.yml``.
+      3. literal ``"unknown"`` (no git checkout, e.g. shipped tarball).
+
+    Captured here on the host so the baked image carries a stable
+    identifier that survives ``cloud-init clean`` and is readable by
+    provision/steps/33-nosi-release.sh from /opt/nosi/.nosi-version.
+    """
+    env_ver = os.environ.get("NOSI_VERSION")
+    if env_ver:
+        return env_ver.strip()
+
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--short=7", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        date_tag = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+        return f"{date_tag}-{sha}"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
 
 
 def add_args(parser: ArgumentParser):
@@ -97,6 +128,20 @@ def render(src: Path, provision_root: Path) -> str:
             f"{indent}  content: |\n"
             f"{body_lines}"
         )
+
+    # Build identifier captured at render time. Consumed in the guest by
+    # provision/steps/33-nosi-release.sh, which writes /etc/nosi-release
+    # and surfaces this in /etc/motd via 31-motd. Single-line text file,
+    # 0644, lives under /opt/nosi/ so a Hetzner-VM operator can drop the
+    # same file in by hand if they want a custom identifier.
+    version = _resolve_version(provision_root.parent)
+    body_indent = indent + "    "
+    blocks.append(
+        f"{indent}- path: /opt/nosi/.nosi-version\n"
+        f"{indent}  permissions: '0644'\n"
+        f"{indent}  content: |\n"
+        f"{body_indent}{version}"
+    )
 
     rendered = "\n\n".join(blocks)
     return template.replace(marker_line, rendered)

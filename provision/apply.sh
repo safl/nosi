@@ -53,6 +53,10 @@ export NOSI_VARIANT="$FLAVOR"
 # the inline cloud-init blocks they get appended here. Each entry is a
 # basename under provision/steps/ minus the .sh extension.
 STEPS=(
+    # 05-nosi-release runs FIRST so /etc/nosi-release captures the build
+    # identity even if a later step explodes -- forensics need the version
+    # tag before anything else can break.
+    05-nosi-release
     10-r8125-dkms
     20-upstream-tools
     21-shell-tools
@@ -65,12 +69,16 @@ STEPS=(
     28-ssh-config
     29-rotate-password
     30-clock-from-http
-    31-motd
     32-firstboot-inventory
     40-nerd-font
     41-npm-globals
     42-pi-cli
     43-wsl-config
+    # 99-motd runs LAST so the login banner's presence is the at-a-glance
+    # signal that the whole apply chain succeeded: see the nosi banner ->
+    # everything before it ran; no banner -> something broke before the end,
+    # and /etc/nosi-release (written first) tells you exactly which build.
+    99-motd
 )
 
 nosi_info "apply start: flavor=$FLAVOR variant=$NOSI_VARIANT distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"

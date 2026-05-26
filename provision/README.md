@@ -17,6 +17,7 @@ provision/
 ├── apply.sh              # entry point: apply.sh <flavor>
 ├── lib/common.sh         # distro detect, logging, helpers
 └── steps/
+    ├── 05-nosi-release.sh          # FIRST: /etc/nosi-release with build identity
     ├── 10-r8125-dkms.sh
     ├── 20-upstream-tools.sh        # uv, rust, helix, zellij, lazygit, yazi, taplo, marksman, oras
     ├── 21-shell-tools.sh           # fd, gitconfig, profile.d
@@ -29,10 +30,16 @@ provision/
     ├── 28-ssh-config.sh
     ├── 29-rotate-password.sh       # force first-login passwd change
     ├── 30-clock-from-http.sh
-    ├── 31-motd.sh
     ├── 32-firstboot-inventory.sh
-    └── 40..43                      # aidev-only: nerd font, npm globals, pi, wsl.conf
+    ├── 40..43                      # aidev-only: nerd font, npm globals, pi, wsl.conf
+    └── 99-motd.sh                  # LAST: login banner = "all earlier steps ran"
 ```
+
+`apply.sh` continues past a failing step, accumulates the list, and exits
+non-zero at the end with the names of the failures. That way a single
+broken step (transient pip / curl flake, missing pkg in a new distro
+release) no longer silently skips every step after it, and the bake log
+shows exactly which steps need attention.
 
 ## Flavors
 

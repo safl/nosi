@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# nosi/provision/steps/31-motd.sh
+# nosi/provision/steps/99-motd.sh
 #
-# Generate /etc/motd from a per-boot snapshot: distro / kernel / IPs /
-# IOMMU mode / hugepages / CPU / RAM / NVMe count / helper hints. A
-# systemd oneshot runs the renderer at boot so the IP and IOMMU columns
-# are always current at login time.
+# Runs LAST in apply.sh. Generates /etc/motd from a per-boot snapshot:
+# build identity / distro / kernel / IPs / IOMMU mode / hugepages / CPU /
+# RAM / NVMe count / helper hints. A systemd oneshot runs the renderer at
+# boot so IP and IOMMU columns are always current at login time.
+#
+# Numbered 99 deliberately: a flashed nosi image that shows the banner at
+# login means every earlier provision step succeeded. A bare login prompt
+# with no banner is the at-a-glance signal that something broke before
+# the end of apply.sh; /etc/nosi-release (written first, by step 05) then
+# tells the operator which build to look at.
 #
 # The renderer is identical across all four nosi flavors. The two
 # pieces of variant state (flavor name in the banner, default-hostname
@@ -30,7 +36,7 @@ if [ -z "${NOSI_DEFAULT_HOSTNAME:-}" ]; then
     fi
 fi
 
-nosi_info "step 31-motd (flavor=$NOSI_FLAVOR, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
+nosi_info "step 99-motd (flavor=$NOSI_FLAVOR, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
 nosi_require_root
 
 install -d -m 0755 /etc/nosi
@@ -42,7 +48,7 @@ nosi_write_if_changed "$NOSI_DEFAULT_HOSTNAME" /etc/nosi/default-hostname 0644
 
 nosi_write_if_changed \
 '#!/bin/sh
-# Managed by nosi/provision/steps/31-motd.sh
+# Managed by nosi/provision/steps/99-motd.sh
 # /usr/local/bin/nosi-motd: print the nosi login banner to stdout.
 # Wrapped by nosi-motd.service at boot into /etc/motd.
 set -eu
@@ -55,6 +61,18 @@ host="$(hostnamectl --static 2>/dev/null || hostname)"
 
 flavor="$(cat /etc/nosi/flavor 2>/dev/null || echo sysdev)"
 default_host="$(cat /etc/nosi/default-hostname 2>/dev/null || echo nosi-${ID:-linux})"
+
+# Build identity from /etc/nosi-release (written first by step 05). Falls
+# back to "(unset)" so the banner still renders on a system where step 05
+# has not run yet (e.g. mid-bake partial state).
+nosi_variant="(unset)"
+nosi_version="(unset)"
+if [ -r /etc/nosi-release ]; then
+    v="$(awk -F= '"'"'$1=="NOSI_VARIANT" {print $2; exit}'"'"' /etc/nosi-release)"
+    [ -n "$v" ] && nosi_variant="$v"
+    v="$(awk -F= '"'"'$1=="NOSI_VERSION" {print $2; exit}'"'"' /etc/nosi-release)"
+    [ -n "$v" ] && nosi_version="$v"
+fi
 
 ips=""
 while IFS= read -r line; do
@@ -87,7 +105,7 @@ nvme_count="$(find /dev -maxdepth 1 -name '"'"'nvme*n*'"'"' 2>/dev/null | wc -l)
 
 cat <<EOM
 
-  nosi ${flavor}   ${distro}   Linux ${kernel}   ${arch}
+  nosi ${flavor} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
 
   hostname:  ${host}
   ip:        ${ips}
@@ -131,4 +149,4 @@ WantedBy=multi-user.target
 systemctl daemon-reload
 systemctl enable nosi-motd.service
 
-nosi_info "step 31-motd done"
+nosi_info "step 99-motd done"
