@@ -27,38 +27,22 @@ nosi_require_root
 
 # ---- venv + tools ---------------------------------------------------------
 #
-# Install each package independently so a single bad / unreachable index
-# entry can't take down the rest. Previously the bundled `pip install ruff
-# pyright devbind hugepages iommu` was a single atomic call -- one network
-# blip aborted the whole step under apply.sh's old set -e, and every step
-# after this (sshd-enable, motd, firstboot-inventory, ...) silently never
-# ran. The per-package loop with warn-on-failure keeps the rest moving and
-# leaves a clear marker in the bake log of exactly which package broke.
+# Fail-fast on first pip error. An earlier iteration installed each
+# package in its own pip call with warn-and-continue, so one bad / 404
+# package left the image looking baked but missing tools. apply.sh now
+# fail-fasts under set -e and the bake is gated on /etc/nosi/apply-ok,
+# so a missing tool here aborts the whole bake by design -- that is the
+# point. If a package goes 404 we want the build to fail loudly and the
+# operator to fix the index, not for the image to ship without claude /
+# devbind / iommu.
 
 python3 -m venv /opt/python-tools
+/opt/python-tools/bin/pip install --no-cache-dir --upgrade pip
+/opt/python-tools/bin/pip install --no-cache-dir --upgrade \
+    ruff pyright devbind hugepages iommu
 
-if ! /opt/python-tools/bin/pip install --no-cache-dir --upgrade pip; then
-    nosi_warn "pip upgrade failed (continuing with bundled pip)"
-fi
-
-PIP_PKGS=(ruff pyright devbind hugepages iommu)
-for pkg in "${PIP_PKGS[@]}"; do
-    if /opt/python-tools/bin/pip install --no-cache-dir --upgrade "$pkg"; then
-        nosi_info "installed $pkg"
-    else
-        nosi_warn "failed to install $pkg (continuing)"
-    fi
-done
-
-# Symlink whatever console scripts the install actually produced; missing
-# ones are warned about, not fatal, so a partial install still wires up
-# the bits that worked.
 for bin in ruff pyright pyright-langserver devbind hugepages iommu; do
-    if [ -x "/opt/python-tools/bin/$bin" ]; then
-        ln -sf "/opt/python-tools/bin/$bin" "/usr/local/bin/$bin"
-    else
-        nosi_warn "/opt/python-tools/bin/$bin missing; no /usr/local/bin symlink"
-    fi
+    ln -sf "/opt/python-tools/bin/$bin" "/usr/local/bin/$bin"
 done
 
 # ---- bash completions for the PCI helpers --------------------------------

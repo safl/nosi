@@ -16,20 +16,26 @@
 # operator's shell on a vanilla Hetzner VM (or similar). Same code path
 # in both cases.
 
-set -uo pipefail
+set -euo pipefail
 
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=lib/common.sh
 . "$HERE/lib/common.sh"
 
-# common.sh sets `set -e` so individual steps abort on first error. apply.sh
-# needs the OPPOSITE: a single step's failure must not skip every step that
-# follows, otherwise one transient pip / curl hiccup quietly leaves the
-# image missing sshd-enable, the motd renderer, the firstboot inventory,
-# etc. (and the bake still "succeeds" because cloud-init just moves to
-# the next runcmd entry). Clear -e here, collect failures per step, exit
-# non-zero with a list at the end.
-set +e
+# Fail-fast on first step error. An earlier iteration of this script
+# tolerated per-step failures and exited 1 at the end with a list. That
+# meant a curl 404 in step 20 still left the image with a freshly-baked
+# qcow2 that LOOKED valid -- /etc/nosi-release written, motd rendered,
+# sshd enabled -- but actually missing whichever tools the failed step
+# was supposed to install. The smoketest was meant to be the safety net,
+# but a smoketest only catches what it asserts; an asserted-too-narrow
+# net let aidev ship through CI without claude / gemini for one cycle.
+#
+# Strict mode + a sentinel at the very end (see below) ties failure
+# detection to apply.sh itself: any abort means /etc/nosi/apply-ok is
+# never written, the smoketest's single sentinel-presence assertion
+# fails, and the image is refused regardless of which step actually
+# died. Nothing seeps through.
 
 FLAVOR="${1:-}"
 [ -n "$FLAVOR" ] || nosi_die "usage: $0 <flavor>   (debian-sysdev | ubuntu-sysdev | ubuntu-aidev | fedora-sysdev)"
@@ -83,21 +89,17 @@ STEPS=(
 
 nosi_info "apply start: flavor=$FLAVOR variant=$NOSI_VARIANT distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
 
-failed=()
 for s in "${STEPS[@]}"; do
     script="$HERE/steps/${s}.sh"
     [ -x "$script" ] || nosi_die "missing step: $script"
     nosi_info "--- step $s ---"
     "$script"
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-        nosi_warn "step $s exited with code $rc; continuing"
-        failed+=("$s")
-    fi
 done
 
-if [ "${#failed[@]}" -ne 0 ]; then
-    nosi_warn "apply finished with failed steps: ${failed[*]}"
-    exit 1
-fi
-nosi_info "apply complete: $FLAVOR"
+# All steps completed. Write the success sentinel. The smoketest's only
+# whole-chain assertion checks for this file; absence => apply.sh aborted
+# somewhere => image is refused for publish. The timestamp inside the
+# file is useful for forensics (Hetzner-VM re-runs overwrite it).
+install -d -m 0755 /etc/nosi
+date -u +%Y-%m-%dT%H:%M:%SZ > /etc/nosi/apply-ok
+nosi_info "apply complete: $FLAVOR (sentinel: /etc/nosi/apply-ok)"
