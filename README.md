@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/src/_static/nosi.png" alt="nosi" width="360">
+</p>
+
 # nosi
 
 [![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)
