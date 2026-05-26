@@ -386,8 +386,16 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
 
-    # ---- awesome tools ---------------------------------------------------
-    for tool in ("iommu", "devbind", "hugepages", "ruff", "pyright"):
+    # ---- pipx-installed CLIs (step 22) -----------------------------------
+    # `pipx install --global` symlinks each package's entry points into
+    # /usr/local/bin (and venvs into /usr/local/pipx). /usr/local/bin is
+    # on every user's default PATH, so no profile.d wiring is needed; a
+    # presence check is sufficient. pyright-langserver is included
+    # explicitly even though pipx is supposed to auto-symlink every
+    # entry point -- this assertion is the tripwire if pipx ever changes
+    # that default.
+    for tool in ("iommu", "devbind", "hugepages", "ruff",
+                 "pyright", "pyright-langserver"):
         check(
             f"/usr/local/bin/{tool} exists",
             f"test -x /usr/local/bin/{tool} && echo ok",
