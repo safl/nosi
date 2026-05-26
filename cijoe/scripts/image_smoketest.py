@@ -386,6 +386,25 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
 
+    # ---- upstream-release CLIs (step 20) ---------------------------------
+    # Each one curl-downloaded from a GitHub release. Asserting individual
+    # presence lets a single 404 surface exactly which upstream URL needs
+    # fixing rather than just "the bake aborted somewhere in step 20".
+    # (rustc is the rustup install marker; rustup itself drops binaries
+    # under /usr/local/cargo/bin/, not /usr/local/bin.)
+    for tool in ("uv", "uvx", "hx", "zellij", "lazygit",
+                 "yazi", "ya", "taplo", "marksman", "oras"):
+        check(
+            f"/usr/local/bin/{tool} exists (step 20)",
+            f"test -x /usr/local/bin/{tool} && echo ok",
+            lambda rc, out, _t=tool: (out == "ok", out or f"missing {_t}"),
+        )
+    check(
+        "/usr/local/cargo/bin/rustc exists (step 20: rustup toolchain)",
+        "test -x /usr/local/cargo/bin/rustc && echo ok",
+        lambda rc, out: (out == "ok", out or "missing rustc"),
+    )
+
     # ---- pipx-installed CLIs (step 22) -----------------------------------
     # `pipx install --global` symlinks each package's entry points into
     # /usr/local/bin (and venvs into /usr/local/pipx). /usr/local/bin is
@@ -397,7 +416,7 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
     for tool in ("iommu", "devbind", "hugepages", "ruff",
                  "pyright", "pyright-langserver"):
         check(
-            f"/usr/local/bin/{tool} exists",
+            f"/usr/local/bin/{tool} exists (step 22)",
             f"test -x /usr/local/bin/{tool} && echo ok",
             lambda rc, out, _t=tool: (out == "ok", out or f"missing {_t}"),
         )

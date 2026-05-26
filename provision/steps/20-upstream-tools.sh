@@ -133,7 +133,7 @@ case "$arch" in
     aarch64) tp_arch=aarch64 ;;
     *) nosi_die "unsupported arch $arch for taplo" ;;
 esac
-curl -fsSL "https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-${tp_arch}.gz" \
+curl -fsSL "https://github.com/tamasfe/taplo/releases/latest/download/taplo-linux-${tp_arch}.gz" \
     | gunzip > /usr/local/bin/taplo
 chmod 0755 /usr/local/bin/taplo
 /usr/local/bin/taplo --version
