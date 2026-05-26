@@ -40,21 +40,52 @@ PasswordAuthentication yes
 PermitRootLogin no
 ' /etc/ssh/sshd_config.d/00-nosi.conf 0644
 
+# Enablement: openssh-server on Debian/Ubuntu ships BOTH ssh.service and
+# (more recent versions) ssh.socket; the cloud image may have either enabled
+# by default. Walk every candidate, enable each that actually exists, and
+# log the resulting state so the bake log makes "is sshd ready for login?"
+# answerable without booting the image. Fedora ships sshd.service only.
 case "$NOSI_DISTRO" in
-fedora) ssh_unit=sshd ;;
-*)      ssh_unit=ssh ;;
+fedora) ssh_units=(sshd.service) ;;
+*)      ssh_units=(ssh.service ssh.socket) ;;
 esac
 
-# Enable for next boot regardless of context. unmask first in case a
-# prior pass (or a base image) left it masked.
-systemctl unmask "${ssh_unit}.service" 2>/dev/null || true
-systemctl enable "${ssh_unit}.service" 2>/dev/null || true
+systemctl daemon-reload 2>/dev/null || true
 
-# On a live system (Hetzner VM re-run), pick up the new drop-in now.
-# Reload is a no-op when the daemon is not running (bake-time chroot /
-# WSL without systemd), so this never fails the step.
-if systemctl is-active --quiet "${ssh_unit}.service" 2>/dev/null; then
-    systemctl reload "${ssh_unit}.service" 2>/dev/null || true
-fi
+for u in "${ssh_units[@]}"; do
+    if ! systemctl cat "$u" >/dev/null 2>&1; then
+        nosi_info "$u not present on this system; skipping"
+        continue
+    fi
+    if ! systemctl unmask "$u" 2>/dev/null; then
+        nosi_warn "unmask $u failed"
+    fi
+    if systemctl enable "$u" 2>/dev/null; then
+        nosi_info "enabled $u"
+    else
+        nosi_warn "enable $u failed"
+    fi
+done
 
-nosi_info "step 28-ssh-config done (sshd enabled via ${ssh_unit}.service)"
+# On a live system (Hetzner-VM re-run), pick up the new drop-in now. No-op
+# at bake time when systemd isn't running for that unit.
+for u in "${ssh_units[@]}"; do
+    if systemctl is-active --quiet "$u" 2>/dev/null; then
+        systemctl reload "$u" 2>/dev/null \
+            || systemctl try-restart "$u" 2>/dev/null \
+            || nosi_warn "reload/restart $u failed"
+    fi
+done
+
+# Final visible state. Surfaces in the bake log as e.g.
+#   [nosi] ssh.service is-enabled: enabled
+#   [nosi] ssh.socket  is-enabled: disabled
+# so we can tell from the log alone whether the next boot will start sshd.
+for u in "${ssh_units[@]}"; do
+    if systemctl cat "$u" >/dev/null 2>&1; then
+        state="$(systemctl is-enabled "$u" 2>/dev/null || echo unknown)"
+        nosi_info "$u is-enabled: $state"
+    fi
+done
+
+nosi_info "step 28-ssh-config done"

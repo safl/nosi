@@ -16,11 +16,20 @@
 # operator's shell on a vanilla Hetzner VM (or similar). Same code path
 # in both cases.
 
-set -euo pipefail
+set -uo pipefail
 
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=lib/common.sh
 . "$HERE/lib/common.sh"
+
+# common.sh sets `set -e` so individual steps abort on first error. apply.sh
+# needs the OPPOSITE: a single step's failure must not skip every step that
+# follows, otherwise one transient pip / curl hiccup quietly leaves the
+# image missing sshd-enable, the motd renderer, the firstboot inventory,
+# etc. (and the bake still "succeeds" because cloud-init just moves to
+# the next runcmd entry). Clear -e here, collect failures per step, exit
+# non-zero with a list at the end.
+set +e
 
 FLAVOR="${1:-}"
 [ -n "$FLAVOR" ] || nosi_die "usage: $0 <flavor>   (debian-sysdev | ubuntu-sysdev | ubuntu-aidev | fedora-sysdev)"
@@ -36,6 +45,9 @@ ubuntu-aidev)
     nosi_die "unknown flavor: $FLAVOR"
     ;;
 esac
+
+# Full flavor string (e.g. "ubuntu-sysdev") for identity-aware steps.
+export NOSI_VARIANT="$FLAVOR"
 
 # Steps the flavor wants, in order. As more steps are extracted from
 # the inline cloud-init blocks they get appended here. Each entry is a
@@ -61,13 +73,23 @@ STEPS=(
     43-wsl-config
 )
 
-nosi_info "apply start: flavor=$FLAVOR distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
+nosi_info "apply start: flavor=$FLAVOR variant=$NOSI_VARIANT distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
 
+failed=()
 for s in "${STEPS[@]}"; do
     script="$HERE/steps/${s}.sh"
     [ -x "$script" ] || nosi_die "missing step: $script"
     nosi_info "--- step $s ---"
     "$script"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        nosi_warn "step $s exited with code $rc; continuing"
+        failed+=("$s")
+    fi
 done
 
+if [ "${#failed[@]}" -ne 0 ]; then
+    nosi_warn "apply finished with failed steps: ${failed[*]}"
+    exit 1
+fi
 nosi_info "apply complete: $FLAVOR"

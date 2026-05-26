@@ -26,20 +26,40 @@ nosi_info "step 22-python-tools"
 nosi_require_root
 
 # ---- venv + tools ---------------------------------------------------------
+#
+# Install each package independently so a single bad / unreachable index
+# entry can't take down the rest. Previously the bundled `pip install ruff
+# pyright devbind hugepages iommu` was a single atomic call -- one network
+# blip aborted the whole step under apply.sh's old set -e, and every step
+# after this (sshd-enable, motd, firstboot-inventory, ...) silently never
+# ran. The per-package loop with warn-on-failure keeps the rest moving and
+# leaves a clear marker in the bake log of exactly which package broke.
 
 python3 -m venv /opt/python-tools
-/opt/python-tools/bin/pip install --no-cache-dir --upgrade pip
-/opt/python-tools/bin/pip install --no-cache-dir ruff pyright devbind hugepages iommu
 
-for bin in ruff pyright pyright-langserver devbind hugepages iommu; do
-    ln -sf /opt/python-tools/bin/$bin /usr/local/bin/$bin
+if ! /opt/python-tools/bin/pip install --no-cache-dir --upgrade pip; then
+    nosi_warn "pip upgrade failed (continuing with bundled pip)"
+fi
+
+PIP_PKGS=(ruff pyright devbind hugepages iommu)
+for pkg in "${PIP_PKGS[@]}"; do
+    if /opt/python-tools/bin/pip install --no-cache-dir --upgrade "$pkg"; then
+        nosi_info "installed $pkg"
+    else
+        nosi_warn "failed to install $pkg (continuing)"
+    fi
 done
 
-ruff --version
-pyright --version
-devbind --help >/dev/null 2>&1 || true
-hugepages --help >/dev/null 2>&1 || true
-iommu --help >/dev/null 2>&1 || true
+# Symlink whatever console scripts the install actually produced; missing
+# ones are warned about, not fatal, so a partial install still wires up
+# the bits that worked.
+for bin in ruff pyright pyright-langserver devbind hugepages iommu; do
+    if [ -x "/opt/python-tools/bin/$bin" ]; then
+        ln -sf "/opt/python-tools/bin/$bin" "/usr/local/bin/$bin"
+    else
+        nosi_warn "/opt/python-tools/bin/$bin missing; no /usr/local/bin symlink"
+    fi
+done
 
 # ---- bash completions for the PCI helpers --------------------------------
 
