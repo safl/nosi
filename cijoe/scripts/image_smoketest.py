@@ -341,18 +341,28 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         )
 
     # ---- ModemManager actually gone --------------------------------------
+    # systemctl is-active prints "active" / "inactive" / "failed" to stdout
+    # and uses exit codes (3 for inactive, 4 for not-loaded). We only care
+    # about stdout; an empty stdout (unit-not-loaded with stderr swallowed)
+    # also counts as "not active". Avoid an `|| echo ...` fallback because
+    # those concatenate onto a non-empty stdout for the inactive case and
+    # break the comparison.
     check(
         "ModemManager is not active",
-        "systemctl is-active ModemManager.service 2>/dev/null || echo inactive",
-        lambda rc, out: (out != "active", out),
+        "systemctl is-active ModemManager.service 2>/dev/null",
+        lambda rc, out: (out != "active", out or "inactive (unit not loaded)"),
     )
 
     # ---- ubuntu-only: snapd soft-disabled --------------------------------
     if distro == "ubuntu":
+        # is-enabled for a masked unit prints "masked" but exits 1, so a
+        # bare `|| echo missing` would append "missing" onto the stdout
+        # the masked case produces and break the equality. Empty stdout
+        # (unit absent) correctly fails the assertion via the equality.
         check(
             "snapd.socket is masked",
-            "systemctl is-enabled snapd.socket 2>/dev/null || echo missing",
-            lambda rc, out: (out == "masked", out),
+            "systemctl is-enabled snapd.socket 2>/dev/null",
+            lambda rc, out: (out == "masked", out or "(unit not present)"),
         )
         check(
             "snap binary still present (re-enableable)",
