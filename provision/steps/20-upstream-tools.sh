@@ -176,6 +176,26 @@ rm -rf "$tmp"
 ln -sf /usr/local/zig/zig /usr/local/bin/zig
 /usr/local/bin/zig version
 
+# ---- zls (zig language server, github.com/zigtools/zls) -------------------
+# Helix auto-spawns zls from PATH for *.zig buffers (out-of-the-box
+# language.toml entry); no editor config needed. Versioned in lockstep
+# with zig itself -- zls 0.13.x matches zig 0.13.x and breaks against
+# zig master / mismatched stable. Pin to the same version as zig_ver
+# above; bump both together.
+
+case "$arch" in
+    x86_64)  zls_arch=x86_64-linux ;;
+    aarch64) zls_arch=aarch64-linux ;;
+    *) nosi_die "unsupported arch $arch for zls" ;;
+esac
+tmp=$(mktemp -d)
+curl -fsSL "https://github.com/zigtools/zls/releases/download/${zig_ver}/zls-${zls_arch}.tar.xz" \
+    -o "$tmp/zls.tar.xz"
+tar -xJf "$tmp/zls.tar.xz" -C "$tmp"
+install -m 0755 "$tmp/zls" /usr/local/bin/zls
+rm -rf "$tmp"
+/usr/local/bin/zls --version
+
 # ---- oras (OCI registry CLI) ----------------------------------------------
 
 case "$arch" in
