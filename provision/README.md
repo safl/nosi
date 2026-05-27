@@ -6,7 +6,7 @@ nosi-parity machine.
 
 Each script under `steps/` is standalone, idempotent, and cross-distro
 where the work is genuinely the same (DKMS, modprobe.d, systemd units,
-profile.d snippets); per-distro otherwise. `apply.sh <flavor>` runs the
+profile.d snippets); per-distro otherwise. `apply.sh <variant>` runs the
 whole chain in order. `lib/common.sh` provides distro detection
 (`NOSI_DISTRO`, `NOSI_PKGMGR`), package-manager wrappers, logging, and
 an idempotency helper that skips writing files whose content has not
@@ -14,11 +14,13 @@ changed.
 
 ```
 provision/
-├── apply.sh              # entry point: apply.sh <flavor>
+├── apply.sh              # entry point: apply.sh <variant>
 ├── lib/common.sh         # distro detect, logging, helpers
 └── steps/
     ├── 05-nosi-release.sh          # FIRST: /etc/nosi-release with build identity
     ├── 10-r8125-dkms.sh
+    ├── 12-gdb-dashboard.sh
+    ├── 15-nouveau-blacklist.sh
     ├── 20-upstream-tools.sh        # uv, rust, helix, zellij, lazygit, yazi, taplo, marksman, oras
     ├── 21-shell-tools.sh           # fd, gitconfig, profile.d
     ├── 22-python-tools.sh          # ruff, pyright, devbind, hugepages, iommu
@@ -31,26 +33,29 @@ provision/
     ├── 29-rotate-password.sh       # force first-login passwd change
     ├── 30-clock-from-http.sh
     ├── 32-firstboot-inventory.sh
-    ├── 40..43                      # aidev-only: nerd font, npm globals, pi, wsl.conf
+    ├── 50-desktop-stack.sh         # desktop-shape only: greetd / Hyprland / waybar configs
+    ├── 98-metadata.sh              # /etc/nosi-metadata.json (tool versions, packages, identity)
     └── 99-motd.sh                  # LAST: login banner = "all earlier steps ran"
 ```
 
-`apply.sh` continues past a failing step, accumulates the list, and exits
-non-zero at the end with the names of the failures. That way a single
-broken step (transient pip / curl flake, missing pkg in a new distro
-release) no longer silently skips every step after it, and the bake log
-shows exactly which steps need attention.
+`apply.sh` is fail-fast: any step error aborts the chain and the
+`/etc/nosi/apply-ok` sentinel never gets written. The smoketest's
+whole-chain assertion checks for this sentinel; absence means the
+image is refused for publish. Strict mode catches the kind of failure
+that an asserted-too-narrow smoketest would miss otherwise.
 
 ## Variants
 
-| variant               | base                 | adds over headless       |
-|-----------------------|----------------------|------------------------|
-| `debian-13-headless`    | Debian 13 trixie     | --                     |
-| `ubuntu-2604-headless`  | Ubuntu 26.04 resolute| --                     |
-| `ubuntu-2604-aidev`   | Ubuntu 26.04 resolute| Node, agentic CLIs, JetBrainsMono Nerd Font, WSL config |
-| `fedora-44-headless`    | Fedora 44            | --                     |
-| `freebsd-14-headless`   | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
-| `freebsd-15-headless`   | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| variant                | base                 | adds over headless |
+|------------------------|----------------------|--------------------|
+| `debian-13-headless`   | Debian 13 trixie     | -- |
+| `ubuntu-2404-headless` | Ubuntu 24.04 noble   | -- (HW vendor stacks: cudadev/rocmdev workflows pin to this base) |
+| `ubuntu-2604-headless` | Ubuntu 26.04 resolute| -- |
+| `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |
+| `fedora-44-headless`   | Fedora 44            | -- |
+| `fedora-44-desktop`    | Fedora 44            | Hyprland + tuigreet + Firefox + audio/bluetooth/power-management |
+| `freebsd-14-headless`  | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| `freebsd-15-headless`  | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
 
 ## Use from a flashed nosi image
 
@@ -79,14 +84,16 @@ no-ops there.
 
 ## Use as a WSL2 distribution
 
-The aidev bake produces both a flashable `.img.gz` and a WSL2 rootfs
-tarball (`wsl_rootfs_publish` strips kernel/grub/firmware/cloud-init).
+The `wsl`-shape variant (today: `ubuntu-2604-wsl`) bake produces both
+a flashable `.img.gz` side-effect and a WSL2 rootfs tarball
+(`wsl_rootfs_publish` strips kernel/grub/firmware/cloud-init); the
+`.tar.gz` is the primary artefact.
 
 Install on Windows (recommended, Win11 + WSL 2.x):
 
 ```
-wsl --install --from-file path\to\nosi-aidev.tar.gz
-wsl -d nosi-aidev
+wsl --install --from-file path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl -d nosi-wsl
 ```
 
 `--from-file` reads `/etc/wsl-distribution.conf [oobe]` from the
@@ -96,9 +103,15 @@ root. odus sits at the standard UID 1000 (WSL/Linux convention for
 the first interactive user). See "Personalization" below if you want
 your own name on the prompt instead.
 
-On first interactive shell, the WSL-only profile.d snippet from step
-29 prompts for `passwd` to rotate the baked default `odus.321` to
-something local. Once rotated, the prompt disappears.
+GUI dev tools baked into the variant (`meld`, `gitk`, `git-gui`)
+launch via WSLg's Windows-side Wayland + XWayland server -- nothing
+runs inside the rootfs. `xdg-open <url>` opens links in the Windows
+default browser via WSLg's interop layer.
+
+On first interactive shell, the WSL-only profile.d snippet from
+nosi's password-rotation logic prompts for `passwd` to rotate the
+baked default `odus.321` to something local. Once rotated, the
+prompt disappears.
 
 ### Older WSL (no `--from-file`)
 
@@ -110,13 +123,13 @@ root. Two ways out:
 
 ```
 # Set the default user once via the Windows-side knob (recommended)
-wsl --import nosi-aidev C:\WSL\nosi-aidev path\to\nosi-aidev.tar.gz
-wsl --manage nosi-aidev --set-default-user odus
-wsl -d nosi-aidev
+wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl --manage nosi-wsl --set-default-user odus
+wsl -d nosi-wsl
 
 # Or pass -u on every launch (never updates the registry)
-wsl --import nosi-aidev C:\WSL\nosi-aidev path\to\nosi-aidev.tar.gz
-wsl -d nosi-aidev -u odus
+wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl -d nosi-wsl -u odus
 ```
 
 ## Password rotation
@@ -162,7 +175,7 @@ blast radius by a wide margin.
 purely additive, doesn't touch any nosi state:
 
 ```
-sudo useradd -u 1001 -m -s /bin/bash -G sudo,kvm me   # +render,video on aidev
+sudo useradd -u 1001 -m -s /bin/bash -G sudo,kvm me   # +render,video,input on desktop
 sudo passwd me
 
 # WSL only: have `wsl -d <distro>` land as `me` instead of odus

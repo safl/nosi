@@ -4,35 +4,51 @@
 work. The output is a vanilla `.img.gz` flashable with any standard tool;
 nothing about the image format ties it to a specific deployment workflow.
 
-## Flavors
+## Shapes
 
-Distro + version in a variant name are self-explanatory (Ubuntu 24.04,
-Debian 13, etc.); the **flavor** is the nosi-specific bit that needs
-an introduction. A flavor is an opinionated package selection layered
-on top of the base cloud image, named for the work it's fit for.
+Every nosi variant is **the nosi flavor of `<upstream>`** -- the
+opinionated layer nosi puts on top of a stock cloud image. The
+suffix in the variant name describes the **shape** the system takes:
+how it's deployed, what kind of hardware or environment it's for.
+Distro + numerical version in a variant name are self-explanatory
+(Ubuntu 24.04, Debian 13, ...); the shape is the nosi-specific bit
+that needs an introduction.
 
-Two flavors ship today:
+Three shapes ship today:
 
-- **`headless`** : C / C++ / Python / Rust systems work. Compilers,
-  build tooling (meson / ninja / cmake / cargo), debuggers (gdb +
-  gdb-dashboard, lldb), perf / strace / valgrind, user-space PCI
-  prereqs (vfio plumbing, hugepages, IOMMU cmdline), containers
-  (podman / buildah / skopeo), local virtualisation (qemu / OVMF),
-  hardware inspection (dmidecode / lshw / nvme-cli / smartmontools),
-  the helix / zellij / lazygit / yazi daily-driver layer, and a
-  pipx-installed Python CLI set (uv, ruff, pyright, devbind). No Node
-  runtime ([by design](https://github.com/safl/nosi/blob/main/provision/steps/41-npm-globals.sh) -- Node-based tools live in aidev).
-- **`aidev`** : `headless` superset plus Node and a curated set of
-  agentic-AI command-line tools (claude-code, codex, gemini-cli,
-  opencode), JetBrainsMono Nerd Font, WSL configuration. Variants
-  with this flavor additionally publish a WSL2 rootfs tarball
-  consumable by `wsl --import`.
+- **`headless`** : C / C++ / Python / Rust systems work; server /
+  VM / bare-metal-without-display use. Compilers, build tooling
+  (meson / ninja / cmake / cargo), debuggers (gdb + gdb-dashboard,
+  lldb), perf / strace / valgrind, user-space PCI prereqs (vfio
+  plumbing, hugepages, IOMMU cmdline), containers (podman / buildah
+  / skopeo), local virtualisation (qemu / OVMF), hardware inspection
+  (dmidecode / lshw / nvme-cli / smartmontools), the helix / zellij
+  / lazygit / yazi daily-driver layer, and a pipx-installed Python
+  CLI set (uv, ruff, pyright, devbind).
+- **`desktop`** : headless superset plus a Hyprland tiling Wayland
+  compositor + tuigreet greeter + Firefox + audio (PipeWire +
+  WirePlumber) + bluetooth + brightness + power-profiles-daemon. For
+  personal laptop / workstation use.
+- **`wsl`** : headless superset plus a curated set of GUI dev tools
+  (meld, gitk, git-gui) that render through WSLg without a compositor
+  inside the rootfs. wsl-shape variants publish a `.tar.gz`
+  consumable by `wsl --import` (alongside an .img.gz side-effect of
+  the bake pipeline).
+
+Optional tooling collections that don't define a shape (agentic AI
+CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,
+...) are out-of-scope for the baked variants. GPU + NIC vendor stacks
+live as post-flash cijoe workflows under `cijoe/workflows/`
+(`setup_cudadev.yaml`, `setup_rocmdev.yaml`); other tooling is
+operator-installed from upstream after flashing. The intent: a
+flashable variant stays focused on **what kind of system it is**;
+"what extras you want installed" is the operator's call.
 
 Each variant is a self-contained build keyed by
-`<distro>-<version>-<flavor>`. There is **no actual layered
-inheritance** (no Yocto / Nix style composition); the word "flavor"
+`<distro>-<version>-<shape>`. There is **no actual layered
+inheritance** (no Yocto / Nix style composition); the word "shape"
 describes a curated package list and configuration, nothing more. The
-bare `*-base` variants (cloud-image-stock plus identity, no flavor
+bare `*-base` variants (cloud-image-stock plus identity, no shape
 layer) are still on the roadmap.
 
 ## Variants
@@ -44,16 +60,18 @@ every docs build from the ORAS metadata layer each image publishes
 to GHCR, so it reflects the bytes actually on disk rather than
 hand-curated prose that can drift.
 
-Variant names follow `<distro>-<version>-<flavor>`, e.g.
-`debian-13-headless`, `ubuntu-2604-aidev`, `freebsd-15-headless`. The
-version-in-the-name is what lets multiple kernel / user-land releases
-of the same distro coexist when their use cases call for it (see
-"Why these distros" below).
+Variant names follow `<distro>-<version>-<shape>`, e.g.
+`debian-13-headless`, `ubuntu-2604-wsl`, `freebsd-15-headless`. The
+version-in-the-name lets multiple kernel / user-land releases of the
+same distro coexist when their use cases call for it (for example,
+`ubuntu-2404-headless` exists alongside `ubuntu-2604-headless`
+because NVIDIA / AMD / Mellanox qualify their apt repos against 24.04
+LTS while 26.04 LTS is the recency-leaning pick for non-vendor use).
 
-`ubuntu-2604-aidev` is the first variant with two deployment targets
-from one bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2
-rootfs `.tar.gz` consumable by `wsl --import`. The WSL artefact is
-published to a sibling GHCR repo named `<variant>-wsl`.
+`ubuntu-2604-wsl` publishes a sibling GHCR repo `<variant>-wsl` with
+the WSL2 rootfs tarball alongside the regular `.img.gz`. Operators
+import it via `wsl --import`; everything inside renders through
+WSLg, so GUI tools work without a compositor in the rootfs.
 
 Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
 scaffold (bake + identity + baseline packages + kernel source, no
@@ -80,13 +98,13 @@ user-data file under `nosi-media/auxiliary/`. A
    up the `odus` operator account, strips machine identity, powers off.
 5. Compact the baked qcow2 and gzip-publish it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
-6. For variants that declare a `[publish_wsl]` block (today: just
-   `ubuntu-2604-aidev`), `wsl_rootfs_publish` derives a WSL2 rootfs tarball
-   from the same bake: attach the qcow2 via `qemu-nbd`, mount the
-   detected ext4 rootfs partition, chroot in to apt-purge the
+6. For variants that declare a `[publish_wsl]` block (today:
+   `ubuntu-2604-wsl`), `wsl_rootfs_publish` derives a WSL2 rootfs
+   tarball from the same bake: attach the qcow2 via `qemu-nbd`, mount
+   the detected ext4 rootfs partition, chroot in to apt-purge the
    kernel/grub/firmware/cloud-init/netplan/NM plumbing, `tar` the
-   stripped rootfs out (`--xattrs --acls --numeric-owner`), and gzip +
-   sha256-seal. No-op for headless variants.
+   stripped rootfs out (`--xattrs --acls --numeric-owner`), and gzip
+   + sha256-seal. No-op for variants without a `[publish_wsl]` block.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
@@ -103,7 +121,7 @@ cijoe/
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data
-    cloudinit-<flavor>-<distro>.user    # per-variant cloud-init user-data
+    cloudinit-<shape>-<distro>-<version>.user  # per-variant cloud-init user-data
 docs/
   src/                              # sphinx markdown sources (this tree)
   tooling/                          # nosi-docs package (pyproject + cli)

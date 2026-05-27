@@ -76,10 +76,10 @@ blob digest exactly because the digest is the only truly stable name.
 `oras repo tags ghcr.io/safl/nosi/<variant>` enumerates the rolling
 tags for a variant. See [](release.md) for the rolling-release model.
 
-## Import a WSL2 rootfs (`ubuntu-2604-aidev` only)
+## Import a WSL2 rootfs (`ubuntu-2604-wsl`)
 
-`ubuntu-2604-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
-GHCR repo (`<variant>-wsl`).
+`ubuntu-2604-wsl` publishes a WSL2 rootfs tarball to a sibling GHCR
+repo (`<variant>-wsl`).
 
 With [`oras`](https://oras.land) on Windows -- install via `winget`
 (Microsoft's official package manager, present on Windows 10/11 out of
@@ -94,11 +94,13 @@ winget install -e --id ORASProject.ORAS
 too if you prefer those.
 
 ```powershell
-oras pull "ghcr.io/safl/nosi/ubuntu-2604-aidev-wsl:latest"
-wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-2604-aidev-wsl.tar.gz
-wsl -d nosi-aidev
+oras pull "ghcr.io/safl/nosi/ubuntu-2604-wsl-wsl:latest"
+wsl --import nosi-wsl "$env:USERPROFILE\WSL\nosi-wsl" nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl -d nosi-wsl
 ```
 
 The imported distro boots with `systemd=true` and default user `odus`
 (matching the flashable variant). The first boot regenerates SSH host
-keys and the machine-id; `nosi-motd.service` writes the banner.
+keys and the machine-id; `nosi-motd.service` writes the banner. GUI
+tools (`meld`, `gitk`, `git-gui`) render via WSLg as native Windows
+windows -- no compositor in the rootfs.

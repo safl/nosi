@@ -8,10 +8,10 @@ nosi is **rolling**, not semver. Every publish gets:
   publish
 
 Variants that produce a WSL rootfs alongside the flashable image
-(`ubuntu-2604-aidev` today) push that artifact to a sibling repo named
-`<variant>-wsl` with the same tag scheme. Keeping the WSL tarball under
-its own repo means bty's flashable catalog stays cleanly scoped to disk
-images.
+(`ubuntu-2604-wsl` today) push that artifact to a sibling repo named
+`<variant>-wsl` with the same tag scheme. Keeping the WSL tarball
+under its own repo means bty's flashable catalog stays cleanly scoped
+to disk images.
 
 ## When publishes fire
 

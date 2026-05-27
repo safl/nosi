@@ -5,25 +5,27 @@ doc: |
 
   1. Download the upstream cloud image for the variant.
   2. Resize the boot disk so cloud-init has room to install packages.
-  3. Build a NoCloud seed.iso from the variant's cloudinit-<flavor>-<distro>.user
-     in nosi-media/auxiliary/ + the shared meta-data.
+  3. Build a NoCloud seed.iso from the variant's
+     cloudinit-<shape>-<distro>-<version>.user in nosi-media/auxiliary/
+     + the shared meta-data.
   4. Boot QEMU; cloud-init installs the package set, sets up the default
      `odus` operator account, strips SSH host keys and machine-id, and
      powers off.
   5. Compact and checksum the baked qcow2.
   6. ``img_gz_publish`` converts qcow2 -> raw -> gzip-compressed .img.gz
      with a sha256 sidecar, for direct ``dd`` flashing.
-  7. ``wsl_rootfs_publish`` (aidev only -- gated on a [publish_wsl] block
-     in the variant's config) derives a WSL2 rootfs tarball from the same
-     bake by stripping kernel/grub/firmware/cloud-init and tar-ing the
-     result. No-op for headless variants.
-  8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write overlay,
-     SSHes in as odus via a per-run key seeded by cloud-init, and asserts
-     that the regressions caught by hand in nosi 2026-05 stay caught:
-     /etc/nosi-release populated, motd rendered, the awesome tools on
-     PATH, sshd enabled, ModemManager inactive, snapd masked (ubuntu),
-     agentic CLIs on PATH (aidev). Failure here fails the whole build so
-     the GHCR push is skipped.
+  7. ``wsl_rootfs_publish`` (gated on a [publish_wsl] block in the
+     variant's config; today only ubuntu-2604-wsl declares one)
+     derives a WSL2 rootfs tarball from the same bake by stripping
+     kernel/grub/firmware/cloud-init and tar-ing the result. No-op
+     for variants without [publish_wsl].
+  8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write
+     overlay, SSHes in as odus via a per-run key seeded by cloud-init,
+     and asserts that the regressions caught by hand in nosi 2026-05
+     stay caught: /etc/nosi-release populated, motd rendered, the
+     awesome tools on PATH, sshd enabled, ModemManager inactive,
+     snapd masked (ubuntu). Failure here fails the whole build so the
+     GHCR push is skipped.
 
   Variant is selected via ``-c configs/<variant>.toml``; ``[nosi].variant``
   drives the image-name lookup and download URLs.
