@@ -1,0 +1,8 @@
+# Version pins for setup_rocmdev.yaml.
+#
+# Mirror xnvme/aisio/configs/amdstack.toml so a workflow run against a
+# nosi target lands on the same ROCm release the upstream project tests.
+# Bump in lockstep when xnvme/aisio bumps.
+
+[amd.amdgpu_install]
+url = "https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb"

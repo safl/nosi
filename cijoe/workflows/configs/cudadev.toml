@@ -1,0 +1,22 @@
+# Version pins for setup_cudadev.yaml.
+#
+# Mirror xnvme/aisio/configs/nvstack.toml so a workflow run against a
+# nosi target lands on the same NVIDIA software-stack release the
+# upstream project tests. Bump these in lockstep when xnvme/aisio bumps.
+
+[nvidia.ofed]
+version = "24.10-3.2.5.0"
+url = "https://content.mellanox.com/ofed/MLNX_OFED-24.10-3.2.5.0/MLNX_OFED_LINUX-24.10-3.2.5.0-ubuntu24.04-x86_64.tgz"
+
+[nvidia.nokm]
+version = "570"
+
+[nvidia.cuda]
+apt_version = "12-8"
+
+[nvidia.cuda.samples]
+remote = "https://github.com/NVIDIA/cuda-samples"
+tag = "v12.8"
+
+[nvidia.keyring]
+url = "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb"

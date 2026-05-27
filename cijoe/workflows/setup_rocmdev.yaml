@@ -1,0 +1,110 @@
+---
+doc: |
+  Set up the AMD GPU software stack (amdgpu + ROCm) on a freshly-flashed
+  nosi-ubuntu-sysdev box (Ubuntu 24.04 noble, GA 6.8 kernel).
+
+  Direct port of xnvme/aisio/tasks/setup_amdstack.yaml, adjusted for nosi's
+  defaults: target user is `odus` (NOPASSWD sudo), root SSH is locked,
+  the sysdev baseline already provides linux-headers + DKMS prereqs +
+  the nouveau blacklist.
+
+  Prerequisites:
+
+    * Target running nosi-ubuntu-sysdev or nosi-ubuntu-aidev (Ubuntu 24.04
+      noble, kernel 6.8 GA; HWE must NOT be installed).
+    * SSH key authorized on odus@<target>:
+        ssh-copy-id odus@<target>
+    * cijoe configured with workflows/configs/my-transport.toml pointing
+      at the target.
+
+  Running:
+
+    cijoe --monitor \
+        -c workflows/configs/rocmdev.toml \
+        -c workflows/configs/my-transport.toml \
+        workflows/setup_rocmdev.yaml
+
+  Stages:
+
+    1. amdgpu-install meta-installer deb + apt repo registration.
+    2. amdgpu DKMS driver + full ROCm 7.2 user-space (one reboot).
+    3. Headless tweaks (amdgpu runpm=0).
+    4. odus added to video + render groups for /dev/dri + /dev/kfd.
+    5. /etc/profile.d/rocm.sh wiring.
+
+steps:
+- name: workdir_prep
+  run: |
+    mkdir -p ~/workdir
+
+- name: amdgpu_install_deb
+  run: |
+    cd ~/workdir
+    wget -O amdgpu-install.deb {{ config.amd.amdgpu_install.url }}
+    sudo apt-get install -y ./amdgpu-install.deb
+    sudo apt-get update
+
+- name: rocm_install
+  run: |
+    sudo amdgpu-install -y --usecase=rocm
+
+- name: reboot_after_rocm
+  run: sudo shutdown -r now
+
+- name: wait_down_rocm
+  uses: core.wait_for_transport
+  with:
+    state: down
+    timeout: 60
+
+- name: wait_up_rocm
+  uses: core.wait_for_transport
+  with:
+    state: up
+    timeout: 300
+
+# Tell amdgpu not to runtime-suspend the GPU. Headless servers running
+# compute-only otherwise hit "GPU idles, next compute call hangs"
+# surprises.
+- name: headless_tweaks
+  run: |
+    echo "options amdgpu runpm=0" \
+        | sudo tee /etc/modprobe.d/amdgpu-headless.conf > /dev/null
+    sudo update-initramfs -u
+
+- name: gpu_access
+  run: |
+    sudo usermod -a -G video,render odus
+
+- name: verify_amdgpu
+  run: |
+    sudo dkms status | grep amdgpu || true
+    lsmod | grep amdgpu || true
+    dmesg | grep -i amdgpu | tail -20 || true
+
+# /etc/profile.d/rocm.sh: ROCm tooling lives under /opt/rocm. PATH +
+# LD_LIBRARY_PATH need explicit wiring; the snippet is lazy-guarded on
+# /opt/rocm presence so a future amdgpu-install uninstall doesn't break
+# operator shells.
+- name: rocm_profile
+  run: |
+    sudo tee /etc/profile.d/rocm.sh > /dev/null <<'EOF'
+    # ROCm environment (managed by nosi rocmdev setup workflow)
+    if [ -d /opt/rocm ]; then
+        case ":$PATH:" in
+            *":/opt/rocm/bin:"*) : ;;
+            *) export PATH="/opt/rocm/bin:$PATH" ;;
+        esac
+        case ":$LD_LIBRARY_PATH:" in
+            *":/opt/rocm/lib:"*) : ;;
+            *) export LD_LIBRARY_PATH="/opt/rocm/lib:${LD_LIBRARY_PATH:-}" ;;
+        esac
+    fi
+    EOF
+    sudo chmod 0644 /etc/profile.d/rocm.sh
+
+- name: verify_rocm
+  run: |
+    /opt/rocm/bin/rocminfo || true
+    /opt/rocm/bin/rocm-smi || true
+    /opt/rocm/bin/hipcc --version || true

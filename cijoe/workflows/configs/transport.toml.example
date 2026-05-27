@@ -1,0 +1,25 @@
+# Example transport config for the post-flash GPU workflows.
+#
+# Copy this to my-transport.toml in this directory and edit the
+# hostname / port / key_filename to match your target. cijoe drives
+# the workflow over the resulting SSH session.
+#
+# The target must have an SSH-authorized key for odus:
+#
+#     ssh-copy-id odus@<hostname>
+#
+# Password auth works too in principle (`password = "odus.321"` after
+# the default rotation, or whatever it's been set to), but the multi-
+# reboot GPU workflows expect non-interactive auth; key auth is the
+# only ergonomic option.
+
+[cijoe.transport.ssh]
+username = "odus"
+hostname = "your-target-hostname-or-ip"
+port = 22
+
+# Either pass a private key file ...
+key_filename = "~/.ssh/id_ed25519"
+
+# ... or a password (less ergonomic for the multi-reboot flow):
+# password = "odus.321"
