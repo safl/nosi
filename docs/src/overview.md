@@ -41,6 +41,35 @@ Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
 scaffold (bake + identity + baseline packages + kernel source, no
 provision chain yet).
 
+### Why these distros
+
+Three Linux distros are in nosi for three distinct positions on the
+recency / stability / hardware-vendor-support spectrum.
+
+**Ubuntu** is the default Linux base. Not because it's particularly
+loved, but because it's the distribution with the fewest *footnotes*
+when checking HW-vendor support pages. AMD ROCm publishes
+`amdgpu-install` and the ROCm stack against Ubuntu LTS first.
+NVIDIA's CUDA + DOCA + NOKM apt repos target Ubuntu LTS. Mellanox
+MLNX_OFED qualifies against Ubuntu LTS. Pick anything else and every
+vendor's "supported on Ubuntu A.B; for other distros, please …" line
+becomes a personal problem. That's why the GPU-stack variants
+(`ubuntu-aidev`, the post-flash cudadev / rocmdev workflows under
+`cijoe/workflows/`) are Ubuntu-only.
+
+**Debian** is the conservative end. Stable but stale: even the latest
+stable can be a bit behind on package versions. Good baseline for
+sysdev work that doesn't lean on HW-vendor stacks. The personally-
+preferred distro of the nosi author, kept as a first-class variant
+because plenty of operators feel the same way and the trade against
+Ubuntu is principled rather than reluctant.
+
+**Fedora** is the recent end. Less stable than Debian's stable but
+ships much newer package versions; an early signal for what the next
+LTS round looks like. Also second-class for HW-vendor stacks (CUDA /
+ROCm publish for RHEL / EL with a lag and don't cover Fedora
+mainline), so it's not where the GPU-target variants live.
+
 ## Build pipeline
 
 Each variant pairs a TOML config under `cijoe/configs/` with a cloud-init
