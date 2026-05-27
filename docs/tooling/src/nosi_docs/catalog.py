@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 # matrix.variant list and the cijoe/configs/ directory.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
     ("debian-13-sysdev",    "ghcr.io/safl/nosi/debian-13-sysdev:latest"),
+    ("ubuntu-2404-aidev",   "ghcr.io/safl/nosi/ubuntu-2404-aidev:latest"),
     ("ubuntu-2604-sysdev",  "ghcr.io/safl/nosi/ubuntu-2604-sysdev:latest"),
     ("ubuntu-2604-aidev",   "ghcr.io/safl/nosi/ubuntu-2604-aidev:latest"),
     ("fedora-44-sysdev",    "ghcr.io/safl/nosi/fedora-44-sysdev:latest"),

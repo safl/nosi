@@ -22,6 +22,8 @@ help:
 	@echo
 	@echo "Variants (<distro>-<version>-<flavor>):"
 	@echo "  debian-13-sysdev    Debian 13 trixie"
+	@echo "  ubuntu-2404-aidev   Ubuntu 24.04 noble + agentic CLIs"
+	@echo "                      (HW vendor stacks; cudadev/rocmdev workflows pin here)"
 	@echo "  ubuntu-2604-sysdev  Ubuntu 26.04 resolute"
 	@echo "  ubuntu-2604-aidev   Ubuntu 26.04 resolute + agentic CLIs"
 	@echo "                      (additionally publishes a WSL .tar.gz)"
@@ -47,6 +49,7 @@ build:
 
 all:
 	$(MAKE) build VARIANT=debian-13-sysdev
+	$(MAKE) build VARIANT=ubuntu-2404-aidev
 	$(MAKE) build VARIANT=ubuntu-2604-sysdev
 	$(MAKE) build VARIANT=ubuntu-2604-aidev
 	$(MAKE) build VARIANT=fedora-44-sysdev

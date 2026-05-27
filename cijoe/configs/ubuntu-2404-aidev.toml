@@ -1,0 +1,56 @@
+# nosi aidev : Ubuntu 24.04 LTS (noble) + agentic CLIs
+#
+# The LTS that NVIDIA CUDA / NOKM / DOCA, AMD ROCm / amdgpu-install, and
+# Mellanox MLNX_OFED qualify against. cijoe/workflows/setup_cudadev.yaml
+# and setup_rocmdev.yaml pin to this base. Pairs the sysdev superset
+# with Node + agentic AI CLIs; flashable .img.gz only -- the WSL2 rootfs
+# derivative comes from ubuntu-2604-aidev (the recency-leaning aidev
+# base) instead, so there's exactly one WSL tarball variant to maintain.
+#
+# Usage (from repo root, the Makefile cd's into cijoe/):
+#   make build VARIANT=ubuntu-2404-aidev
+
+[nosi]
+variant = "ubuntu-2404-aidev"
+
+[cijoe.transport.qemu_guest]
+username = "root"
+password = "root"
+hostname = "localhost"
+port = 4200
+
+[cijoe.workflow]
+fail_fast = true
+
+[qemu]
+img_bin = "qemu-img"
+
+[qemu.systems.x86_64]
+bin = "/usr/bin/qemu-system-x86_64"
+
+[qemu.guests.nosi-ubuntu-2404-aidev-x86_64]
+path = "{{ local.env.HOME }}/system_imaging/guests/nosi-ubuntu-2404-aidev-x86_64"
+system_label = "x86_64"
+system_image_name = "nosi-ubuntu-2404-aidev-x86_64"
+system_args.kwa = { cpu = "host", smp = 4, m = "4G", accel = "kvm" }
+system_args.tcp_forward = { host = 4200, guest = 22 }
+
+[system-imaging.images.nosi-ubuntu-2404-aidev-x86_64]
+system_label = "x86_64"
+
+cloud.url = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/noble-server-cloudimg-amd64.img"
+cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
+cloud.userdata_path = "nosi-media/auxiliary/cloudinit-aidev-ubuntu-2404.user"
+
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-aidev-x86_64.qcow2"
+
+# Flashable .img.gz output (target = x86_64).
+publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-aidev-x86_64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-aidev-x86_64.img.gz"
+publish.gzip_level = 9
+
+# No publish_wsl block on this variant: the WSL2 rootfs tarball is
+# derived from ubuntu-2604-aidev only. wsl_rootfs_publish reads
+# publish_wsl from the TOML and no-ops when the block is absent, so
+# the 2404 bake produces just the .img.gz.
