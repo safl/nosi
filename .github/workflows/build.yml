@@ -260,7 +260,16 @@ jobs:
               ;;
           esac
 
-          oras push \
+          # Retry the oras push: ghcr.io occasionally resets the HTTP/2
+          # upload stream mid-blob (REFUSED_STREAM), and Go's http2
+          # transport can't auto-retry once Request.Body has been
+          # consumed (no GetBody defined upstream). oras push is
+          # idempotent -- already-uploaded blobs are detected by digest
+          # and skipped -- so re-running picks up where the failure
+          # left off. 3 attempts with 15s + 30s backoff covers the
+          # typical flake without dragging the job out.
+          attempts=0
+          until oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.nosi.disk-image.v1+gzip \
               --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64" \
@@ -282,7 +291,16 @@ jobs:
               "${report}:application/vnd.nosi.build-report.v1+zip" \
               "${report}.sha256:text/plain" \
               "${meta_json}:application/vnd.nosi.metadata.v1+json" \
-              "${meta_md}:text/markdown"
+              "${meta_md}:text/markdown"; do
+              attempts=$((attempts + 1))
+              if [ $attempts -ge 3 ]; then
+                  echo "::error::oras push (disk-image) failed after $attempts attempts"
+                  exit 1
+              fi
+              backoff=$((attempts * 15))
+              echo "::warning::oras push (disk-image) attempt $attempts failed; retrying in ${backoff}s"
+              sleep $backoff
+          done
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Push ${{ matrix.variant }} WSL rootfs to GHCR
@@ -339,7 +357,9 @@ jobs:
               ;;
           esac
 
-          oras push \
+          # Same idempotent-retry pattern as the disk-image push above.
+          attempts=0
+          until oras push \
               "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" \
               --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
               --annotation "org.opencontainers.image.title=nosi-${IMG}-wsl" \
@@ -361,7 +381,16 @@ jobs:
               "${report}:application/vnd.nosi.build-report.v1+zip" \
               "${report}.sha256:text/plain" \
               "${meta_json}:application/vnd.nosi.metadata.v1+json" \
-              "${meta_md}:text/markdown"
+              "${meta_md}:text/markdown"; do
+              attempts=$((attempts + 1))
+              if [ $attempts -ge 3 ]; then
+                  echo "::error::oras push (WSL) failed after $attempts attempts"
+                  exit 1
+              fi
+              backoff=$((attempts * 15))
+              echo "::warning::oras push (WSL) attempt $attempts failed; retrying in ${backoff}s"
+              sleep $backoff
+          done
           oras tag "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" latest
 
       - name: Write build summary
