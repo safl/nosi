@@ -163,9 +163,10 @@ packages:
   - bluez-tools
   - power-profiles-daemon
   - playerctl
-  # Fonts: JetBrainsMono Nerd Font for terminal + waybar icon glyphs.
-  # Noto covers most other scripts + emoji.
-  - jetbrains-mono-nerd-fonts
+  # Fonts: Noto covers most scripts + emoji. JetBrainsMono Nerd Font
+  # is not packaged on Fedora 44 mainline (the upstream Nerd Fonts
+  # release is the canonical source); step 50-desktop-stack pulls the
+  # release tarball into /usr/local/share/fonts/.
   - google-noto-sans-fonts
   - google-noto-color-emoji-fonts
   # XDG plumbing: xdg-utils for xdg-open, xdg-desktop-portal as the

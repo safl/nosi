@@ -135,6 +135,9 @@ jobs:
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz.sha256
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-wsl.tar.gz
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-wsl.tar.gz.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init-output.log
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init.log
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.nosi-release
             cijoe/cijoe-output/
           if-no-files-found: warn
           retention-days: 14

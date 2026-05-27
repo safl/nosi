@@ -272,6 +272,39 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
         raise RuntimeError(f"qemu failed to start smoketest VM (exit {err})")
 
 
+def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
+    """Best-effort scp of in-VM diagnostics into the qcow2 output dir.
+
+    Called when /etc/nosi-metadata.json is missing (so apply.sh aborted
+    somewhere). Pulls whatever exists from the running smoketest VM into
+    nosi-<variant>-x86_64.<name> files in the same dir as the qcow2, so the
+    GHA workflow's artefact-upload step carries them off the ephemeral
+    runner. Each pull is best-effort: a missing source file is fine,
+    the cijoe log already records the smoketest's primary failure.
+    """
+    targets = [
+        ("/var/log/cloud-init-output.log", "cloud-init-output.log"),
+        ("/var/log/cloud-init.log",        "cloud-init.log"),
+        ("/etc/nosi-release",              "nosi-release"),
+    ]
+    for remote, suffix in targets:
+        local = out_dir / f"{base}.{suffix}"
+        scp_cmd = [
+            "scp", "-i", str(key), *SSH_OPTS,
+            "-P", str(SSH_HOST_PORT),
+            f"{SSH_USER}@127.0.0.1:{remote}",
+            str(local),
+        ]
+        res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
+        if res.returncode == 0:
+            log.info(f"failure forensics: pulled {remote} -> {local.name}")
+        else:
+            log.warning(
+                f"failure forensics: could not pull {remote} "
+                f"(exit {res.returncode}): {(res.stderr or res.stdout).strip()}"
+            )
+
+
 def _extract_metadata(key: Path, qcow2: Path) -> None:
     """scp /etc/nosi-metadata.json out and render a sibling .md.
 
@@ -297,6 +330,11 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     ]
     res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
     if res.returncode != 0:
+        # /etc/nosi-metadata.json missing usually means apply.sh died before
+        # reaching step 98-metadata. Best-effort: scp the cloud-init logs +
+        # /etc/nosi-release out so the GHA artefact upload carries them and
+        # the failing step is diagnosable without dropping into the runner.
+        _capture_failure_logs(key, out_dir, base)
         raise RuntimeError(
             f"scp /etc/nosi-metadata.json failed (exit {res.returncode}): "
             f"{(res.stderr or res.stdout).strip()}"

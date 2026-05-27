@@ -39,6 +39,23 @@ fi
 
 nosi_require_root
 
+# ---- JetBrainsMono Nerd Font ----------------------------------------
+# waybar / foot / fuzzel / mako all use the Nerd Font glyphs (battery
+# / audio / wifi icons). Not packaged on Fedora 44 mainline (and the
+# Debian / Ubuntu packages lag the upstream release), so install the
+# upstream Nerd Fonts release tarball directly. Idempotent: skipped if
+# the destination directory already exists.
+NERD_FONT_DEST="/usr/local/share/fonts/JetBrainsMonoNerdFont"
+if [ ! -d "$NERD_FONT_DEST" ]; then
+    nerd_tmp="$(mktemp -d)"
+    nerd_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+    curl -fsSL "$nerd_url" -o "$nerd_tmp/JetBrainsMono.zip"
+    install -d -m 0755 "$NERD_FONT_DEST"
+    unzip -q "$nerd_tmp/JetBrainsMono.zip" -d "$NERD_FONT_DEST"
+    rm -rf "$nerd_tmp"
+    fc-cache -f
+fi
+
 # ---- greetd ---------------------------------------------------------
 # Launch tuigreet on vt1, default to Hyprland. --remember +
 # --remember-user-session save the chosen user + session command to
