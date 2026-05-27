@@ -1,4 +1,4 @@
-VARIANT ?= debian-13-sysdev
+VARIANT ?= debian-13-headless
 
 .DEFAULT_GOAL := help
 
@@ -21,18 +21,18 @@ help:
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
 	@echo "Variants (<distro>-<version>-<flavor>):"
-	@echo "  debian-13-sysdev    Debian 13 trixie"
-	@echo "  ubuntu-2404-sysdev  Ubuntu 24.04 noble"
+	@echo "  debian-13-headless    Debian 13 trixie"
+	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble"
 	@echo "                      (HW vendor stacks; cudadev/rocmdev workflows pin here)"
 	@echo "  ubuntu-2404-aidev   Ubuntu 24.04 noble + agentic CLIs"
 	@echo "                      (HW vendor stacks; cudadev/rocmdev workflows pin here)"
-	@echo "  ubuntu-2604-sysdev  Ubuntu 26.04 resolute"
+	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute"
 	@echo "  ubuntu-2604-aidev   Ubuntu 26.04 resolute + agentic CLIs"
 	@echo "                      (additionally publishes a WSL .tar.gz)"
-	@echo "  fedora-44-sysdev    Fedora 44"
+	@echo "  fedora-44-headless    Fedora 44"
 	@echo "  fedora-44-desktop   Fedora 44 + Hyprland desktop (personal laptop)"
-	@echo "  freebsd-14-sysdev   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
-	@echo "  freebsd-15-sysdev   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
+	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
+	@echo "  freebsd-15-headless   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
@@ -51,15 +51,15 @@ build:
 	cd cijoe && cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
 
 all:
-	$(MAKE) build VARIANT=debian-13-sysdev
-	$(MAKE) build VARIANT=ubuntu-2404-sysdev
+	$(MAKE) build VARIANT=debian-13-headless
+	$(MAKE) build VARIANT=ubuntu-2404-headless
 	$(MAKE) build VARIANT=ubuntu-2404-aidev
-	$(MAKE) build VARIANT=ubuntu-2604-sysdev
+	$(MAKE) build VARIANT=ubuntu-2604-headless
 	$(MAKE) build VARIANT=ubuntu-2604-aidev
-	$(MAKE) build VARIANT=fedora-44-sysdev
+	$(MAKE) build VARIANT=fedora-44-headless
 	$(MAKE) build VARIANT=fedora-44-desktop
-	$(MAKE) build VARIANT=freebsd-14-sysdev
-	$(MAKE) build VARIANT=freebsd-15-sysdev
+	$(MAKE) build VARIANT=freebsd-14-headless
+	$(MAKE) build VARIANT=freebsd-15-headless
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive

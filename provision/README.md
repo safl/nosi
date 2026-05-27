@@ -43,14 +43,14 @@ shows exactly which steps need attention.
 
 ## Variants
 
-| variant               | base                 | adds over sysdev       |
+| variant               | base                 | adds over headless       |
 |-----------------------|----------------------|------------------------|
-| `debian-13-sysdev`    | Debian 13 trixie     | --                     |
-| `ubuntu-2604-sysdev`  | Ubuntu 26.04 resolute| --                     |
+| `debian-13-headless`    | Debian 13 trixie     | --                     |
+| `ubuntu-2604-headless`  | Ubuntu 26.04 resolute| --                     |
 | `ubuntu-2604-aidev`   | Ubuntu 26.04 resolute| Node, agentic CLIs, JetBrainsMono Nerd Font, WSL config |
-| `fedora-44-sysdev`    | Fedora 44            | --                     |
-| `freebsd-14-sysdev`   | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
-| `freebsd-15-sysdev`   | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| `fedora-44-headless`    | Fedora 44            | --                     |
+| `freebsd-14-headless`   | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| `freebsd-15-headless`   | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
 
 ## Use from a flashed nosi image
 
@@ -60,7 +60,7 @@ picks up upstream-latest of every binary in step 20 + Python tools in
 step 22, which is how operators stay current without re-flashing:
 
 ```
-sudo /opt/nosi/provision/apply.sh debian-13-sysdev
+sudo /opt/nosi/provision/apply.sh debian-13-headless
 ```
 
 ## Use on a fresh Hetzner VM (or any clean cloud VM)

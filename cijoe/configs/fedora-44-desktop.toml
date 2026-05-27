@@ -2,7 +2,7 @@
 #
 # Personal laptop / workstation use. Layers the desktop stack
 # (Hyprland + greetd/tuigreet + foot/waybar/fuzzel/mako + Firefox +
-# audio/bluetooth/power-management) on top of the sysdev baseline.
+# audio/bluetooth/power-management) on top of the headless baseline.
 # Fedora-only for the recent kernel + Wayland-first userland + PipeWire
 # defaults.
 #

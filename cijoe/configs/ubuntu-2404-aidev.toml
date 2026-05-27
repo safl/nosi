@@ -2,7 +2,7 @@
 #
 # The LTS that NVIDIA CUDA / NOKM / DOCA, AMD ROCm / amdgpu-install, and
 # Mellanox MLNX_OFED qualify against. cijoe/workflows/setup_cudadev.yaml
-# and setup_rocmdev.yaml pin to this base. Pairs the sysdev superset
+# and setup_rocmdev.yaml pin to this base. Pairs the headless superset
 # with Node + agentic AI CLIs; flashable .img.gz only -- the WSL2 rootfs
 # derivative comes from ubuntu-2604-aidev (the recency-leaning aidev
 # base) instead, so there's exactly one WSL tarball variant to maintain.

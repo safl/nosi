@@ -87,7 +87,7 @@ packages:
   - ninja-build
   - parallel             # GNU parallel
   - ripgrep
-  - ShellCheck           # bash linter; sysdev's substitute for the
+  - ShellCheck           # bash linter; headless's substitute for the
                          # Node-based bash-language-server (aidev only)
   - stress-ng            # CPU / memory stress for thermals + bench
   - sysstat              # iostat / sar / mpstat
@@ -165,9 +165,9 @@ runcmd:
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
   # cross-distro where it makes sense. Same apply.sh runs on a vanilla
-  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh fedora-44-sysdev`) to
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh fedora-44-headless`) to
   # reach this image's parity.
-  - /opt/nosi/provision/apply.sh fedora-44-sysdev
+  - /opt/nosi/provision/apply.sh fedora-44-headless
 
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
@@ -199,7 +199,7 @@ runcmd:
   - dnf clean all
   - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi fedora-44-sysdev baked in $UPTIME seconds; powering off"
+final_message: "nosi fedora-44-headless baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff

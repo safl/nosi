@@ -4,13 +4,13 @@
 # Run every provision step for <variant> in order. The variant is
 # `<distro>-<version>-<flavor>`, e.g.:
 #
-#   debian-13-sysdev    sysdev on Debian 13 (apt)
-#   ubuntu-2604-sysdev  sysdev on Ubuntu 26.04 (apt)
-#   ubuntu-2604-aidev   aidev on Ubuntu 26.04 (apt; sysdev superset + AI CLIs)
-#   fedora-44-sysdev    sysdev on Fedora 44 (dnf)
+#   debian-13-headless    headless on Debian 13 (apt)
+#   ubuntu-2604-headless  headless on Ubuntu 26.04 (apt)
+#   ubuntu-2604-aidev   aidev on Ubuntu 26.04 (apt; headless superset + AI CLIs)
+#   fedora-44-headless    headless on Fedora 44 (dnf)
 #   fedora-44-desktop   desktop on Fedora 44 (dnf; Hyprland tiling stack)
 #
-# Flavor is parsed from the suffix (-sysdev / -aidev / -desktop); the
+# Flavor is parsed from the suffix (-headless / -aidev / -desktop); the
 # rest is informational (lib/common.sh detects the live distro/pkgmgr
 # from /etc/os-release, so version-in-name doesn't gate any step).
 #
@@ -44,22 +44,22 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # died. Nothing seeps through.
 
 VARIANT="${1:-}"
-[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-sysdev | ubuntu-2604-aidev | fedora-44-desktop)"
+[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-headless | ubuntu-2604-aidev | fedora-44-desktop)"
 
-# Flavor is the trailing -sysdev / -aidev / -desktop segment. Distro +
+# Flavor is the trailing -headless / -aidev / -desktop segment. Distro +
 # version are carried in the variant name but not enforced here:
 # lib/common.sh derives the live NOSI_DISTRO / NOSI_PKGMGR from
-# /etc/os-release, so an operator-side `apply.sh ubuntu-2604-sysdev` on
+# /etc/os-release, so an operator-side `apply.sh ubuntu-2604-headless` on
 # a different-version Ubuntu box still works -- the variant string is
 # identity / catalog metadata, not a runtime selector.
 case "$VARIANT" in
-*-sysdev)  export NOSI_FLAVOR=sysdev  ;;
-*-aidev)   export NOSI_FLAVOR=aidev   ;;
-*-desktop) export NOSI_FLAVOR=desktop ;;
-*)         nosi_die "variant must end in -sysdev, -aidev, or -desktop: $VARIANT" ;;
+*-headless)  export NOSI_SHAPE=headless  ;;
+*-aidev)   export NOSI_SHAPE=aidev   ;;
+*-desktop) export NOSI_SHAPE=desktop ;;
+*)         nosi_die "variant must end in -headless, -aidev, or -desktop: $VARIANT" ;;
 esac
 
-# Full variant string (e.g. "ubuntu-2604-sysdev") for identity-aware steps.
+# Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
 export NOSI_VARIANT="$VARIANT"
 
 # Steps the flavor wants, in order. As more steps are extracted from
@@ -102,7 +102,7 @@ STEPS=(
     99-motd
 )
 
-nosi_info "apply start: variant=$NOSI_VARIANT flavor=$NOSI_FLAVOR distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
+nosi_info "apply start: variant=$NOSI_VARIANT shape=$NOSI_SHAPE distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
 
 for s in "${STEPS[@]}"; do
     script="$HERE/steps/${s}.sh"

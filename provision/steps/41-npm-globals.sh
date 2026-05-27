@@ -15,7 +15,7 @@
 # /usr/local/bin. npm's global prefix on Ubuntu is /usr by default; we
 # repoint to /usr/local so apt-managed /usr files stay untouched and the
 # CLIs survive an Ubuntu npm purge. The bash + yaml LSPs ship here (not
-# on sysdev) because they require Node, which sysdev intentionally
+# on headless) because they require Node, which headless intentionally
 # doesn't carry.
 #
 # Idempotency: npm install -g upgrades to the registry-latest each run,
@@ -24,10 +24,10 @@
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
-nosi_info "step 41-npm-globals (flavor=${NOSI_FLAVOR:-?})"
+nosi_info "step 41-npm-globals (shape=${NOSI_SHAPE:-?})"
 
-if [ "${NOSI_FLAVOR:-}" != "aidev" ]; then
-    nosi_info "non-aidev flavor; skipping"
+if [ "${NOSI_SHAPE:-}" != "aidev" ]; then
+    nosi_info "non-aidev shape; skipping"
     exit 0
 fi
 

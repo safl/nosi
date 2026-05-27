@@ -24,10 +24,10 @@ required.
 
 ## Scope
 
-Two flavors today: **`sysdev`** (C / C++ / Python / Rust systems work on bare
-metal, headless-server-friendly) and **`aidev`** (`sysdev` superset with
+Two flavors today: **`headless`** (C / C++ / Python / Rust systems work on bare
+metal, headless-server-friendly) and **`aidev`** (`headless` superset with
 Node and a curated set of agentic-AI CLIs, additionally published as a
-WSL2 rootfs `.tar.gz`). A **`freebsd-<N>-sysdev`** scaffold landed in
+WSL2 rootfs `.tar.gz`). A **`freebsd-<N>-headless`** scaffold landed in
 2026-05 (Phase 1: bake + identity + baseline packages + kernel source,
 no provision chain yet).
 
@@ -41,7 +41,7 @@ disk rather than hand-curated prose that can drift.
 ## Quick start
 
     make deps                              # install cijoe via pipx
-    make build VARIANT=debian-13-sysdev    # build one variant
+    make build VARIANT=debian-13-headless    # build one variant
     make all                               # build every variant
 
 Local builds need `qemu-system-x86_64` + KVM accessible. The

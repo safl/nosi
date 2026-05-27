@@ -1,5 +1,5 @@
 #cloud-config
-# nosi aidev : Ubuntu 26.04 LTS (resolute). Same baseline as sysdev-ubuntu-2604
+# nosi aidev : Ubuntu 26.04 LTS (resolute). Same baseline as headless-ubuntu-2604
 # plus Node.js and a set of agentic-AI command-line tools (claude-code,
 # codex, gemini-cli, opencode, pi). Distro RDMA user space is included so
 # ibverbs-capable apps work out of the box on any vendor. No GPU vendor
@@ -39,7 +39,7 @@ bootcmd:
 # later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
 # salt is fixed so identical bakes produce identical /etc/shadow.
 # `- default` is intentionally absent (bootcmd above removes the base
-# `ubuntu` user). render+video on top of sysdev's sudo+kvm so odus can
+# `ubuntu` user). render+video on top of headless's sudo+kvm so odus can
 # drive a GPU /dev/dri device without sudo once the operator installs a
 # vendor stack. Root is locked in runcmd below. The default password
 # stays active out of the box so CI jobs can flash and ssh straight in;
@@ -74,12 +74,12 @@ package_update: true
 package_upgrade: true
 
 packages:
-  # --- baseline sysdev set (mirrors cloudinit-sysdev-ubuntu-2604.user) ---------
+  # --- baseline headless set (mirrors cloudinit-headless-ubuntu-2604.user) ---------
   - ca-certificates
   - openssh-server
   - sudo
   - systemd-resolved
-  # NTP via systemd's own daemon. See cloudinit-sysdev-debian-13.user for rationale.
+  # NTP via systemd's own daemon. See cloudinit-headless-debian-13.user for rationale.
   - systemd-timesyncd
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
@@ -147,7 +147,7 @@ packages:
   - smartmontools
   - usbutils
   - linux-firmware
-  # CPU microcode (early-load via initramfs). See cloudinit-sysdev-ubuntu-2604.user for
+  # CPU microcode (early-load via initramfs). See cloudinit-headless-ubuntu-2604.user for
   # rationale; same multiverse-+-main + N97 / Ryzen 5 motivation.
   - intel-microcode
   - amd64-microcode
@@ -217,7 +217,7 @@ runcmd:
     apt-get -y autoremove --purge
     apt-get -y autoclean
 
-  # Clock floor: see cloudinit-sysdev-debian-13.user for rationale. Touch /usr/lib/clock-epoch
+  # Clock floor: see cloudinit-headless-debian-13.user for rationale. Touch /usr/lib/clock-epoch
   # last so PID-1 systemd uses the bake mtime as the boot-time clock floor.
   # Inert under WSL (Windows host sets the clock).
   - touch /usr/lib/clock-epoch

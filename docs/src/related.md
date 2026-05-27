@@ -17,12 +17,12 @@ In a lab where nosi and bty are used together, the workflow is:
 
 ## xnvme -- user space NVMe
 
-The `sysdev` flavor leans toward xNVMe-adjacent work: NVMe-CLI is
+The `headless` flavor leans toward xNVMe-adjacent work: NVMe-CLI is
 pre-installed, vfio-pci / uio_pci_generic / IOMMU are wired up so a
 freshly-flashed box can immediately do user space NVMe development with
 DPDK/SPDK and xNVMe/uPCIe.
 
-The Python helpers shipped in `sysdev` --
+The Python helpers shipped in `headless` --
 [`devbind`](https://pypi.org/project/devbind/),
 [`hugepages`](https://pypi.org/project/hugepages/), and
 [`iommu`](https://pypi.org/project/iommu/) -- are the canonical

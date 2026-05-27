@@ -13,7 +13,7 @@ on top of the base cloud image, named for the work it's fit for.
 
 Two flavors ship today:
 
-- **`sysdev`** : C / C++ / Python / Rust systems work. Compilers,
+- **`headless`** : C / C++ / Python / Rust systems work. Compilers,
   build tooling (meson / ninja / cmake / cargo), debuggers (gdb +
   gdb-dashboard, lldb), perf / strace / valgrind, user-space PCI
   prereqs (vfio plumbing, hugepages, IOMMU cmdline), containers
@@ -22,7 +22,7 @@ Two flavors ship today:
   the helix / zellij / lazygit / yazi daily-driver layer, and a
   pipx-installed Python CLI set (uv, ruff, pyright, devbind). No Node
   runtime ([by design](https://github.com/safl/nosi/blob/main/provision/steps/41-npm-globals.sh) -- Node-based tools live in aidev).
-- **`aidev`** : `sysdev` superset plus Node and a curated set of
+- **`aidev`** : `headless` superset plus Node and a curated set of
   agentic-AI command-line tools (claude-code, codex, gemini-cli,
   opencode), JetBrainsMono Nerd Font, WSL configuration. Variants
   with this flavor additionally publish a WSL2 rootfs tarball
@@ -45,7 +45,7 @@ to GHCR, so it reflects the bytes actually on disk rather than
 hand-curated prose that can drift.
 
 Variant names follow `<distro>-<version>-<flavor>`, e.g.
-`debian-13-sysdev`, `ubuntu-2604-aidev`, `freebsd-15-sysdev`. The
+`debian-13-headless`, `ubuntu-2604-aidev`, `freebsd-15-headless`. The
 version-in-the-name is what lets multiple kernel / user-land releases
 of the same distro coexist when their use cases call for it (see
 "Why these distros" below).
@@ -86,7 +86,7 @@ user-data file under `nosi-media/auxiliary/`. A
    detected ext4 rootfs partition, chroot in to apt-purge the
    kernel/grub/firmware/cloud-init/netplan/NM plumbing, `tar` the
    stripped rootfs out (`--xattrs --acls --numeric-owner`), and gzip +
-   sha256-seal. No-op for sysdev variants.
+   sha256-seal. No-op for headless variants.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 

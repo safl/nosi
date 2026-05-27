@@ -1,7 +1,7 @@
 # nosi aidev : Ubuntu 26.04 LTS (resolute) + agentic CLIs
 #
 # Single bake feeds two derived artifacts:
-#   * .img.gz   - flashable x86_64 (sysdev superset + AI tooling)
+#   * .img.gz   - flashable x86_64 (headless superset + AI tooling)
 #   * .tar.gz   - WSL2 rootfs (kernel/grub/firmware/cloud-init stripped
 #                 post-bake)
 #

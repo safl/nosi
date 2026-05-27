@@ -16,7 +16,7 @@ doc: |
   7. ``wsl_rootfs_publish`` (aidev only -- gated on a [publish_wsl] block
      in the variant's config) derives a WSL2 rootfs tarball from the same
      bake by stripping kernel/grub/firmware/cloud-init and tar-ing the
-     result. No-op for sysdev variants.
+     result. No-op for headless variants.
   8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write overlay,
      SSHes in as odus via a per-run key seeded by cloud-init, and asserts
      that the regressions caught by hand in nosi 2026-05 stay caught:

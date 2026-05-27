@@ -69,7 +69,7 @@ osr = read_kv("/etc/os-release")
 meta = {
     "nosi": {
         "version": nosi_release.get("NOSI_VERSION"),
-        "flavor": nosi_release.get("NOSI_FLAVOR"),
+        "shape": nosi_release.get("NOSI_SHAPE"),
         "variant": nosi_release.get("NOSI_VARIANT"),
         "built": nosi_release.get("NOSI_BUILT")
                  or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -124,7 +124,7 @@ meta = {
 }
 
 # aidev-only additions: step 41 npm globals
-if nosi_release.get("NOSI_FLAVOR") == "aidev":
+if nosi_release.get("NOSI_SHAPE") == "aidev":
     meta["tools"]["npm_globals"] = {
         "claude": ver("claude", "--version"),
         "codex": ver("codex", "--version"),

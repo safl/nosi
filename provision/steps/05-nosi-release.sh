@@ -7,8 +7,8 @@
 #
 #     $ cat /etc/nosi-release
 #     NOSI_VERSION=2026.05.26-4afcc92
-#     NOSI_FLAVOR=sysdev
-#     NOSI_VARIANT=ubuntu-2604-sysdev
+#     NOSI_SHAPE=headless
+#     NOSI_VARIANT=ubuntu-2604-headless
 #     NOSI_DISTRO=ubuntu
 #     NOSI_DISTRO_VERSION=26.04
 #     NOSI_BUILT=2026-05-26T14:08:33Z
@@ -16,7 +16,7 @@
 # The motd renderer (step 99, runs last) picks up VERSION + VARIANT from
 # this file so the login banner header reads, e.g.,
 #
-#     nosi sysdev (ubuntu-2604-sysdev, 2026.05.26-c2cba6b)   Ubuntu 26.04 LTS ...
+#     nosi headless (ubuntu-2604-headless, 2026.05.26-c2cba6b)   Ubuntu 26.04 LTS ...
 #
 # Version source (preference order):
 #   1. $NOSI_VERSION env var (operator override on a Hetzner-VM re-run)
@@ -53,13 +53,13 @@ else
 fi
 [ -n "$version" ] || version="unknown"
 
-flavor="${NOSI_FLAVOR:-sysdev}"
+shape="${NOSI_SHAPE:-headless}"
 variant="${NOSI_VARIANT:-unknown}"
 built="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 content="# /etc/nosi-release - written by nosi/provision/steps/05-nosi-release.sh
 NOSI_VERSION=${version}
-NOSI_FLAVOR=${flavor}
+NOSI_SHAPE=${shape}
 NOSI_VARIANT=${variant}
 NOSI_DISTRO=${NOSI_DISTRO}
 NOSI_DISTRO_VERSION=${NOSI_DISTRO_VERSION}
@@ -72,7 +72,7 @@ NOSI_BUILT=${built}
 # other field actually changed.
 stable="# /etc/nosi-release - written by nosi/provision/steps/05-nosi-release.sh
 NOSI_VERSION=${version}
-NOSI_FLAVOR=${flavor}
+NOSI_SHAPE=${shape}
 NOSI_VARIANT=${variant}
 NOSI_DISTRO=${NOSI_DISTRO}
 NOSI_DISTRO_VERSION=${NOSI_DISTRO_VERSION}

@@ -1,24 +1,29 @@
 #cloud-config
-# nosi base : Ubuntu 26.04 LTS (resolute). Default credentials: operator
-# account `odus` with password `odus.321`, root locked, SSH password auth on.
-# Per-instance SSH identity: host keys stripped at end of cloud-init,
-# regenerated on first boot.
+# nosi base : Debian 13 (trixie). Default credentials: operator account
+# `odus` with password `odus.321`, root locked, SSH password auth on (operators
+# rotate the password before exposing the appliance). Per-instance SSH
+# identity: host keys are stripped at the end of cloud-init; sshd's stock
+# preset regenerates them on first boot of the flashed instance.
+#
+# bty can still override identity at flash time by writing a fresh seed to
+# /var/lib/cloud/seed/nocloud/; cloud-init runs again on first boot because
+# we wipe its instance state below.
 
-hostname: nosi-ubuntu
-fqdn: nosi-ubuntu.local
+hostname: nosi-debian
+fqdn: nosi-debian.local
 manage_etc_hosts: true
 
 timezone: UTC
 
 ssh_pwauth: true
 
-# Strip the base cloud image's default user (`ubuntu`) before cloud-init's
+# Strip the base cloud image's default user (`debian`) before cloud-init's
 # users module runs. Two reasons: avoid an unused account in /etc/passwd,
 # and free UID 1000 so odus can claim it (the WSL/Linux convention for
 # the first interactive user; lots of tooling assumes UID 1000 = primary
 # operator).
 bootcmd:
-  - userdel -r ubuntu 2>/dev/null || true
+  - userdel -r debian 2>/dev/null || true
 
 # Operator account: `odus` with password `odus.321`, passwordless sudo,
 # pinned to UID 1000. Created here (cloud-init users-module) rather than
@@ -52,21 +57,19 @@ growpart:
 
 resize_rootfs: true
 
-# Ubuntu cloud images already include universe in their default sources,
-# so btop / podman-docker resolve without extra config. (helix + zellij
-# are pulled from upstream tarballs in runcmd; the universe packages
-# either lag the upstream releases or, in 26.04, vanished entirely.)
-
-# Drop Install-Recommends to keep the image lean -- our explicit packages:
-# list already names everything we want, and Recommends were inflating
-# the gz by GBs on debian/ubuntu compared to fedora's weak-deps default.
+# cloud-init's apt module pulls Install-Recommends by default, which
+# inflates the image by GBs on a dev-flavor package list this size.
+# Drop Recommends + Suggests; the explicit packages: list already names
+# everything we want.
 apt:
   conf: |
     APT::Install-Recommends "false";
     APT::Install-Suggests "false";
 
-# See debian variant: upgrade the base snapshot before installing our
-# explicit packages, so the baked image picks up upstream security fixes.
+# Refresh and upgrade the base image's packages before installing the
+# `packages:` list below: a cloud base is a point-in-time snapshot, and
+# without an upgrade the baked nosi image inherits whatever CVEs the
+# upstream snapshot was carrying. Adds a couple of minutes to bake time.
 package_update: true
 package_upgrade: true
 
@@ -75,8 +78,17 @@ packages:
   - openssh-server
   - sudo
   - systemd-resolved
-  # NTP via systemd's own daemon. See debian variant for rationale.
+  # NTP via systemd's own daemon. Cloud-image baseline pulls it via
+  # systemd Recommends today; name it explicitly so we survive any
+  # future upstream dependency tweak. Clock-correctness is silently
+  # load-bearing -- without it, apt-get update rejects InRelease
+  # signatures ("Not live until <future ts>"), oras pull rejects TLS
+  # NotBefore on rotated certs, etc.
   - systemd-timesyncd
+  # user daily-driver baseline (helix + zellij + lazygit + yazi installed
+  # from upstream tarballs in runcmd; distro packages skew old and Ubuntu
+  # 26.04 dropped helix from universe at one point). taplo + marksman
+  # LSPs are installed from upstream in runcmd (single native binaries).
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
@@ -91,7 +103,7 @@ packages:
   - ninja-build
   - parallel             # GNU parallel
   - ripgrep
-  - shellcheck           # bash linter; sysdev's substitute for the
+  - shellcheck           # bash linter; headless's substitute for the
                          # Node-based bash-language-server (aidev only)
   - stress-ng            # CPU / memory stress for thermals + bench
   - sysstat              # iostat / sar / mpstat
@@ -100,10 +112,11 @@ packages:
   - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
                          # without it dotnet aborts with "Couldn't find a valid
                          # ICU package" and step 20 fails fast on marksman
-  - linux-headers-generic # DKMS needs the running kernel's headers (r8125,
-                         # and any cudadev/rocmdev workflow run on top)
-  - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
-  - linux-tools-common   # shared man pages + helpers for the -generic tool set
+  - linux-headers-amd64   # DKMS / out-of-tree modules; Debian's meta
+                          # (Ubuntu's analog is linux-headers-generic)
+  - linux-perf            # Debian splits perf out of linux-tools-*; this
+                          # is the equivalent metapackage
+  # network & debug
   - curl
   - dnsutils
   - jq
@@ -114,30 +127,35 @@ packages:
   - strace
   - tcpdump
   - wget
+  # build & dev (compilers, LSPs, linters, debugger / memory tools)
   - build-essential
-  - ccache               # transparent compiler cache; wraps gcc/clang
+  - ccache              # transparent compiler cache; wraps gcc/clang
   - clang
-  - clang-tools          # clang-format, clang-tidy
-  - clangd               # C/C++ LSP
-  - cmake                # ubiquitous C/C++ build orchestrator
-  - cppcheck             # standalone C/C++ static analyzer
+  - clang-tools         # clang-format, clang-tidy
+  - clangd              # C/C++ LSP
+  - cmake               # ubiquitous C/C++ build orchestrator
+  - cppcheck            # standalone C/C++ static analyzer
   - gdb
-  - lldb                 # helix DAP debugger backend (lldb-dap binary)
+  - lldb                # helix DAP debugger backend (lldb-dap binary)
   - make
   - pipx
   - pkg-config
   - python3
   - valgrind
-  # See debian variant: name podman's Recommends explicitly (crun /
-  # fuse-overlayfs / dbus-user-session) since Recommends are off.
+  # containers. crun + fuse-overlayfs + dbus-user-session are podman's
+  # Recommends on Debian/Ubuntu (Fedora has them as hard deps); we drop
+  # Recommends globally for image size, so name them explicitly here.
+  # Without crun, podman falls back to runc which mismanages cgroup v2;
+  # without dbus-user-session, rootless cgroup delegation fails.
   - buildah
   - crun
   - dbus-user-session
   - fuse-overlayfs
-  - passt
+  - passt                # /usr/bin/pasta for podman rootless networking
   - podman
   - podman-docker
   - skopeo
+  # hardware & storage
   - dmidecode
   - hdparm
   - lshw
@@ -145,17 +163,19 @@ packages:
   - pciutils
   - smartmontools
   - usbutils
-  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
-  # regulatory.db, etc. The kernel package used to pull linux-firmware via
-  # Recommends; we drop Recommends so name it explicitly.
-  - linux-firmware
-  # CPU microcode (early-load via initramfs). intel-microcode is in
-  # multiverse, amd64-microcode in main; both are default-enabled in
-  # Ubuntu server cloud images. Same rationale as the debian variant:
-  # silently load-bearing errata fixes for consumer Intel SKUs (N97 etc.)
-  # and recent AMD parts (Ryzen 5 in the GMKtec NucBox G10).
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC (Alder
+  # Lake-P et al.), iwlwifi, regulatory.db, etc. Debian 13 cloud images
+  # already enable the non-free-firmware component by default.
+  - firmware-misc-nonfree
+  # CPU microcode (early-load via initramfs). intel-microcode and
+  # amd64-microcode both live in non-free-firmware in Debian 13;
+  # post-install hooks regenerate initramfs so the microcode prepend
+  # cpio is in place for the next boot. Errata fixes here are silently
+  # load-bearing for stability on consumer Intel SKUs (e.g. Alder Lake-N
+  # in the GMKtec NucBox G5) and recent AMD parts (Zen3+ in the G10).
   - intel-microcode
   - amd64-microcode
+  # local virtualisation
   - ovmf
   - qemu-system-x86
   - qemu-utils
@@ -176,23 +196,35 @@ runcmd:
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
   # cross-distro where it makes sense. Same apply.sh runs on a vanilla
-  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh ubuntu-2604-sysdev`) to
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh debian-13-headless`) to
   # reach this image's parity.
-  - /opt/nosi/provision/apply.sh ubuntu-2604-sysdev
+  - /opt/nosi/provision/apply.sh debian-13-headless
 
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
   # so the only login channel is odus.
   - passwd -l root
 
+  # SSH host-key hygiene: openssh-server's postinst generated host keys
+  # during apt install; remove them now so every flashed instance gets
+  # unique keys via the stock systemd preset on first boot.
   - rm -f /etc/ssh/ssh_host_*
+
+  # machine-id: regenerated by systemd-machine-id-setup on first boot when empty.
   - ': > /etc/machine-id'
   - rm -f /var/lib/dbus/machine-id
+
+  # cloud-init state cache: clear it so cloud-init runs fresh on first boot
+  # of the flashed instance (against whatever seed bty injects, or the
+  # built-in NoCloud absence which is fine; defaults from this run stay).
   - cloud-init clean --logs --seed || true
 
-  # Deep cleanup (see debian variant for rationale).
+  # Deep cleanup: trim non-English locales, systemd journal, build logs,
+  # stray Python bytecode, and drop apt orphans + uninstallable archives
+  # before the final cache wipe below.
   - |
     set -eu
+    # Drop translations for everything except the English / C locales.
     if [ -d /usr/share/locale ]; then
         find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
             ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'C.*' \
@@ -205,15 +237,21 @@ runcmd:
     apt-get -y autoremove --purge
     apt-get -y autoclean
 
-  # Clock floor: see debian variant for rationale. Touch /usr/lib/clock-epoch
-  # last so its mtime is the bake time; PID-1 systemd uses it as the
-  # minimum boot-time clock, defeating dead-CMOS TLS-cert breakage.
+  # Clock floor: systemd (PID 1) reads /usr/lib/clock-epoch's mtime at boot
+  # and uses it as the minimum acceptable system time. A flashed box with a
+  # dead CMOS battery (or RTC freshly reset to ~1970) would otherwise come
+  # up at the epoch and reject every TLS handshake ("certificate not yet
+  # valid"), breaking apt-get update / curl / cloud-init's own seed fetch.
+  # Touch it last so the mtime is as close to bake time as possible;
+  # systemd-timesyncd (already running from the cloud base) refines the
+  # clock against NTP once the network is up.
   - touch /usr/lib/clock-epoch
 
+  # Trim caches for a smaller image.
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi ubuntu-2604-sysdev baked in $UPTIME seconds; powering off"
+final_message: "nosi debian-13-headless baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff

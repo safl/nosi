@@ -109,7 +109,7 @@ runcmd:
   - rm -f /etc/ssh/ssh_host_*
   - rm -f /etc/hostid
 
-  # Kernel + world source for sysdev work: buildkernel, out-of-tree
+  # Kernel + world source for headless work: buildkernel, out-of-tree
   # modules, sys/ headers. Pattern borrowed from xNVMe's FreeBSD bootimg
   # workflow (github.com/xnvme/xnvme/blob/main/cijoe/workflows/bootimg-
   # freebsd-14-amd64.yaml). src.txz is the canonical FreeBSD source
@@ -120,7 +120,7 @@ runcmd:
   - tar -C / -xpf /tmp/src.txz
   - rm -f /tmp/src.txz
 
-  # Strip /usr/lib/debug to recover ~200 MB. nosi sysdev operators
+  # Strip /usr/lib/debug to recover ~200 MB. nosi headless operators
   # build their own kernels and don't generally need the prebuilt
   # debug symbols for the cloud image's kernel.
   - rm -rf /usr/lib/debug
@@ -141,15 +141,15 @@ runcmd:
     set -e
     /usr/local/bin/jq -n \
         --arg version "__NOSI_VERSION__" \
-        --arg flavor sysdev \
-        --arg variant freebsd-14-sysdev \
+        --arg shape headless \
+        --arg variant freebsd-14-headless \
         --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg pretty "FreeBSD 14.4-RELEASE" \
         --arg krel "$(uname -r)" \
         --arg kver "$(uname -v)" \
         --arg arch "$(uname -m)" \
         '{
-            nosi: {version: $version, flavor: $flavor, variant: $variant, built: $built},
+            nosi: {version: $version, shape: $shape, variant: $variant, built: $built},
             distro: {id: "freebsd", version_id: "14.4", pretty_name: $pretty},
             kernel: {release: $krel, version: $kver},
             architecture: $arch,

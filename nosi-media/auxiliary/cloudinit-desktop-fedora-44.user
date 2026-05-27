@@ -1,6 +1,6 @@
 #cloud-config
 # nosi desktop : Fedora 44 + Hyprland (Wayland) for personal laptop /
-# workstation use. Same sysdev baseline as fedora-44-sysdev plus a
+# workstation use. Same headless baseline as fedora-44-headless plus a
 # desktop layer: Hyprland tiling compositor, tuigreet greeter, Firefox,
 # audio (PipeWire + WirePlumber), bluetooth, brightness, power
 # management. Opinionated default configs live in
@@ -17,7 +17,7 @@ timezone: UTC
 ssh_pwauth: true
 
 # Operator account: `odus` with password `odus.321`, passwordless sudo,
-# pinned to UID 1000. Same construction as fedora-44-sysdev plus
+# pinned to UID 1000. Same construction as fedora-44-headless plus
 # desktop-relevant groups: `video` for direct render access (Wayland
 # compositors talk to /dev/dri/* via the seat manager but
 # membership matches the conventional laptop-user setup), `input` for
@@ -40,7 +40,7 @@ growpart:
 
 resize_rootfs: true
 
-# Same dnf weak-deps + base-user-strip as fedora-44-sysdev.
+# Same dnf weak-deps + base-user-strip as fedora-44-headless.
 bootcmd:
   - |
     if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
@@ -52,7 +52,7 @@ package_update: true
 package_upgrade: true
 
 packages:
-  # --- baseline sysdev set (mirrors cloudinit-sysdev-fedora-44.user) ---
+  # --- baseline headless set (mirrors cloudinit-headless-fedora-44.user) ---
   - ca-certificates
   - openssh-server
   - sudo
@@ -185,7 +185,7 @@ write_files:
 
 runcmd:
 
-  # nosi provision: sysdev baseline + step 50-desktop-stack which drops
+  # nosi provision: headless baseline + step 50-desktop-stack which drops
   # opinionated default configs for Hyprland / waybar / foot / fuzzel /
   # mako under /etc/skel/.config/ + /home/odus/.config/, wires greetd as
   # the display manager pointing at tuigreet + Hyprland, and sets the

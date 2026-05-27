@@ -35,15 +35,15 @@ log = logging.getLogger(__name__)
 # Variants nosi publishes. Keep in sync with .github/workflows/build.yml's
 # matrix.variant list and the cijoe/configs/ directory.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
-    ("debian-13-sysdev",    "ghcr.io/safl/nosi/debian-13-sysdev:latest"),
-    ("ubuntu-2404-sysdev",  "ghcr.io/safl/nosi/ubuntu-2404-sysdev:latest"),
+    ("debian-13-headless",    "ghcr.io/safl/nosi/debian-13-headless:latest"),
+    ("ubuntu-2404-headless",  "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
     ("ubuntu-2404-aidev",   "ghcr.io/safl/nosi/ubuntu-2404-aidev:latest"),
-    ("ubuntu-2604-sysdev",  "ghcr.io/safl/nosi/ubuntu-2604-sysdev:latest"),
+    ("ubuntu-2604-headless",  "ghcr.io/safl/nosi/ubuntu-2604-headless:latest"),
     ("ubuntu-2604-aidev",   "ghcr.io/safl/nosi/ubuntu-2604-aidev:latest"),
-    ("fedora-44-sysdev",    "ghcr.io/safl/nosi/fedora-44-sysdev:latest"),
+    ("fedora-44-headless",    "ghcr.io/safl/nosi/fedora-44-headless:latest"),
     ("fedora-44-desktop",   "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
-    ("freebsd-14-sysdev",   "ghcr.io/safl/nosi/freebsd-14-sysdev:latest"),
-    ("freebsd-15-sysdev",   "ghcr.io/safl/nosi/freebsd-15-sysdev:latest"),
+    ("freebsd-14-headless",   "ghcr.io/safl/nosi/freebsd-14-headless:latest"),
+    ("freebsd-15-headless",   "ghcr.io/safl/nosi/freebsd-15-headless:latest"),
 )
 
 
@@ -143,7 +143,7 @@ def _render(snapshots: Iterable[VariantSnapshot]) -> str:
         "",
         "## Summary",
         "",
-        "| Variant | Distro | Flavor | Kernel | Version | Built |",
+        "| Variant | Distro | Shape | Kernel | Version | Built |",
         "|---|---|---|---|---|---|",
     ]
     for s in snaps:
@@ -159,7 +159,7 @@ def _render(snapshots: Iterable[VariantSnapshot]) -> str:
         lines.append(
             f"| `{s.name}` "
             f"| {d.get('pretty_name') or '?'} "
-            f"| {n.get('flavor') or '?'} "
+            f"| {n.get('shape') or n.get('flavor') or '?'} "
             f"| {k.get('release') or '?'} "
             f"| `{n.get('version') or '?'}` "
             f"| {n.get('built') or '?'} |"
@@ -195,7 +195,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         parts.extend([s.description, ""])
     parts.extend([
         f"**Distro:** {d.get('pretty_name') or '?'}  ",
-        f"**Flavor:** `{n.get('flavor') or '?'}`  ",
+        f"**Shape:** `{n.get('shape') or n.get('flavor') or '?'}`  ",
         f"**Kernel:** `{k.get('release') or '?'}`  ",
         f"**Architecture:** `{arch}`  ",
         f"**Version:** `{n.get('version') or '?'}`  ",

@@ -90,7 +90,7 @@ def main(args, cijoe):
         return errno.ENOENT
 
     variant = cijoe.getconf("nosi", {}).get("variant", "")
-    flavor = "aidev" if variant.endswith("-aidev") else "sysdev"
+    shape = variant.rsplit("-", 1)[-1]  # headless / aidev / desktop / wsl
     distro = variant.split("-", 1)[0] if "-" in variant else ""
 
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
@@ -138,7 +138,7 @@ def main(args, cijoe):
         # fails so the assertion (not the extract) is the source of truth.
         _extract_metadata(key, qcow2)
 
-        results = _run_assertions(key, variant, flavor, distro)
+        results = _run_assertions(key, variant, shape, distro)
         _report(results)
         rc = 0 if all(ok for ok, _name, _detail in results) else 1
     finally:
@@ -194,7 +194,7 @@ def _file_sha256(path: Path) -> str:
 
 def _default_image_name(cijoe) -> str:
     nosi = cijoe.getconf("nosi", {})
-    return f"nosi-{nosi.get('variant', 'debian-13-sysdev')}-x86_64"
+    return f"nosi-{nosi.get('variant', 'debian-13-headless')}-x86_64"
 
 
 def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
@@ -444,7 +444,7 @@ def _ssh(key: Path, cmd: str) -> tuple[int, str]:
     return res.returncode, (res.stdout + res.stderr).strip()
 
 
-def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[tuple[bool, str, str]]:
+def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tuple[bool, str, str]]:
     """Return [(ok, name, detail)] for every assertion."""
 
     # Wait until cloud-init has finished applying the smoketest seed --
@@ -529,7 +529,7 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
         )
         check(
-            "/usr/src kernel source tree present (sysdev essential)",
+            "/usr/src kernel source tree present (headless essential)",
             "test -f /usr/src/sys/conf/kern.pre.mk && test -d /usr/src/sys/dev && echo ok",
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
         )
@@ -678,7 +678,7 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
     #   opencode-ai               -> binary `opencode`
     # plus bash-language-server / yaml-language-server which are aidev-
     # only because they need Node.
-    if flavor == "aidev":
+    if shape == "aidev":
         for cli in ("claude", "codex", "gemini", "opencode",
                     "bash-language-server", "yaml-language-server"):
             check(

@@ -26,13 +26,13 @@ jobs:
     runs-on: ubuntu-24.04
     # aidev's npm-global installs + WSL post-bake (qemu-nbd mount, chroot
     # strip, tar + gzip of a multi-GiB rootfs) add ~10-15 min over the
-    # sysdev runtime, which is tight against the prior 60 min ceiling.
+    # headless runtime, which is tight against the prior 60 min ceiling.
     # Bump uniformly rather than per-variant to keep the matrix simple.
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-sysdev, ubuntu-2404-sysdev, ubuntu-2404-aidev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, fedora-44-desktop, freebsd-14-sysdev, freebsd-15-sysdev]
+        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2404-aidev, ubuntu-2604-headless, ubuntu-2604-aidev, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
 
     steps:
       - uses: actions/checkout@v5
@@ -211,7 +211,7 @@ jobs:
           # graceful-degrade fallback -- a missing file would mean the
           # smoketest's gate broke, which we want to find out about loudly.
           jq -e . "${meta_json}" >/dev/null
-          flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
+          shape=$(jq -r '.nosi.shape // .nosi.flavor // empty' "${meta_json}")
           distro=$(jq -r '.distro.id // empty' "${meta_json}")
           distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
           distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
@@ -226,32 +226,32 @@ jobs:
           # reads them back from the manifest annotation so docs stay aligned
           # with the shippable artefact automatically.
           case "${IMG}" in
-          debian-13-sysdev)
-              variant_desc="Debian 13 (trixie) sysdev. The nicer user-land choices and stability; general-purpose sysdev base when HW-vendor stacks aren't load-bearing."
+          debian-13-headless)
+              variant_desc="Debian 13 (trixie) headless. The nicer user-land choices and stability; general-purpose headless base when HW-vendor stacks aren't load-bearing."
               ;;
-          ubuntu-2404-sysdev)
-              variant_desc="Ubuntu 24.04 LTS (noble) sysdev. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+          ubuntu-2404-headless)
+              variant_desc="Ubuntu 24.04 LTS (noble) headless. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
               ;;
           ubuntu-2404-aidev)
-              variant_desc="Ubuntu 24.04 LTS (noble) aidev (sysdev superset + agentic AI CLIs). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              variant_desc="Ubuntu 24.04 LTS (noble) aidev (headless superset + agentic AI CLIs). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
               ;;
-          ubuntu-2604-sysdev)
-              variant_desc="Ubuntu 26.04 LTS (resolute) sysdev. For a more recent kernel and user-land packages on Ubuntu LTS."
+          ubuntu-2604-headless)
+              variant_desc="Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel and user-land packages on Ubuntu LTS."
               ;;
           ubuntu-2604-aidev)
-              variant_desc="Ubuntu 26.04 LTS (resolute) aidev (sysdev superset + agentic AI CLIs + WSL2 rootfs target). For a more recent kernel and user-land packages on Ubuntu LTS."
+              variant_desc="Ubuntu 26.04 LTS (resolute) aidev (headless superset + agentic AI CLIs + WSL2 rootfs target). For a more recent kernel and user-land packages on Ubuntu LTS."
               ;;
-          fedora-44-sysdev)
-              variant_desc="Fedora 44 sysdev. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
+          fedora-44-headless)
+              variant_desc="Fedora 44 headless. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
               ;;
           fedora-44-desktop)
-              variant_desc="Fedora 44 desktop. Hyprland tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the sysdev baseline. For personal laptop / workstation use."
+              variant_desc="Fedora 44 desktop. Hyprland tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the headless baseline. For personal laptop / workstation use."
               ;;
-          freebsd-14-sysdev)
-              variant_desc="FreeBSD 14.4-RELEASE sysdev scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
+          freebsd-14-headless)
+              variant_desc="FreeBSD 14.4-RELEASE headless scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
               ;;
-          freebsd-15-sysdev)
-              variant_desc="FreeBSD 15.0-RELEASE sysdev scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
+          freebsd-15-headless)
+              variant_desc="FreeBSD 15.0-RELEASE headless scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
               ;;
           *)
               # No use-case statement registered for this variant. Fail loud
@@ -285,7 +285,7 @@ jobs:
               --annotation "org.opencontainers.image.architecture=${arch}" \
               --annotation "org.opencontainers.image.os=linux" \
               --annotation "dev.nosi.variant=${IMG}" \
-              --annotation "dev.nosi.flavor=${flavor}" \
+              --annotation "dev.nosi.shape=${shape}" \
               --annotation "dev.nosi.distro=${distro}" \
               --annotation "dev.nosi.distro-version=${distro_version}" \
               --annotation "dev.nosi.kernel-release=${kernel_release}" \
@@ -326,7 +326,7 @@ jobs:
           cd "$HOME/system_imaging/disk"
           tarball="nosi-${IMG}-wsl.tar.gz"
           if [ ! -e "${tarball}" ]; then
-              echo "No WSL tarball for ${IMG} (expected for sysdev variants)."
+              echo "No WSL tarball for ${IMG} (expected for headless variants)."
               exit 0
           fi
           report="nosi-${IMG}-x86_64.cijoe-report.zip"
@@ -337,7 +337,7 @@ jobs:
           # Operators who pull just the WSL tag should not have to also
           # pull the disk-image tag to learn what's inside.
           variant=$(jq -r '.nosi.variant // empty' "${meta_json}")
-          flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
+          shape=$(jq -r '.nosi.shape // .nosi.flavor // empty' "${meta_json}")
           distro=$(jq -r '.distro.id // empty' "${meta_json}")
           distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
           distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
@@ -375,7 +375,7 @@ jobs:
               --annotation "org.opencontainers.image.architecture=${arch}" \
               --annotation "org.opencontainers.image.os=linux" \
               --annotation "dev.nosi.variant=${variant}" \
-              --annotation "dev.nosi.flavor=${flavor}" \
+              --annotation "dev.nosi.shape=${shape}" \
               --annotation "dev.nosi.distro=${distro}" \
               --annotation "dev.nosi.distro-version=${distro_version}" \
               --annotation "dev.nosi.kernel-release=${kernel_release}" \

@@ -9,7 +9,7 @@
 # Why this and not pwndbg / GEF: gdb-dashboard is a single Python file
 # loaded by gdb's startup hook -- no extra deps, no venv to maintain,
 # no exploit-dev styling. The "step into and inspect" workflow that
-# sysdev operators actually want, beautified.
+# headless operators actually want, beautified.
 #
 # Distros vary on where gdb's system gdbinit lives. Debian/Ubuntu reads
 # /etc/gdb/gdbinit; Fedora reads /etc/gdbinit. Write the dashboard file

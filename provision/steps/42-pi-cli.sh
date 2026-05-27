@@ -8,10 +8,10 @@
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
-nosi_info "step 42-pi-cli (flavor=${NOSI_FLAVOR:-?})"
+nosi_info "step 42-pi-cli (shape=${NOSI_SHAPE:-?})"
 
-if [ "${NOSI_FLAVOR:-}" != "aidev" ]; then
-    nosi_info "non-aidev flavor; skipping"
+if [ "${NOSI_SHAPE:-}" != "aidev" ]; then
+    nosi_info "non-aidev shape; skipping"
     exit 0
 fi
 

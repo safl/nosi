@@ -30,10 +30,10 @@
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
-nosi_info "step 50-desktop-stack (flavor=${NOSI_FLAVOR:-?})"
+nosi_info "step 50-desktop-stack (shape=${NOSI_SHAPE:-?})"
 
-if [ "${NOSI_FLAVOR:-}" != "desktop" ]; then
-    nosi_info "non-desktop flavor; skipping"
+if [ "${NOSI_SHAPE:-}" != "desktop" ]; then
+    nosi_info "non-desktop shape; skipping"
     exit 0
 fi
 

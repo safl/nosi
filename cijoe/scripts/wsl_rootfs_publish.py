@@ -39,7 +39,7 @@ Reads the ``publish_wsl`` section of
   publish_wsl.gz_path           final .tar.gz path
   publish_wsl.gzip_level        compression level (1..9; 9 default)
 
-When ``publish_wsl`` is absent (sysdev variants), the step no-ops with a
+When ``publish_wsl`` is absent (headless variants), the step no-ops with a
 success return so the same cijoe task file can drive every variant.
 
 Retargetable: False

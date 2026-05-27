@@ -4,7 +4,7 @@
 
 ```
 make deps                              # install cijoe via pipx
-make build VARIANT=debian-13-sysdev    # build a single variant
+make build VARIANT=debian-13-headless    # build a single variant
 make all                               # build every variant
 ```
 
@@ -34,7 +34,7 @@ For machines with the headroom for the compressed `.img.gz` plus
 whatever `gunzip` needs:
 
 ```bash
-VARIANT='debian-13-sysdev'
+VARIANT='debian-13-headless'
 
 # pull the latest of any variant into the current dir
 # (lands as nosi-<variant>-x86_64.img.gz + sidecars)
@@ -54,7 +54,7 @@ to the target. Nothing hits the filesystem between GHCR and the
 device's first sector:
 
 ```bash
-VARIANT='debian-13-sysdev'
+VARIANT='debian-13-headless'
 REPO="ghcr.io/safl/nosi/${VARIANT}"
 
 # Resolve the .img.gz blob's content-addressed digest from the manifest.

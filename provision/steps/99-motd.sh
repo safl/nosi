@@ -19,29 +19,29 @@
 # config, not a script edit.
 #
 # Inputs (env vars, optional):
-#   NOSI_FLAVOR             "sysdev" (default) or "aidev". Surfaces in
+#   NOSI_SHAPE             "headless" (default) or "aidev". Surfaces in
 #                           the banner header.
 #   NOSI_DEFAULT_HOSTNAME   Hostname nosi shipped with. Surfaces in the
 #                           Reconfigure hint. Default derives from
-#                           NOSI_DISTRO + NOSI_FLAVOR (see below).
+#                           NOSI_DISTRO + NOSI_SHAPE (see below).
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
-NOSI_FLAVOR="${NOSI_FLAVOR:-sysdev}"
+NOSI_SHAPE="${NOSI_SHAPE:-headless}"
 if [ -z "${NOSI_DEFAULT_HOSTNAME:-}" ]; then
-    if [ "$NOSI_FLAVOR" = "aidev" ]; then
+    if [ "$NOSI_SHAPE" = "aidev" ]; then
         NOSI_DEFAULT_HOSTNAME="nosi-aidev"
     else
         NOSI_DEFAULT_HOSTNAME="nosi-${NOSI_DISTRO}"
     fi
 fi
 
-nosi_info "step 99-motd (flavor=$NOSI_FLAVOR, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
+nosi_info "step 99-motd (shape=$NOSI_SHAPE, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
 nosi_require_root
 
 install -d -m 0755 /etc/nosi
 
-nosi_write_if_changed "$NOSI_FLAVOR"           /etc/nosi/flavor           0644
+nosi_write_if_changed "$NOSI_SHAPE"           /etc/nosi/shape            0644
 nosi_write_if_changed "$NOSI_DEFAULT_HOSTNAME" /etc/nosi/default-hostname 0644
 
 # ---- nosi-motd renderer ---------------------------------------------------
@@ -59,7 +59,7 @@ kernel="$(uname -r)"
 arch="$(uname -m)"
 host="$(hostnamectl --static 2>/dev/null || hostname)"
 
-flavor="$(cat /etc/nosi/flavor 2>/dev/null || echo sysdev)"
+shape="$(cat /etc/nosi/shape 2>/dev/null || echo headless)"
 default_host="$(cat /etc/nosi/default-hostname 2>/dev/null || echo nosi-${ID:-linux})"
 
 # Build identity from /etc/nosi-release (written first by step 05). Falls
@@ -114,7 +114,7 @@ fi
 
 cat <<EOM
 
-  nosi ${flavor} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
+  nosi ${shape} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
 ${default_pw_warning}
 
   hostname:  ${host}

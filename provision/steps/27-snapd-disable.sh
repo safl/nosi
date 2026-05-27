@@ -2,7 +2,7 @@
 # nosi/provision/steps/27-snapd-disable.sh
 #
 # Soft-disable snapd on Ubuntu. Ubuntu cloud images ship it preinstalled;
-# sysdev / aidev do not use snaps (apt + podman cover the same ground) and
+# headless / aidev do not use snaps (apt + podman cover the same ground) and
 # snapd's running daemon + auto-refresh + squashfs loop mounts add
 # measurable runtime overhead on a flashed bare-metal box (a process in
 # `ps aux` / htop, resident memory, periodic CPU wakeups, /snap loop

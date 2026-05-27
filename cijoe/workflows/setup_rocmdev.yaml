@@ -1,16 +1,16 @@
 ---
 doc: |
   Set up the AMD GPU software stack (amdgpu + ROCm) on a freshly-flashed
-  nosi-ubuntu-2404-sysdev box (Ubuntu 24.04 noble, GA 6.8 kernel).
+  nosi-ubuntu-2404-headless box (Ubuntu 24.04 noble, GA 6.8 kernel).
 
   Direct port of xnvme/aisio/tasks/setup_amdstack.yaml, adjusted for nosi's
   defaults: target user is `odus` (NOPASSWD sudo), root SSH is locked,
-  the sysdev baseline already provides linux-headers + DKMS prereqs +
+  the headless baseline already provides linux-headers + DKMS prereqs +
   the nouveau blacklist.
 
   Prerequisites:
 
-    * Target running nosi-ubuntu-2404-sysdev or nosi-ubuntu-2404-aidev
+    * Target running nosi-ubuntu-2404-headless or nosi-ubuntu-2404-aidev
       (Ubuntu 24.04 noble, kernel 6.8 GA; HWE must NOT be installed).
     * SSH key authorized on odus@<target>:
         ssh-copy-id odus@<target>
