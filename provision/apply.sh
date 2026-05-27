@@ -64,6 +64,7 @@ STEPS=(
     # tag before anything else can break.
     05-nosi-release
     10-r8125-dkms
+    12-gdb-dashboard
     20-upstream-tools
     21-shell-tools
     22-python-tools

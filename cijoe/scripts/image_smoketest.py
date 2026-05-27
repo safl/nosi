@@ -589,6 +589,13 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         lambda rc, out: (out == "ok", out or "missing rustc"),
     )
 
+    # ---- gdb-dashboard wired into the system gdbinit (step 12) -----------
+    check(
+        "gdb-dashboard installed as /etc/gdb/gdbinit",
+        "grep -c '^python Dashboard.start()' /etc/gdb/gdbinit 2>/dev/null",
+        lambda rc, out: (out.strip() == "1", out or "(no dashboard marker)"),
+    )
+
     # ---- pipx-installed CLIs (step 22) -----------------------------------
     # `pipx install --global` symlinks each package's entry points into
     # /usr/local/bin (and venvs into /usr/local/pipx). /usr/local/bin is
