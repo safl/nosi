@@ -1,16 +1,24 @@
 #cloud-config
-# nosi base : Fedora 44. Default credentials: operator account `odus` with
-# password `odus.321`, root locked, SSH password auth on. Per-instance SSH
-# identity: host keys stripped at end of cloud-init, regenerated on first
-# boot.
+# nosi base : Ubuntu 26.04 LTS (resolute). Default credentials: operator
+# account `odus` with password `odus.321`, root locked, SSH password auth on.
+# Per-instance SSH identity: host keys stripped at end of cloud-init,
+# regenerated on first boot.
 
-hostname: nosi-fedora
-fqdn: nosi-fedora.local
+hostname: nosi-ubuntu
+fqdn: nosi-ubuntu.local
 manage_etc_hosts: true
 
 timezone: UTC
 
 ssh_pwauth: true
+
+# Strip the base cloud image's default user (`ubuntu`) before cloud-init's
+# users module runs. Two reasons: avoid an unused account in /etc/passwd,
+# and free UID 1000 so odus can claim it (the WSL/Linux convention for
+# the first interactive user; lots of tooling assumes UID 1000 = primary
+# operator).
+bootcmd:
+  - userdel -r ubuntu 2>/dev/null || true
 
 # Operator account: `odus` with password `odus.321`, passwordless sudo,
 # pinned to UID 1000. Created here (cloud-init users-module) rather than
@@ -21,20 +29,19 @@ ssh_pwauth: true
 # without the runcmd hazard that a single non-zero exit silently skips
 # later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
 # salt is fixed so identical bakes produce identical /etc/shadow.
-# `wheel` is Fedora's sudo group. `- default` is intentionally absent
-# (bootcmd above already removed the base `fedora` user). Root is
-# locked in runcmd below. The default password stays active out of the
-# box so CI jobs can flash and ssh straight in; step 29 just marks the
-# system as on the default and the motd warns at every interactive
-# login until the operator rotates with `passwd odus`. Operators who
-# want a personal identity rename odus rather than create a second
-# account (see provision/README.md).
+# `- default` is intentionally absent; the base image's default user is
+# gone (bootcmd). Root is locked in runcmd below. The default password
+# stays active out of the box so CI jobs can flash and ssh straight in;
+# step 29 just marks the system as on the default and the motd warns at
+# every interactive login until the operator rotates with `passwd odus`.
+# Operators who want a personal identity rename odus rather than create
+# a second account (see provision/README.md).
 users:
   - name: odus
     uid: 1000
     gecos: nosi operator
     shell: /bin/bash
-    groups: [wheel, kvm]
+    groups: [sudo, kvm]
     sudo: ALL=(ALL) NOPASSWD:ALL
     lock_passwd: false
     hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
@@ -45,19 +52,18 @@ growpart:
 
 resize_rootfs: true
 
-# Mirror the apt Install-Recommends=false story for dnf: skip weak
-# dependencies so the installed set matches the explicit packages: list.
-# Also strip the base cloud image's default user (`fedora`) before
-# cloud-init's users module runs so /etc/passwd doesn't carry an unused
-# account and so UID 1000 is free for odus (the WSL/Linux convention
-# for the first interactive user). bootcmd runs before the packages:
-# phase, so dnf picks up the setting.
-bootcmd:
-  - |
-    if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
-        echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
-    fi
-  - userdel -r fedora 2>/dev/null || true
+# Ubuntu cloud images already include universe in their default sources,
+# so btop / podman-docker resolve without extra config. (helix + zellij
+# are pulled from upstream tarballs in runcmd; the universe packages
+# either lag the upstream releases or, in 26.04, vanished entirely.)
+
+# Drop Install-Recommends to keep the image lean -- our explicit packages:
+# list already names everything we want, and Recommends were inflating
+# the gz by GBs on debian/ubuntu compared to fedora's weak-deps default.
+apt:
+  conf: |
+    APT::Install-Recommends "false";
+    APT::Install-Suggests "false";
 
 # See debian variant: upgrade the base snapshot before installing our
 # explicit packages, so the baked image picks up upstream security fixes.
@@ -69,14 +75,12 @@ packages:
   - openssh-server
   - sudo
   - systemd-resolved
-  # NTP via chrony (Fedora's default time daemon). Pre-installed in the
-  # cloud baseline today; name explicitly so we survive any future weak-
-  # dep tweak. Same rationale as systemd-timesyncd on the apt variants.
-  - chrony
+  # NTP via systemd's own daemon. See debian variant for rationale.
+  - systemd-timesyncd
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
-  - fd-find              # /usr/bin/fd on Fedora (no rename needed)
+  - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
   - fzf
   - gh                   # GitHub CLI
   - git
@@ -87,43 +91,49 @@ packages:
   - ninja-build
   - parallel             # GNU parallel
   - ripgrep
-  - ShellCheck           # bash linter; sysdev's substitute for the
+  - shellcheck           # bash linter; sysdev's substitute for the
                          # Node-based bash-language-server (aidev only)
   - stress-ng            # CPU / memory stress for thermals + bench
   - sysstat              # iostat / sar / mpstat
   - time                 # GNU time (verbose vs the bash builtin)
   - unzip                # yazi ships as a zip in its releases
-  - libicu               # ICU runtime for marksman (.NET-based markdown LSP);
+  - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
                          # without it dotnet aborts with "Couldn't find a valid
                          # ICU package" and step 20 fails fast on marksman
-  - kernel-devel         # DKMS / out-of-tree modules (Fedora's analog
-                         # to Debian/Ubuntu's linux-headers-*)
-  - perf                 # Linux perf events tooling
-  - bind-utils
+  - linux-headers-generic # DKMS needs the running kernel's headers (r8125,
+                         # and any cudadev/rocmdev workflow run on top)
+  - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
+  - linux-tools-common   # shared man pages + helpers for the -generic tool set
   - curl
+  - dnsutils
   - jq
   - lsof
-  - mtr
-  - NetworkManager-tui    # nmtui for interactive interface config
+  - mtr-tiny
+  - network-manager       # provides nmtui for interactive interface config
   - nmap
   - strace
   - tcpdump
   - wget
+  - build-essential
   - ccache               # transparent compiler cache; wraps gcc/clang
   - clang
-  - clang-tools-extra    # clangd (C/C++ LSP), clang-format, clang-tidy
+  - clang-tools          # clang-format, clang-tidy
+  - clangd               # C/C++ LSP
   - cmake                # ubiquitous C/C++ build orchestrator
   - cppcheck             # standalone C/C++ static analyzer
-  - gcc
-  - gcc-c++
   - gdb
   - lldb                 # helix DAP debugger backend (lldb-dap binary)
   - make
   - pipx
-  - pkgconf-pkg-config
+  - pkg-config
   - python3
   - valgrind
+  # See debian variant: name podman's Recommends explicitly (crun /
+  # fuse-overlayfs / dbus-user-session) since Recommends are off.
   - buildah
+  - crun
+  - dbus-user-session
+  - fuse-overlayfs
   - passt
   - podman
   - podman-docker
@@ -137,17 +147,18 @@ packages:
   - usbutils
   # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
   # regulatory.db, etc. The kernel package used to pull linux-firmware via
-  # weak-deps; we set install_weak_deps=False so name it explicitly.
+  # Recommends; we drop Recommends so name it explicitly.
   - linux-firmware
-  # CPU microcode (early-load via dracut). AMD microcode ships through
-  # linux-firmware above; microcode_ctl adds Intel's blobs and the
-  # dracut hook that prepends them to initramfs. Same rationale as
-  # debian variant: errata fixes load-bearing for stability on consumer
-  # Intel SKUs (e.g. Alder Lake-N in the GMKtec NucBox G5).
-  - microcode_ctl
-  - edk2-ovmf
-  - qemu-img
-  - qemu-system-x86-core
+  # CPU microcode (early-load via initramfs). intel-microcode is in
+  # multiverse, amd64-microcode in main; both are default-enabled in
+  # Ubuntu server cloud images. Same rationale as the debian variant:
+  # silently load-bearing errata fixes for consumer Intel SKUs (N97 etc.)
+  # and recent AMD parts (Ryzen 5 in the GMKtec NucBox G10).
+  - intel-microcode
+  - amd64-microcode
+  - ovmf
+  - qemu-system-x86
+  - qemu-utils
 
 # Drop the nosi provision/ tree into /opt/nosi/provision/. The
 # __NOSI_PROVISION_FILES__ marker is expanded at bake time by
@@ -165,9 +176,9 @@ runcmd:
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
   # cross-distro where it makes sense. Same apply.sh runs on a vanilla
-  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh fedora-sysdev`) to
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh ubuntu-2604-sysdev`) to
   # reach this image's parity.
-  - /opt/nosi/provision/apply.sh fedora-sysdev
+  - /opt/nosi/provision/apply.sh ubuntu-2604-sysdev
 
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
@@ -179,27 +190,30 @@ runcmd:
   - rm -f /var/lib/dbus/machine-id
   - cloud-init clean --logs --seed || true
 
-  # Deep cleanup (see debian variant for rationale). Fedora's locale
-  # data lives in a single archive (/usr/lib/locale/locale-archive) and
-  # is awkward to trim safely; skipped here.
+  # Deep cleanup (see debian variant for rationale).
   - |
     set -eu
+    if [ -d /usr/share/locale ]; then
+        find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+            ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'C.*' \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
     journalctl --vacuum-size=1M 2>/dev/null || true
-    rm -rf /var/log/journal/* /var/log/dnf.log* /var/log/dnf.rpm.log*
+    rm -rf /var/log/installer /var/log/journal/* /var/log/dpkg.log* /var/log/apt
     find /usr /opt /root /home -type d -name __pycache__ \
         -exec rm -rf {} + 2>/dev/null || true
-    dnf -y autoremove
+    apt-get -y autoremove --purge
+    apt-get -y autoclean
 
   # Clock floor: see debian variant for rationale. Touch /usr/lib/clock-epoch
-  # last so PID-1 systemd uses the bake mtime as the boot-time clock floor.
-  # chronyd (already running from the Fedora cloud base) refines once the
-  # network is up.
+  # last so its mtime is the bake time; PID-1 systemd uses it as the
+  # minimum boot-time clock, defeating dead-CMOS TLS-cert breakage.
   - touch /usr/lib/clock-epoch
 
-  - dnf clean all
-  - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
+  - apt-get clean
+  - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi fedora-sysdev baked in $UPTIME seconds; powering off"
+final_message: "nosi ubuntu-2604-sysdev baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff

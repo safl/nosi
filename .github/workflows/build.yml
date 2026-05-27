@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-sysdev, ubuntu-sysdev, fedora-sysdev, ubuntu-aidev, freebsd-sysdev]
+        variant: [debian-13-sysdev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, freebsd-14-sysdev, freebsd-15-sysdev]
 
     steps:
       - uses: actions/checkout@v5
@@ -249,7 +249,7 @@ jobs:
         # cleanly scoped to disk-images; the WSL artifact is rootfs, not
         # a flashable disk, so colocating tags under the same repo would
         # be misleading. Gated on the artifact existing, which today
-        # means matrix.variant == 'ubuntu-aidev'. Same build, same report,
+        # means matrix.variant == 'ubuntu-2604-aidev'. Same build, same report,
         # so the cijoe-report zip is attached here too for symmetry --
         # operators who pulled the WSL artifact alone still get the
         # provenance.

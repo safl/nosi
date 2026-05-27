@@ -8,8 +8,9 @@ operator's actual hardware kernel, multi-reboot installer choreography
 decoupled from nosi's. The GPU stacks (NVIDIA + AMD) sit squarely in
 that bucket.
 
-**The pattern**: flash one of nosi's `ubuntu-sysdev` / `ubuntu-aidev`
-images on the target, then run a workflow from this directory against
+**The pattern**: flash one of nosi's Ubuntu 24.04 LTS variants
+(`ubuntu-2404-sysdev` / `ubuntu-2404-aidev`, when they exist) on the
+target, then run a workflow from this directory against
 the running box. cijoe drives the install over SSH, handles the
 reboots, and waits for the box to come back. The workflows are direct
 ports of [xnvme/aisio's][aisio] equivalents, adjusted for nosi's
@@ -24,9 +25,11 @@ constraints (default operator account is `odus`, root SSH is locked).
 | `setup_cudadev.yaml` | MLNX_OFED + NVIDIA NOKM driver + CUDA toolkit + GDS | [aisio setup_nvstack.yaml](https://github.com/xnvme/aisio/blob/main/tasks/setup_nvstack.yaml) |
 | `setup_rocmdev.yaml` | amdgpu DKMS driver + ROCm user-space stack | [aisio setup_amdstack.yaml](https://github.com/xnvme/aisio/blob/main/tasks/setup_amdstack.yaml) |
 
-Both expect the target to be a freshly-flashed `nosi-ubuntu-sysdev`
-running Ubuntu 24.04 noble (matching the kernel pin both stacks
-qualify against). Other distros / versions are not supported.
+Both expect the target to be running Ubuntu 24.04 noble (matching the
+kernel pin both vendor stacks qualify against). In nosi terms that's
+`ubuntu-2404-sysdev` / `ubuntu-2404-aidev` (the Ubuntu 24.04 variants
+exist precisely so the vendor stacks compose). Other distros /
+versions are not supported.
 
 ## Running
 

@@ -66,7 +66,7 @@ def _resolve_version(repo_root: Path) -> str:
 def add_args(parser: ArgumentParser):
     parser.add_argument(
         "--src", type=Path, required=True,
-        help="Path to the cloud-init template (e.g. nosi-media/auxiliary/cloudinit-sysdev-debian.user)",
+        help="Path to the cloud-init template (e.g. nosi-media/auxiliary/cloudinit-sysdev-debian-13.user)",
     )
     parser.add_argument(
         "--out", type=Path, default=None,

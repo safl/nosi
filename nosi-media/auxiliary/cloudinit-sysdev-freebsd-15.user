@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base : FreeBSD 14.4-RELEASE. Default credentials: operator account
+# nosi base : FreeBSD 15.0-RELEASE. Default credentials: operator account
 # `odus` with password `odus.321`, root locked, SSH password auth on.
 # Per-instance SSH identity: host keys stripped at end of init,
 # regenerated on first boot.
@@ -116,7 +116,7 @@ runcmd:
   # distribution for the running release (~250 MB compressed, extracts
   # to /usr/src at ~1.5 GB). nuageinit's runcmd PATH is sane enough
   # that `fetch` and `tar` resolve.
-  - fetch -o /tmp/src.txz https://download.freebsd.org/releases/amd64/14.4-RELEASE/src.txz
+  - fetch -o /tmp/src.txz https://download.freebsd.org/releases/amd64/15.0-RELEASE/src.txz
   - tar -C / -xpf /tmp/src.txz
   - rm -f /tmp/src.txz
 
@@ -142,15 +142,15 @@ runcmd:
     /usr/local/bin/jq -n \
         --arg version "__NOSI_VERSION__" \
         --arg flavor sysdev \
-        --arg variant freebsd-sysdev \
+        --arg variant freebsd-15-sysdev \
         --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg pretty "FreeBSD 14.4-RELEASE" \
+        --arg pretty "FreeBSD 15.0-RELEASE" \
         --arg krel "$(uname -r)" \
         --arg kver "$(uname -v)" \
         --arg arch "$(uname -m)" \
         '{
             nosi: {version: $version, flavor: $flavor, variant: $variant, built: $built},
-            distro: {id: "freebsd", version_id: "14.4", pretty_name: $pretty},
+            distro: {id: "freebsd", version_id: "15.0", pretty_name: $pretty},
             kernel: {release: $krel, version: $kver},
             architecture: $arch,
             operator: {

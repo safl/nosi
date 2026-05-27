@@ -1,0 +1,207 @@
+#cloud-config
+# nosi base : Fedora 44. Default credentials: operator account `odus` with
+# password `odus.321`, root locked, SSH password auth on. Per-instance SSH
+# identity: host keys stripped at end of cloud-init, regenerated on first
+# boot.
+
+hostname: nosi-fedora
+fqdn: nosi-fedora.local
+manage_etc_hosts: true
+
+timezone: UTC
+
+ssh_pwauth: true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1000. Created here (cloud-init users-module) rather than
+# in runcmd because users-module calls `useradd -p HASH`, which writes
+# the hash straight to /etc/shadow without going through PAM (so
+# pam_pwquality cannot reject `odus.321` for containing the username),
+# without depending on `openssl` being installed at runcmd time, and
+# without the runcmd hazard that a single non-zero exit silently skips
+# later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
+# salt is fixed so identical bakes produce identical /etc/shadow.
+# `wheel` is Fedora's sudo group. `- default` is intentionally absent
+# (bootcmd above already removed the base `fedora` user). Root is
+# locked in runcmd below. The default password stays active out of the
+# box so CI jobs can flash and ssh straight in; step 29 just marks the
+# system as on the default and the motd warns at every interactive
+# login until the operator rotates with `passwd odus`. Operators who
+# want a personal identity rename odus rather than create a second
+# account (see provision/README.md).
+users:
+  - name: odus
+    uid: 1000
+    gecos: nosi operator
+    shell: /bin/bash
+    groups: [wheel, kvm]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
+growpart:
+  mode: auto
+  devices: ["/"]
+
+resize_rootfs: true
+
+# Mirror the apt Install-Recommends=false story for dnf: skip weak
+# dependencies so the installed set matches the explicit packages: list.
+# Also strip the base cloud image's default user (`fedora`) before
+# cloud-init's users module runs so /etc/passwd doesn't carry an unused
+# account and so UID 1000 is free for odus (the WSL/Linux convention
+# for the first interactive user). bootcmd runs before the packages:
+# phase, so dnf picks up the setting.
+bootcmd:
+  - |
+    if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
+        echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
+    fi
+  - userdel -r fedora 2>/dev/null || true
+
+# See debian variant: upgrade the base snapshot before installing our
+# explicit packages, so the baked image picks up upstream security fixes.
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - openssh-server
+  - sudo
+  - systemd-resolved
+  # NTP via chrony (Fedora's default time daemon). Pre-installed in the
+  # cloud baseline today; name explicitly so we survive any future weak-
+  # dep tweak. Same rationale as systemd-timesyncd on the apt variants.
+  - chrony
+  - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
+  - btop
+  - direnv               # per-directory env vars; bash hook in /etc/profile.d
+  - fd-find              # /usr/bin/fd on Fedora (no rename needed)
+  - fzf
+  - gh                   # GitHub CLI
+  - git
+  - git-delta            # `delta` pager, wired into /etc/gitconfig
+  - htop
+  - just                 # task runner (sister to make-as-task-runner)
+  - meson
+  - ninja-build
+  - parallel             # GNU parallel
+  - ripgrep
+  - ShellCheck           # bash linter; sysdev's substitute for the
+                         # Node-based bash-language-server (aidev only)
+  - stress-ng            # CPU / memory stress for thermals + bench
+  - sysstat              # iostat / sar / mpstat
+  - time                 # GNU time (verbose vs the bash builtin)
+  - unzip                # yazi ships as a zip in its releases
+  - libicu               # ICU runtime for marksman (.NET-based markdown LSP);
+                         # without it dotnet aborts with "Couldn't find a valid
+                         # ICU package" and step 20 fails fast on marksman
+  - kernel-devel         # DKMS / out-of-tree modules (Fedora's analog
+                         # to Debian/Ubuntu's linux-headers-*)
+  - perf                 # Linux perf events tooling
+  - bind-utils
+  - curl
+  - jq
+  - lsof
+  - mtr
+  - NetworkManager-tui    # nmtui for interactive interface config
+  - nmap
+  - strace
+  - tcpdump
+  - wget
+  - ccache               # transparent compiler cache; wraps gcc/clang
+  - clang
+  - clang-tools-extra    # clangd (C/C++ LSP), clang-format, clang-tidy
+  - cmake                # ubiquitous C/C++ build orchestrator
+  - cppcheck             # standalone C/C++ static analyzer
+  - gcc
+  - gcc-c++
+  - gdb
+  - lldb                 # helix DAP debugger backend (lldb-dap binary)
+  - make
+  - pipx
+  - pkgconf-pkg-config
+  - python3
+  - valgrind
+  - buildah
+  - passt
+  - podman
+  - podman-docker
+  - skopeo
+  - dmidecode
+  - hdparm
+  - lshw
+  - nvme-cli
+  - pciutils
+  - smartmontools
+  - usbutils
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
+  # regulatory.db, etc. The kernel package used to pull linux-firmware via
+  # weak-deps; we set install_weak_deps=False so name it explicitly.
+  - linux-firmware
+  # CPU microcode (early-load via dracut). AMD microcode ships through
+  # linux-firmware above; microcode_ctl adds Intel's blobs and the
+  # dracut hook that prepends them to initramfs. Same rationale as
+  # debian variant: errata fixes load-bearing for stability on consumer
+  # Intel SKUs (e.g. Alder Lake-N in the GMKtec NucBox G5).
+  - microcode_ctl
+  - edk2-ovmf
+  - qemu-img
+  - qemu-system-x86-core
+
+# Drop the nosi provision/ tree into /opt/nosi/provision/. The
+# __NOSI_PROVISION_FILES__ marker is expanded at bake time by
+# cijoe/scripts/userdata_render.py: it replaces this comment with one
+# write_files: entry per file under provision/ (apply.sh, lib/*,
+# steps/*), chmod 0755. The runcmd: section below then invokes
+# /opt/nosi/provision/apply.sh, which is also the same script
+# operators run on a vanilla Hetzner VM to reach image parity.
+write_files:
+  # __NOSI_PROVISION_FILES__
+
+runcmd:
+
+  # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
+  # nosi-motd renderer + service, nosi-firstboot-inventory + service.
+  # Each step under provision/steps/ is independently idempotent and
+  # cross-distro where it makes sense. Same apply.sh runs on a vanilla
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh fedora-44-sysdev`) to
+  # reach this image's parity.
+  - /opt/nosi/provision/apply.sh fedora-44-sysdev
+
+  # odus itself is created by the top-level `users:` block (hashed_passwd
+  # written straight to /etc/shadow). All that's left here is locking root
+  # so the only login channel is odus.
+  - passwd -l root
+
+  - rm -f /etc/ssh/ssh_host_*
+  - ': > /etc/machine-id'
+  - rm -f /var/lib/dbus/machine-id
+  - cloud-init clean --logs --seed || true
+
+  # Deep cleanup (see debian variant for rationale). Fedora's locale
+  # data lives in a single archive (/usr/lib/locale/locale-archive) and
+  # is awkward to trim safely; skipped here.
+  - |
+    set -eu
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/journal/* /var/log/dnf.log* /var/log/dnf.rpm.log*
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    dnf -y autoremove
+
+  # Clock floor: see debian variant for rationale. Touch /usr/lib/clock-epoch
+  # last so PID-1 systemd uses the bake mtime as the boot-time clock floor.
+  # chronyd (already running from the Fedora cloud base) refines once the
+  # network is up.
+  - touch /usr/lib/clock-epoch
+
+  - dnf clean all
+  - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
+
+final_message: "nosi fedora-44-sysdev baked in $UPTIME seconds; powering off"
+
+power_state:
+  mode: poweroff
+  timeout: 60
+  message: "nosi build complete"

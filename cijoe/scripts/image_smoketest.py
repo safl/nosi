@@ -194,7 +194,7 @@ def _file_sha256(path: Path) -> str:
 
 def _default_image_name(cijoe) -> str:
     nosi = cijoe.getconf("nosi", {})
-    return f"nosi-{nosi.get('variant', 'debian-sysdev')}-x86_64"
+    return f"nosi-{nosi.get('variant', 'debian-13-sysdev')}-x86_64"
 
 
 def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:

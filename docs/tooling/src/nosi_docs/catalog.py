@@ -35,11 +35,12 @@ log = logging.getLogger(__name__)
 # Variants nosi publishes. Keep in sync with .github/workflows/build.yml's
 # matrix.variant list and the cijoe/configs/ directory.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
-    ("debian-sysdev",  "ghcr.io/safl/nosi/debian-sysdev:latest"),
-    ("ubuntu-sysdev",  "ghcr.io/safl/nosi/ubuntu-sysdev:latest"),
-    ("fedora-sysdev",  "ghcr.io/safl/nosi/fedora-sysdev:latest"),
-    ("ubuntu-aidev",   "ghcr.io/safl/nosi/ubuntu-aidev:latest"),
-    ("freebsd-sysdev", "ghcr.io/safl/nosi/freebsd-sysdev:latest"),
+    ("debian-13-sysdev",    "ghcr.io/safl/nosi/debian-13-sysdev:latest"),
+    ("ubuntu-2604-sysdev",  "ghcr.io/safl/nosi/ubuntu-2604-sysdev:latest"),
+    ("ubuntu-2604-aidev",   "ghcr.io/safl/nosi/ubuntu-2604-aidev:latest"),
+    ("fedora-44-sysdev",    "ghcr.io/safl/nosi/fedora-44-sysdev:latest"),
+    ("freebsd-14-sysdev",   "ghcr.io/safl/nosi/freebsd-14-sysdev:latest"),
+    ("freebsd-15-sysdev",   "ghcr.io/safl/nosi/freebsd-15-sysdev:latest"),
 )
 
 

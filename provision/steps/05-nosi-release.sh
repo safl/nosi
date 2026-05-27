@@ -8,7 +8,7 @@
 #     $ cat /etc/nosi-release
 #     NOSI_VERSION=2026.05.26-4afcc92
 #     NOSI_FLAVOR=sysdev
-#     NOSI_VARIANT=ubuntu-sysdev
+#     NOSI_VARIANT=ubuntu-2604-sysdev
 #     NOSI_DISTRO=ubuntu
 #     NOSI_DISTRO_VERSION=26.04
 #     NOSI_BUILT=2026-05-26T14:08:33Z
@@ -16,7 +16,7 @@
 # The motd renderer (step 99, runs last) picks up VERSION + VARIANT from
 # this file so the login banner header reads, e.g.,
 #
-#     nosi sysdev (ubuntu-sysdev, 2026.05.26-c2cba6b)   Ubuntu 26.04 LTS ...
+#     nosi sysdev (ubuntu-2604-sysdev, 2026.05.26-c2cba6b)   Ubuntu 26.04 LTS ...
 #
 # Version source (preference order):
 #   1. $NOSI_VERSION env var (operator override on a Hetzner-VM re-run)

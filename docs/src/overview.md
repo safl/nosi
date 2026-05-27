@@ -14,7 +14,7 @@ The intended structure is **bare bases + flavors**:
   for the work it's fit for (`sysdev` for C / C++ / Python / Rust systems work,
   future flavors for other niches).
 
-Each variant is a self-contained build keyed by `<distro>-<flavor>`. There
+Each variant is a self-contained build keyed by `<distro>-<version>-<flavor>`. There
 is **no actual layered inheritance** (no Yocto / Nix style composition);
 the word "flavor" describes a curated package list and configuration,
 nothing more.
@@ -32,10 +32,16 @@ every docs build from the ORAS metadata layer each image publishes
 to GHCR, so it reflects the bytes actually on disk rather than
 hand-curated prose that can drift.
 
-`ubuntu-aidev` is the first variant with two deployment targets from
-one bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2 rootfs
-`.tar.gz` consumable by `wsl --import`. The WSL artefact is published
-to a sibling GHCR repo named `<variant>-wsl`.
+Variant names follow `<distro>-<version>-<flavor>`, e.g.
+`debian-13-sysdev`, `ubuntu-2604-aidev`, `freebsd-15-sysdev`. The
+version-in-the-name is what lets multiple kernel / user-land releases
+of the same distro coexist when their use cases call for it (see
+"Why these distros" below).
+
+`ubuntu-2604-aidev` is the first variant with two deployment targets
+from one bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2
+rootfs `.tar.gz` consumable by `wsl --import`. The WSL artefact is
+published to a sibling GHCR repo named `<variant>-wsl`.
 
 Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
 scaffold (bake + identity + baseline packages + kernel source, no
@@ -43,32 +49,36 @@ provision chain yet).
 
 ### Why these distros
 
-Three Linux distros are in nosi for three distinct positions on the
-recency / stability / hardware-vendor-support spectrum.
+Each distro has a specific use case it covers; the version pinning is
+what makes the use cases stay sharp instead of blurring as upstream
+moves.
 
-**Ubuntu** is the default Linux base. Not because it's particularly
-loved, but because it's the distribution with the fewest *footnotes*
-when checking HW-vendor support pages. AMD ROCm publishes
-`amdgpu-install` and the ROCm stack against Ubuntu LTS first.
-NVIDIA's CUDA + DOCA + NOKM apt repos target Ubuntu LTS. Mellanox
-MLNX_OFED qualifies against Ubuntu LTS. Pick anything else and every
-vendor's "supported on Ubuntu A.B; for other distros, please …" line
-becomes a personal problem. That's why the GPU-stack variants
-(`ubuntu-aidev`, the post-flash cudadev / rocmdev workflows under
-`cijoe/workflows/`) are Ubuntu-only.
+**Ubuntu 24.04 LTS (noble)** is for hardware. NVIDIA CUDA + NOKM +
+DOCA, AMD ROCm + amdgpu-install, and Mellanox MLNX_OFED for ConnectX
+NICs / BlueField DPUs all publish first-class apt repos against
+Ubuntu 24.04 LTS specifically. The post-flash workflows in
+`cijoe/workflows/` (`setup_cudadev.yaml`, `setup_rocmdev.yaml`) pin
+to this base for exactly that reason. If your machine has a GPU, a
+ConnectX, or a BlueField in it, this is the variant.
 
-**Debian** is the conservative end. Stable but stale: even the latest
-stable can be a bit behind on package versions. Good baseline for
-sysdev work that doesn't lean on HW-vendor stacks. The personally-
-preferred distro of the nosi author, kept as a first-class variant
-because plenty of operators feel the same way and the trade against
-Ubuntu is principled rather than reluctant.
+**Ubuntu 26.04 LTS (resolute)** is for a more recent kernel and
+user-land while staying on Ubuntu. The price you pay versus 24.04 is
+vendor stacks haven't qualified against it yet, so cudadev /
+rocmdev / DOCA paths are not in scope here. Otherwise it's the
+recency-leaning Ubuntu sysdev / aidev option.
 
-**Fedora** is the recent end. Less stable than Debian's stable but
-ships much newer package versions; an early signal for what the next
-LTS round looks like. Also second-class for HW-vendor stacks (CUDA /
-ROCm publish for RHEL / EL with a lag and don't cover Fedora
-mainline), so it's not where the GPU-target variants live.
+**Debian 13 (trixie)** is for nicer user-land choices and stability.
+Debian's package selection, sane defaults, and lower rate of
+surprising upstream re-architectures make it the preferred general-
+purpose sysdev base when HW-vendor stacks aren't load-bearing. It's
+also the personally-preferred distro of the nosi author.
+
+**Fedora 44** is for an alternative from the RHEL family. Operators
+who live in Red-Hat-shaped environments (dnf, SELinux defaults, the
+RHEL/EL package universe) get a first-class nosi variant that
+matches their world rather than being pushed onto a Debian-flavored
+base. Also a useful early signal for upstream-stable trajectories
+that eventually land in RHEL.
 
 ## Build pipeline
 
@@ -85,7 +95,7 @@ user-data file under `nosi-media/auxiliary/`. A
 5. Compact the baked qcow2 and gzip-publish it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
 6. For variants that declare a `[publish_wsl]` block (today: just
-   `ubuntu-aidev`), `wsl_rootfs_publish` derives a WSL2 rootfs tarball
+   `ubuntu-2604-aidev`), `wsl_rootfs_publish` derives a WSL2 rootfs tarball
    from the same bake: attach the qcow2 via `qemu-nbd`, mount the
    detected ext4 rootfs partition, chroot in to apt-purge the
    kernel/grub/firmware/cloud-init/netplan/NM plumbing, `tar` the

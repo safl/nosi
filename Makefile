@@ -1,4 +1,4 @@
-VARIANT ?= debian-sysdev
+VARIANT ?= debian-13-sysdev
 
 .DEFAULT_GOAL := help
 
@@ -20,13 +20,14 @@ help:
 	@echo "  docs-serve        Live-rebuild on http://localhost:8000"
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
-	@echo "Variants:"
-	@echo "  debian-sysdev       Debian 13 trixie"
-	@echo "  ubuntu-sysdev       Ubuntu 26.04 resolute"
-	@echo "  fedora-sysdev       Fedora 44"
-	@echo "  ubuntu-aidev        Ubuntu 26.04 + NVIDIA + agentic CLIs"
+	@echo "Variants (<distro>-<version>-<flavor>):"
+	@echo "  debian-13-sysdev    Debian 13 trixie"
+	@echo "  ubuntu-2604-sysdev  Ubuntu 26.04 resolute"
+	@echo "  ubuntu-2604-aidev   Ubuntu 26.04 resolute + agentic CLIs"
 	@echo "                      (additionally publishes a WSL .tar.gz)"
-	@echo "  freebsd-sysdev      FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
+	@echo "  fedora-44-sysdev    Fedora 44"
+	@echo "  freebsd-14-sysdev   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
+	@echo "  freebsd-15-sysdev   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
@@ -45,11 +46,12 @@ build:
 	cd cijoe && cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
 
 all:
-	$(MAKE) build VARIANT=debian-sysdev
-	$(MAKE) build VARIANT=ubuntu-sysdev
-	$(MAKE) build VARIANT=fedora-sysdev
-	$(MAKE) build VARIANT=ubuntu-aidev
-	$(MAKE) build VARIANT=freebsd-sysdev
+	$(MAKE) build VARIANT=debian-13-sysdev
+	$(MAKE) build VARIANT=ubuntu-2604-sysdev
+	$(MAKE) build VARIANT=ubuntu-2604-aidev
+	$(MAKE) build VARIANT=fedora-44-sysdev
+	$(MAKE) build VARIANT=freebsd-14-sysdev
+	$(MAKE) build VARIANT=freebsd-15-sysdev
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive

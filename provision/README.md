@@ -41,14 +41,16 @@ broken step (transient pip / curl flake, missing pkg in a new distro
 release) no longer silently skips every step after it, and the bake log
 shows exactly which steps need attention.
 
-## Flavors
+## Variants
 
-| flavor          | distro    | adds over sysdev       |
-|-----------------|-----------|------------------------|
-| `debian-sysdev` | Debian 13 | --                     |
-| `ubuntu-sysdev` | Ubuntu LTS| --                     |
-| `fedora-sysdev` | Fedora    | --                     |
-| `ubuntu-aidev`  | Ubuntu LTS| Node, agentic CLIs, JetBrainsMono Nerd Font, WSL config |
+| variant               | base                 | adds over sysdev       |
+|-----------------------|----------------------|------------------------|
+| `debian-13-sysdev`    | Debian 13 trixie     | --                     |
+| `ubuntu-2604-sysdev`  | Ubuntu 26.04 resolute| --                     |
+| `ubuntu-2604-aidev`   | Ubuntu 26.04 resolute| Node, agentic CLIs, JetBrainsMono Nerd Font, WSL config |
+| `fedora-44-sysdev`    | Fedora 44            | --                     |
+| `freebsd-14-sysdev`   | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| `freebsd-15-sysdev`   | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
 
 ## Use from a flashed nosi image
 
@@ -58,7 +60,7 @@ picks up upstream-latest of every binary in step 20 + Python tools in
 step 22, which is how operators stay current without re-flashing:
 
 ```
-sudo /opt/nosi/provision/apply.sh debian-sysdev
+sudo /opt/nosi/provision/apply.sh debian-13-sysdev
 ```
 
 ## Use on a fresh Hetzner VM (or any clean cloud VM)
@@ -68,7 +70,7 @@ installed by someone else. The script clones the repo, then dispatches:
 
 ```
 git clone https://github.com/safl/nosi /opt/nosi
-sudo /opt/nosi/provision/apply.sh <flavor>
+sudo /opt/nosi/provision/apply.sh <variant>
 ```
 
 Steps with kernel-side effects (r8125 DKMS, IOMMU cmdline) take effect

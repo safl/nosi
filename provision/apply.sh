@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# nosi/provision/apply.sh <flavor>
+# nosi/provision/apply.sh <variant>
 #
-# Run every provision step for <flavor> in order. Flavors:
+# Run every provision step for <variant> in order. The variant is
+# `<distro>-<version>-<flavor>`, e.g.:
 #
-#   debian-sysdev   sysdev on Debian (apt)
-#   ubuntu-sysdev   sysdev on Ubuntu (apt)
-#   ubuntu-aidev    aidev on Ubuntu (apt; superset of ubuntu-sysdev + AI CLIs)
-#   fedora-sysdev   sysdev on Fedora (dnf)
+#   debian-13-sysdev    sysdev on Debian 13 (apt)
+#   ubuntu-2604-sysdev  sysdev on Ubuntu 26.04 (apt)
+#   ubuntu-2604-aidev   aidev on Ubuntu 26.04 (apt; sysdev superset + AI CLIs)
+#   fedora-44-sysdev    sysdev on Fedora 44 (dnf)
+#
+# Flavor is parsed from the suffix (-sysdev / -aidev); the rest is
+# informational (lib/common.sh detects the live distro/pkgmgr from
+# /etc/os-release, so version-in-name doesn't gate any step).
 #
 # Each step is independently idempotent, so apply.sh is also idempotent:
 # re-running on the same system does nothing the second time. Steps that
@@ -37,23 +42,23 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # fails, and the image is refused regardless of which step actually
 # died. Nothing seeps through.
 
-FLAVOR="${1:-}"
-[ -n "$FLAVOR" ] || nosi_die "usage: $0 <flavor>   (debian-sysdev | ubuntu-sysdev | ubuntu-aidev | fedora-sysdev)"
+VARIANT="${1:-}"
+[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-sysdev | ubuntu-2604-sysdev | ubuntu-2604-aidev | fedora-44-sysdev)"
 
-case "$FLAVOR" in
-debian-sysdev|ubuntu-sysdev|fedora-sysdev)
-    export NOSI_FLAVOR=sysdev
-    ;;
-ubuntu-aidev)
-    export NOSI_FLAVOR=aidev
-    ;;
-*)
-    nosi_die "unknown flavor: $FLAVOR"
-    ;;
+# Flavor is the trailing -sysdev / -aidev segment. Distro + version are
+# carried in the variant name but not enforced here: lib/common.sh derives
+# the live NOSI_DISTRO / NOSI_PKGMGR from /etc/os-release, so an
+# operator-side `apply.sh ubuntu-2604-sysdev` on a different-version
+# Ubuntu box still works -- the variant string is identity / catalog
+# metadata, not a runtime selector.
+case "$VARIANT" in
+*-sysdev) export NOSI_FLAVOR=sysdev ;;
+*-aidev)  export NOSI_FLAVOR=aidev ;;
+*)        nosi_die "variant must end in -sysdev or -aidev: $VARIANT" ;;
 esac
 
-# Full flavor string (e.g. "ubuntu-sysdev") for identity-aware steps.
-export NOSI_VARIANT="$FLAVOR"
+# Full variant string (e.g. "ubuntu-2604-sysdev") for identity-aware steps.
+export NOSI_VARIANT="$VARIANT"
 
 # Steps the flavor wants, in order. As more steps are extracted from
 # the inline cloud-init blocks they get appended here. Each entry is a
@@ -94,7 +99,7 @@ STEPS=(
     99-motd
 )
 
-nosi_info "apply start: flavor=$FLAVOR variant=$NOSI_VARIANT distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
+nosi_info "apply start: variant=$NOSI_VARIANT flavor=$NOSI_FLAVOR distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
 
 for s in "${STEPS[@]}"; do
     script="$HERE/steps/${s}.sh"
@@ -109,4 +114,4 @@ done
 # file is useful for forensics (Hetzner-VM re-runs overwrite it).
 install -d -m 0755 /etc/nosi
 date -u +%Y-%m-%dT%H:%M:%SZ > /etc/nosi/apply-ok
-nosi_info "apply complete: $FLAVOR (sentinel: /etc/nosi/apply-ok)"
+nosi_info "apply complete: $VARIANT (sentinel: /etc/nosi/apply-ok)"

@@ -1,0 +1,179 @@
+#cloud-config
+# nosi base : FreeBSD 14.4-RELEASE. Default credentials: operator account
+# `odus` with password `odus.321`, root locked, SSH password auth on.
+# Per-instance SSH identity: host keys stripped at end of init,
+# regenerated on first boot.
+#
+# Phase 1 scaffold. No apply.sh provision chain yet -- the four Linux
+# variants migrated to provision/steps/*.sh over the course of nosi
+# 2026-05, and porting that to FreeBSD is its own audit (pkg vs
+# apt/dnf, rc.d vs systemd, kld vs DKMS, loader.conf vs grub, vfio vs
+# vmm, /proc/cmdline vs kenv ...). This template gives us a working
+# FreeBSD .img.gz with the right identity story so we can layer in
+# steps incrementally.
+#
+# Important: FreeBSD's BASIC-CLOUDINIT image runs *nuageinit*, the
+# FreeBSD-native cloud-init-compatible re-implementation, not the
+# Python cloud-init. nuageinit speaks a SUBSET of the user-data
+# spec: users, ssh_authorized_keys, hashed_passwd, packages, runcmd,
+# hostname all work; `power_state:`, `final_message:`, `growpart:`,
+# `manage_etc_hosts:` do NOT. Hence the explicit `poweroff` at the end
+# of runcmd (no power_state module) and the absence of those keys.
+
+hostname: nosi-freebsd
+
+ssh_pwauth: true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1000. `wheel` is FreeBSD's sudo group. The `freebsd`
+# user from the base cloud image is left in place for now (Phase 2 may
+# `pw userdel freebsd` once nuageinit's coverage is mapped out;
+# nuageinit may not run a bootcmd that does that cleanly).
+users:
+  - name: odus
+    uid: 1000
+    gecos: nosi operator
+    shell: /bin/sh
+    groups: [wheel, operator]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
+# Phase 1 package set: the "easy" ones that map cleanly to FreeBSD pkg
+# names without per-distro thrash. Mirrors the Linux baseline minus
+# anything Linux-specific (systemd-*, network-manager, *-microcode,
+# linux-firmware). The deeper layers (upstream-release tools via
+# step 20, pipx CLIs via step 22, ports-only specialties) wait for
+# Phase 2 when the provision/steps/*.sh chain is audited for FreeBSD.
+packages:
+  # system basics
+  - bash
+  - bash-completion
+  - ca_root_nss
+  - curl
+  - git
+  - sudo
+  - wget
+  - unzip
+  # build / dev
+  - ccache               # transparent compiler cache; wraps gcc/clang
+  - cmake                # ubiquitous C/C++ build orchestrator
+  - cppcheck             # standalone C/C++ static analyzer
+  - gmake                # gnu make; FreeBSD's `make` is bsdmake
+  - meson
+  - ninja
+  - pkgconf
+  - python3
+  # Compilers + lldb are in the FreeBSD base system, not a pkg (clang
+  # has been the system C/C++ compiler since FreeBSD 10). The helix
+  # `lldb-dap` binary used for DAP debugging ships with base lldb.
+  # baseline tools (per user-memory: must be pre-installed)
+  - btop
+  - helix                # binary is /usr/local/bin/hx
+  - zellij
+  # productivity / shell quality of life
+  - direnv
+  - fd-find
+  - fzf
+  - gh                   # github CLI
+  - git-delta
+  - htop
+  - jq
+  - ripgrep
+
+# nuageinit doesn't honour cloud-init's write_files: directive in the
+# shape our renderer emits (used by the Linux variants to drop the
+# provision tree + /opt/nosi/.nosi-version). FreeBSD instead relies on
+# the renderer's inline __NOSI_VERSION__ substitution -- the marker
+# below in runcmd gets replaced with the actual rolling tag at bake
+# time, no write_files needed.
+
+runcmd:
+  # Reclaim uid 1000 for odus. nuageinit's users module runs before
+  # runcmd and silently ignored our `uid: 1000` because the BASIC-
+  # CLOUDINIT image's `freebsd` user already owned 1000 -- odus came
+  # out at uid 1001. Delete the freebsd user, then `pw usermod -u 1000`
+  # to align with the Linux variants' UID convention (and the
+  # WSL/Linux-standard "first interactive user owns 1000" assumption
+  # baked into wsl-distribution.conf etc.).
+  - pw userdel -r freebsd 2>/dev/null || true
+  - pw usermod odus -u 1000
+  - chown -R 1000:1000 /home/odus
+
+  # Lock root so the only login channel is odus (matches Linux variants).
+  - pw lock root
+
+  # Strip per-instance identity so first boot of the flashed image
+  # regenerates it (host keys via sshd's first-boot keygen path,
+  # hostid via /etc/rc.d/hostid).
+  - rm -f /etc/ssh/ssh_host_*
+  - rm -f /etc/hostid
+
+  # Kernel + world source for sysdev work: buildkernel, out-of-tree
+  # modules, sys/ headers. Pattern borrowed from xNVMe's FreeBSD bootimg
+  # workflow (github.com/xnvme/xnvme/blob/main/cijoe/workflows/bootimg-
+  # freebsd-14-amd64.yaml). src.txz is the canonical FreeBSD source
+  # distribution for the running release (~250 MB compressed, extracts
+  # to /usr/src at ~1.5 GB). nuageinit's runcmd PATH is sane enough
+  # that `fetch` and `tar` resolve.
+  - fetch -o /tmp/src.txz https://download.freebsd.org/releases/amd64/14.4-RELEASE/src.txz
+  - tar -C / -xpf /tmp/src.txz
+  - rm -f /tmp/src.txz
+
+  # Strip /usr/lib/debug to recover ~200 MB. nosi sysdev operators
+  # build their own kernels and don't generally need the prebuilt
+  # debug symbols for the cloud image's kernel.
+  - rm -rf /usr/lib/debug
+
+  # Light cleanup; pkg cache is the main thing worth dropping.
+  - pkg clean -aqy
+
+  # Emit /etc/nosi-metadata.json so the smoketest scp's it out for the
+  # ORAS catalog layer, same shape as step 98-metadata produces on the
+  # Linux variants. apply.sh doesn't run on FreeBSD Phase 1, hence
+  # inline. Pulls the rolling-tag from /opt/nosi/.nosi-version which
+  # the cijoe renderer writes at bake time. Absolute path to jq because
+  # nuageinit's runcmd PATH does not include /usr/local/bin. No stub /
+  # graceful-degrade fallback -- if jq isn't there or fails, the bake
+  # fails. The smoketest's metadata-parse assertion catches any silent
+  # truncation too.
+  - |
+    set -e
+    /usr/local/bin/jq -n \
+        --arg version "__NOSI_VERSION__" \
+        --arg flavor sysdev \
+        --arg variant freebsd-14-sysdev \
+        --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg pretty "FreeBSD 14.4-RELEASE" \
+        --arg krel "$(uname -r)" \
+        --arg kver "$(uname -v)" \
+        --arg arch "$(uname -m)" \
+        '{
+            nosi: {version: $version, flavor: $flavor, variant: $variant, built: $built},
+            distro: {id: "freebsd", version_id: "14.4", pretty_name: $pretty},
+            kernel: {release: $krel, version: $kver},
+            architecture: $arch,
+            operator: {
+                username: "odus", uid: 1000,
+                default_password: "odus.321",
+                default_password_state: "active (no force-rotate)",
+                root_locked: true
+            }
+        }' > /etc/nosi-metadata.json
+    chmod 0644 /etc/nosi-metadata.json
+
+  # Wipe nuageinit's state cache before we power off. nuageinit caches
+  # the compiled runcmd script at /var/cache/nuageinit/runcmds and will
+  # replay it on EVERY subsequent boot if left in place -- the first
+  # bake attempt's smoketest VM caught that the hard way (poweroff
+  # re-ran during smoketest boot, sshd never came up, timeout). Clearing
+  # the cache means a fresh boot picks up whatever new seed it finds
+  # (smoketest VM gets its own SSH key seed; operator-flashed first boot
+  # gets no seed and nuageinit exits cleanly).
+  - rm -rf /var/cache/nuageinit
+
+  # nuageinit doesn't implement cloud-init's power_state module; an
+  # explicit poweroff is how we hand control back to cijoe so the bake
+  # completes. Must be the last entry: nuageinit runs runcmds serially
+  # and anything after this won't execute.
+  - poweroff

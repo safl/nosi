@@ -3,9 +3,9 @@
 ## Build a variant locally
 
 ```
-make deps                           # install cijoe via pipx
-make build VARIANT=debian-sysdev    # build a single variant
-make all                            # build every variant
+make deps                              # install cijoe via pipx
+make build VARIANT=debian-13-sysdev    # build a single variant
+make all                               # build every variant
 ```
 
 The cijoe pipeline downloads the upstream cloud image, resizes it, runs
@@ -34,7 +34,7 @@ For machines with the headroom for the compressed `.img.gz` plus
 whatever `gunzip` needs:
 
 ```bash
-VARIANT='debian-sysdev'
+VARIANT='debian-13-sysdev'
 
 # pull the latest of any variant into the current dir
 # (lands as nosi-<variant>-x86_64.img.gz + sidecars)
@@ -54,7 +54,7 @@ to the target. Nothing hits the filesystem between GHCR and the
 device's first sector:
 
 ```bash
-VARIANT='debian-sysdev'
+VARIANT='debian-13-sysdev'
 REPO="ghcr.io/safl/nosi/${VARIANT}"
 
 # Resolve the .img.gz blob's content-addressed digest from the manifest.
@@ -76,9 +76,9 @@ blob digest exactly because the digest is the only truly stable name.
 `oras repo tags ghcr.io/safl/nosi/<variant>` enumerates the rolling
 tags for a variant. See [](release.md) for the rolling-release model.
 
-## Import a WSL2 rootfs (`ubuntu-aidev` only)
+## Import a WSL2 rootfs (`ubuntu-2604-aidev` only)
 
-`ubuntu-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
+`ubuntu-2604-aidev` additionally publishes a WSL2 rootfs tarball to a sibling
 GHCR repo (`<variant>-wsl`).
 
 With [`oras`](https://oras.land) on Windows -- install via `winget`
@@ -94,8 +94,8 @@ winget install -e --id ORASProject.ORAS
 too if you prefer those.
 
 ```powershell
-oras pull "ghcr.io/safl/nosi/ubuntu-aidev-wsl:latest"
-wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-aidev-wsl.tar.gz
+oras pull "ghcr.io/safl/nosi/ubuntu-2604-aidev-wsl:latest"
+wsl --import nosi-aidev "$env:USERPROFILE\WSL\nosi-aidev" nosi-ubuntu-2604-aidev-wsl.tar.gz
 wsl -d nosi-aidev
 ```
 

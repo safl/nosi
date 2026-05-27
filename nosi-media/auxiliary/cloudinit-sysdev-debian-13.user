@@ -196,9 +196,9 @@ runcmd:
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
   # Each step under provision/steps/ is independently idempotent and
   # cross-distro where it makes sense. Same apply.sh runs on a vanilla
-  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh debian-sysdev`) to
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh debian-13-sysdev`) to
   # reach this image's parity.
-  - /opt/nosi/provision/apply.sh debian-sysdev
+  - /opt/nosi/provision/apply.sh debian-13-sysdev
 
   # odus itself is created by the top-level `users:` block (hashed_passwd
   # written straight to /etc/shadow). All that's left here is locking root
@@ -251,7 +251,7 @@ runcmd:
   - apt-get clean
   - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
 
-final_message: "nosi debian-sysdev baked in $UPTIME seconds; powering off"
+final_message: "nosi debian-13-sysdev baked in $UPTIME seconds; powering off"
 
 power_state:
   mode: poweroff
