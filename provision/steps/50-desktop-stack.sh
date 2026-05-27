@@ -127,7 +127,7 @@ focus_follows_mouse no
 exec nm-applet --indicator
 exec waybar
 exec mako
-exec /usr/libexec/polkit-gnome-authentication-agent-1
+exec lxpolkit
 exec wl-paste --watch cliphist store
 # swayidle: lock after 5 min, screen off after 10, suspend after 15.
 exec swayidle -w \

@@ -134,11 +134,12 @@ packages:
   - swayidle
   - swaybg
   # Wayland portals: xdg-desktop-portal-wlr handles screencast / file
-  # picker for wlroots-based compositors (Sway is wlroots). polkit-gnome
-  # is the GTK polkit auth agent -- compositor-agnostic, runs fine under
-  # Sway via an `exec` in the Sway config.
+  # picker for wlroots-based compositors (Sway is wlroots). lxpolkit is
+  # a tiny compositor-agnostic PolicyKit auth agent (the GTK
+  # `polkit-gnome` package doesn't exist on Fedora; lxpolkit is the
+  # equivalent shipped in mainline).
   - xdg-desktop-portal-wlr
-  - polkit-gnome
+  - lxpolkit
   # wlroots-shared desktop bits: terminal, bar, launcher, notifications,
   # clipboard, screenshots. All compositor-agnostic Wayland tools.
   - foot
