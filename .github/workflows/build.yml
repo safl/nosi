@@ -203,44 +203,62 @@ jobs:
           meta_json="nosi-${IMG}-x86_64.metadata.json"
           meta_md="nosi-${IMG}-x86_64.metadata.md"
 
-          # OCI manifest annotations sourced from the smoketest-extracted
-          # metadata. Visible via `oras manifest fetch` without pulling any
-          # layer -- the "tell me what this image is" path. Well-known
-          # org.opencontainers.image.* keys plus dev.nosi.* for variant
-          # / flavor / distro since those are nosi-specific concepts.
-          jq -r . "${meta_json}" >/dev/null   # sanity-parse before annotating
-          variant=$(jq -r '.nosi.variant // empty' "${meta_json}")
-          flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
-          distro=$(jq -r '.distro.id // empty' "${meta_json}")
-          distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
-          distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
-          kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
-          built=$(jq -r '.nosi.built // empty' "${meta_json}")
-          arch=$(jq -r '.architecture // empty' "${meta_json}")
+          # Metadata layers + annotations are gated on the metadata.json
+          # actually existing. Variants that don't run apply.sh (today:
+          # freebsd-sysdev Phase 1) skip step 98 and never produce one;
+          # the smoketest's scp-out is best-effort and logs a warning
+          # rather than failing. So check for the file here and either
+          # include the metadata-derived bits or fall back to a minimal
+          # annotation set sourced from the workflow env alone.
+          annotations=(
+              --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64"
+              --annotation "org.opencontainers.image.version=${ROLLING}"
+              --annotation "org.opencontainers.image.revision=${SHA}"
+              --annotation "org.opencontainers.image.source=https://github.com/${REPO}"
+              --annotation "org.opencontainers.image.url=https://github.com/${REPO}"
+              --annotation "org.opencontainers.image.os=linux"
+              --annotation "dev.nosi.variant=${IMG}"
+          )
+          layers=(
+              "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip"
+              "${gz}.sha256:text/plain"
+              "${report}:application/vnd.nosi.build-report.v1+zip"
+              "${report}.sha256:text/plain"
+          )
+          if [ -r "${meta_json}" ] && jq -e . "${meta_json}" >/dev/null 2>&1; then
+              # OCI manifest annotations sourced from the smoketest-
+              # extracted metadata. Visible via `oras manifest fetch`
+              # without pulling any layer -- the "tell me what this image
+              # is" path.
+              flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
+              distro=$(jq -r '.distro.id // empty' "${meta_json}")
+              distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
+              distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
+              kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
+              built=$(jq -r '.nosi.built // empty' "${meta_json}")
+              arch=$(jq -r '.architecture // empty' "${meta_json}")
+              annotations+=(
+                  --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} image for DPDK / SPDK / xNVMe / uPCIe development"
+                  --annotation "org.opencontainers.image.created=${built}"
+                  --annotation "org.opencontainers.image.architecture=${arch}"
+                  --annotation "dev.nosi.flavor=${flavor}"
+                  --annotation "dev.nosi.distro=${distro}"
+                  --annotation "dev.nosi.distro-version=${distro_version}"
+                  --annotation "dev.nosi.kernel-release=${kernel_release}"
+              )
+              layers+=(
+                  "${meta_json}:application/vnd.nosi.metadata.v1+json"
+                  "${meta_md}:text/markdown"
+              )
+          else
+              echo "::warning::No metadata.json for ${IMG}; pushing with reduced annotation set."
+          fi
 
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.nosi.disk-image.v1+gzip \
-              --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64" \
-              --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} image for DPDK / SPDK / xNVMe / uPCIe development" \
-              --annotation "org.opencontainers.image.version=${ROLLING}" \
-              --annotation "org.opencontainers.image.created=${built}" \
-              --annotation "org.opencontainers.image.revision=${SHA}" \
-              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.architecture=${arch}" \
-              --annotation "org.opencontainers.image.os=linux" \
-              --annotation "dev.nosi.variant=${variant}" \
-              --annotation "dev.nosi.flavor=${flavor}" \
-              --annotation "dev.nosi.distro=${distro}" \
-              --annotation "dev.nosi.distro-version=${distro_version}" \
-              --annotation "dev.nosi.kernel-release=${kernel_release}" \
-              "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip" \
-              "${gz}.sha256:text/plain" \
-              "${report}:application/vnd.nosi.build-report.v1+zip" \
-              "${report}.sha256:text/plain" \
-              "${meta_json}:application/vnd.nosi.metadata.v1+json" \
-              "${meta_md}:text/markdown"
+              "${annotations[@]}" \
+              "${layers[@]}"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Push ${{ matrix.variant }} WSL rootfs to GHCR

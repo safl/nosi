@@ -81,6 +81,15 @@ packages:
   - jq
   - ripgrep
 
+# nosi cijoe renderer expands this marker into write_files: entries for
+# /opt/nosi/provision/*.sh (apply.sh + lib + steps) AND /opt/nosi/.nosi-
+# version capturing the build identity. FreeBSD Phase 1 doesn't run
+# apply.sh, so the .sh files just sit on disk (~100 KB, inert), but the
+# .nosi-version file is the source of truth our inline metadata writer
+# pulls the rolling-tag from.
+write_files:
+  # __NOSI_PROVISION_FILES__
+
 runcmd:
   # Reclaim uid 1000 for odus. nuageinit's users module runs before
   # runcmd and silently ignored our `uid: 1000` because the BASIC-
@@ -120,6 +129,36 @@ runcmd:
 
   # Light cleanup; pkg cache is the main thing worth dropping.
   - pkg clean -aqy
+
+  # Emit /etc/nosi-metadata.json so the smoketest scp's it out for the
+  # ORAS catalog layer, same shape as step 98-metadata produces on the
+  # Linux variants. apply.sh doesn't run on FreeBSD Phase 1, hence
+  # inline. Pulls the rolling-tag from /opt/nosi/.nosi-version which
+  # the cijoe renderer writes at bake time.
+  - |
+    NV=$(cat /opt/nosi/.nosi-version 2>/dev/null || echo unknown)
+    jq -n \
+        --arg version "$NV" \
+        --arg flavor sysdev \
+        --arg variant freebsd-sysdev \
+        --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg pretty "FreeBSD 14.4-RELEASE" \
+        --arg krel "$(uname -r)" \
+        --arg kver "$(uname -v)" \
+        --arg arch "$(uname -m)" \
+        '{
+            nosi: {version: $version, flavor: $flavor, variant: $variant, built: $built},
+            distro: {id: "freebsd", version_id: "14.4", pretty_name: $pretty},
+            kernel: {release: $krel, version: $kver},
+            architecture: $arch,
+            operator: {
+                username: "odus", uid: 1000,
+                default_password: "odus.321",
+                default_password_state: "active (no force-rotate)",
+                root_locked: true
+            }
+        }' > /etc/nosi-metadata.json
+    chmod 0644 /etc/nosi-metadata.json
 
   # Wipe nuageinit's state cache before we power off. nuageinit caches
   # the compiled runcmd script at /var/cache/nuageinit/runcmds and will
