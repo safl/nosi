@@ -491,6 +491,26 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
                 out or f"exit {rc}",
             ),
         )
+        # Baseline pkg tools landed. /usr/local/bin/ is FreeBSD's pkg
+        # install prefix and is on every user's default PATH. `helix`
+        # ships as `hx`. Combined into one assertion -- a single
+        # missing tool fails the whole check and surfaces what's
+        # missing in the detail field.
+        # Check binary names, NOT package names: ripgrep's binary is
+        # `rg`, helix's is `hx`. Same lesson as the claude-code/claude
+        # mix-up on aidev.
+        check(
+            "baseline tools (git, hx, zellij, btop, meson, ninja, rg) on PATH",
+            "for t in git hx zellij btop meson ninja rg jq fzf direnv; do "
+            "command -v \"$t\" >/dev/null || { echo \"missing $t\"; exit 1; }; "
+            "done && echo ok",
+            lambda rc, out: (out == "ok", out or f"exit {rc}"),
+        )
+        check(
+            "/usr/src kernel source tree present (sysdev essential)",
+            "test -f /usr/src/sys/conf/kern.pre.mk && test -d /usr/src/sys/dev && echo ok",
+            lambda rc, out: (out == "ok", out or f"exit {rc}"),
+        )
         return results
 
     # ---- apply.sh completed end-to-end -----------------------------------
