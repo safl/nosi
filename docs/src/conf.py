@@ -26,5 +26,11 @@ templates_path = ["_templates"]
 exclude_patterns: list[str] = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
-html_title = "nosi -- Niche Operating System Images"
+# Furo renders html_logo in the sidebar header where html_title would
+# otherwise sit. Leaving html_title empty suppresses the redundant
+# "nosi -- Niche Operating System Images" wordmark there, since the
+# logo already includes the "nosi" wordmark and the index.md H1 carries
+# the long-form name on the landing page.
+html_title = ""
+html_logo = "_static/nosi.png"
 html_static_path = ["_static"]
