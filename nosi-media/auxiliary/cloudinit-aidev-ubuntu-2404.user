@@ -161,16 +161,11 @@ packages:
   - qemu-system-x86
   - qemu-utils
   # --- aidev additions ---------------------------------------------------
-  # Node for the agentic CLIs (npm-globally installed in runcmd below).
-  # Ubuntu 24.04 noble ships Node 18.x in universe -- 18 reached upstream
-  # EOL in 2025-04, but the agentic CLIs we install (claude-code, codex,
-  # gemini-cli, opencode) still install + run on it as of nosi 2026-05.
-  # Step 41-npm-globals will fail loud if any CLI's published minimum
-  # bumps past 18; the fix at that point is a NodeSource setup_22.x
-  # script in this runcmd (preferred over backports / nvm). Tracked as
-  # a known-fragile point of the 2404 base.
-  - nodejs
-  - npm
+  # nodejs + npm are NOT listed here for noble: the universe nodejs is
+  # 18.x (upstream EOL 2025-04), and the agentic CLIs in step
+  # 41-npm-globals (claude-code, codex, gemini-cli, opencode) reject
+  # Node 18 with engines.node constraints. Node 22 LTS comes from the
+  # NodeSource apt repo set up in runcmd below, before apply.sh runs.
   # Mellanox user space: distro-shipped RDMA stack. Enough for ibverbs apps
   # and basic InfiniBand/RoCE bring-up; MLNX_OFED proper is opt-in via the
   # DOCA repo (operator can add it post-flash if they need kernel-tied
@@ -194,6 +189,18 @@ write_files:
   # __NOSI_PROVISION_FILES__
 
 runcmd:
+
+  # Node 22 LTS via NodeSource. Has to happen before apply.sh runs
+  # step 41-npm-globals: noble's universe nodejs is 18.x (upstream EOL
+  # 2025-04) which the agentic CLIs refuse to install on. setup_22.x
+  # writes /etc/apt/sources.list.d/nodesource.list + the signing key,
+  # then `apt-get install nodejs` pulls Node 22 + npm 10. set -e here
+  # so a NodeSource fetch failure aborts cloud-init immediately rather
+  # than letting apply.sh limp into step 41 against a missing nodejs.
+  - |
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
 
   # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
   # nosi-motd renderer + service, nosi-firstboot-inventory + service.
