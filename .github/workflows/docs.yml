@@ -1,7 +1,16 @@
 name: Docs
 
 on:
-  push:
+  # Docs are downstream of build-images: catalog.py pulls each variant's
+  # ORAS manifest and renders the use-case description + tool inventory
+  # from the just-published artefacts. Triggering on workflow_run after
+  # build-images completes guarantees the docs always reflect the latest
+  # push -- the previous push-in-parallel trigger had a race where the
+  # docs job could finish before build-images' oras push step, leaving
+  # the catalog rendered against the prior :latest.
+  workflow_run:
+    workflows: ["build-images"]
+    types: [completed]
     branches: [main]
   pull_request:
   workflow_dispatch:
@@ -14,6 +23,15 @@ jobs:
   build:
     name: Build docs
     runs-on: ubuntu-24.04
+    # For workflow_run triggers, only run when the upstream workflow
+    # actually succeeded. workflow_run fires on every conclusion
+    # (success/failure/cancelled), but a docs build against a failed
+    # image build would surface stale catalog rows + look like the docs
+    # broke. Skip if upstream failed; the next successful build will
+    # refresh the catalog.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v5
 
@@ -37,9 +55,11 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Set up oras
-        # The docs build pulls /etc/nosi-metadata.json from each
-        # published image's ORAS manifest to render the catalog page;
-        # oras is required on the runner's PATH for that.
+        # The docs build pulls each variant's ORAS manifest to render the
+        # catalog page: org.opencontainers.image.description annotation
+        # for the use-case prose, application/vnd.nosi.metadata.v1+json
+        # layer for the tool / package inventory. oras is required on
+        # the runner's PATH for both.
         uses: oras-project/setup-oras@v1
 
       - name: Build HTML
@@ -66,7 +86,14 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Deploy only when this docs build was triggered by a successful
+    # build-images run on main. Excludes pull_request builds (no deploy
+    # for PRs) and workflow_dispatch builds (manual dispatches stay as
+    # artefacts only -- if you want them on Pages, push to main).
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     needs: build
     runs-on: ubuntu-24.04
     permissions:
