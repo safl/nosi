@@ -85,13 +85,20 @@ packages:
   - just                 # task runner (sister to make-as-task-runner)
   - meson
   - ninja-build
+  - parallel             # GNU parallel
   - ripgrep
   - ShellCheck           # bash linter; sysdev's substitute for the
                          # Node-based bash-language-server (aidev only)
+  - stress-ng            # CPU / memory stress for thermals + bench
+  - sysstat              # iostat / sar / mpstat
+  - time                 # GNU time (verbose vs the bash builtin)
   - unzip                # yazi ships as a zip in its releases
   - libicu               # ICU runtime for marksman (.NET-based markdown LSP);
                          # without it dotnet aborts with "Couldn't find a valid
                          # ICU package" and step 20 fails fast on marksman
+  - kernel-devel         # DKMS / out-of-tree modules (Fedora's analog
+                         # to Debian/Ubuntu's linux-headers-*)
+  - perf                 # Linux perf events tooling
   - bind-utils
   - curl
   - jq

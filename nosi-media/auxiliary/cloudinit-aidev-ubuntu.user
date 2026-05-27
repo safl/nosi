@@ -93,7 +93,14 @@ packages:
   - just                 # task runner (sister to make-as-task-runner)
   - meson
   - ninja-build
+  - parallel             # GNU parallel
   - ripgrep
+  - stress-ng            # CPU / memory stress for thermals + bench
+  - sysstat              # iostat / sar / mpstat
+  - time                 # GNU time (verbose vs the bash builtin)
+  - linux-headers-generic # DKMS needs the running kernel's headers
+  - linux-tools-generic  # perf + bpftool
+  - linux-tools-common
   - shellcheck           # bash linter; complements bash-language-server below
   - unzip                # yazi ships as a zip in its releases
   - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);

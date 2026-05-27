@@ -65,6 +65,7 @@ STEPS=(
     05-nosi-release
     10-r8125-dkms
     12-gdb-dashboard
+    15-nouveau-blacklist
     20-upstream-tools
     21-shell-tools
     22-python-tools

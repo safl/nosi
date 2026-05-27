@@ -89,13 +89,21 @@ packages:
   - just                 # task runner (sister to make-as-task-runner)
   - meson
   - ninja-build
+  - parallel             # GNU parallel
   - ripgrep
   - shellcheck           # bash linter; sysdev's substitute for the
                          # Node-based bash-language-server (aidev only)
+  - stress-ng            # CPU / memory stress for thermals + bench
+  - sysstat              # iostat / sar / mpstat
+  - time                 # GNU time (verbose vs the bash builtin)
   - unzip                # yazi ships as a zip in its releases
   - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
                          # without it dotnet aborts with "Couldn't find a valid
                          # ICU package" and step 20 fails fast on marksman
+  - linux-headers-generic # DKMS needs the running kernel's headers (r8125,
+                         # and any cudadev/rocmdev workflow run on top)
+  - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
+  - linux-tools-common   # shared man pages + helpers for the -generic tool set
   - curl
   - dnsutils
   - jq
