@@ -1,6 +1,6 @@
 ---
 doc: |
-  Set up the NVIDIA software stack on a freshly-flashed nosi-ubuntu-2404-aidev
+  Set up the NVIDIA software stack on a freshly-flashed nosi-ubuntu-2404-sysdev
   box (Ubuntu 24.04 noble, GA 6.8 kernel).
 
   Direct port of xnvme/aisio/tasks/setup_nvstack.yaml, adjusted for nosi's
@@ -10,8 +10,8 @@ doc: |
 
   Prerequisites:
 
-    * Target running nosi-ubuntu-2404-aidev (Ubuntu 24.04 noble,
-      kernel 6.8 GA; HWE must NOT be installed).
+    * Target running nosi-ubuntu-2404-sysdev or nosi-ubuntu-2404-aidev
+      (Ubuntu 24.04 noble, kernel 6.8 GA; HWE must NOT be installed).
     * SSH key authorized on odus@<target>:
         ssh-copy-id odus@<target>
     * cijoe configured with workflows/configs/my-transport.toml pointing

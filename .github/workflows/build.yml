@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-sysdev, ubuntu-2404-aidev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, freebsd-14-sysdev, freebsd-15-sysdev]
+        variant: [debian-13-sysdev, ubuntu-2404-sysdev, ubuntu-2404-aidev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, freebsd-14-sysdev, freebsd-15-sysdev]
 
     steps:
       - uses: actions/checkout@v5
@@ -229,8 +229,11 @@ jobs:
           debian-13-sysdev)
               variant_desc="Debian 13 (trixie) sysdev. The nicer user-land choices and stability; general-purpose sysdev base when HW-vendor stacks aren't load-bearing."
               ;;
+          ubuntu-2404-sysdev)
+              variant_desc="Ubuntu 24.04 LTS (noble) sysdev. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              ;;
           ubuntu-2404-aidev)
-              variant_desc="Ubuntu 24.04 LTS (noble) aidev (sysdev superset + agentic AI CLIs + WSL2 rootfs target). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              variant_desc="Ubuntu 24.04 LTS (noble) aidev (sysdev superset + agentic AI CLIs). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
               ;;
           ubuntu-2604-sysdev)
               variant_desc="Ubuntu 26.04 LTS (resolute) sysdev. For a more recent kernel and user-land packages on Ubuntu LTS."
