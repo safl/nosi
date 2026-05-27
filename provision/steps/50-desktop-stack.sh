@@ -190,6 +190,85 @@ bindsym --locked XF86AudioPrev         exec playerctl previous
 
 # Floating drag/resize with Super + mouse
 floating_modifier $mod normal
+
+# Cheatsheet: $mod+F1 pops up the keybinding reference in a foot+less
+# window (~/.config/sway/cheatsheet.md). Helix-style "what binds do I
+# have again?" without having to re-read the config.
+bindsym $mod+F1 exec foot --title cheatsheet -e less ~/.config/sway/cheatsheet.md
+EOF
+
+# ---- Sway cheatsheet -----------------------------------------------
+# Plain markdown -- less doesn't render the syntax but the # / ** /
+# tables read fine as text. Keep in sync with the bindings above; the
+# binding-to-doc drift cost is real but the alternative (parsing the
+# live sway config) is more code than the table itself.
+cat > /etc/skel/.config/sway/cheatsheet.md <<'EOF'
+# nosi Sway cheatsheet
+
+Press `q` to close this window.
+
+`Mod` = `Super` (the Windows / command key).
+
+## Windows
+
+| Combo            | Action                          |
+|------------------|---------------------------------|
+| Mod + Return     | Open terminal (foot)            |
+| Mod + Space      | App launcher (fuzzel)           |
+| Mod + Q          | Close focused window            |
+| Mod + V          | Toggle floating                 |
+| Mod + F          | Toggle fullscreen               |
+| Mod + Arrows     | Move focus                      |
+| Mod + drag       | Move floating window with mouse |
+| Mod + Shift + E  | Exit sway (logs you out)        |
+
+## Workspaces
+
+| Combo                | Action                       |
+|----------------------|------------------------------|
+| Mod + 1..9           | Switch to workspace N        |
+| Mod + Shift + 1..9   | Move focused window to N     |
+
+## Screen
+
+| Combo            | Action                              |
+|------------------|-------------------------------------|
+| Mod + L          | Lock screen (swaylock)              |
+| Print            | Screenshot whole screen -> clipboard|
+| Shift + Print    | Screenshot region -> clipboard      |
+
+## Hardware keys
+
+| Combo                  | Action                       |
+|------------------------|------------------------------|
+| XF86MonBrightnessUp/Down | Brightness +/- 10%        |
+| XF86AudioRaise/LowerVolume | Volume +/- 5%           |
+| XF86AudioMute / MicMute  | Toggle sink / source mute |
+| XF86AudioPlay/Next/Prev  | MPRIS (playerctl)         |
+
+## Help
+
+| Combo            | Action                       |
+|------------------|------------------------------|
+| Mod + F1         | Show this cheatsheet         |
+
+## Waybar interactions
+
+| Bar element       | Click             | Right-click           | Scroll        |
+|-------------------|-------------------|-----------------------|---------------|
+| Workspace number  | Switch to it      |                       |               |
+| Audio (volume)    | Toggle mute       | Open pavucontrol      | +/- 5%        |
+| Network           | Open nmtui (foot) | Open nm-connection-editor |           |
+| Power profile     | Cycle profile     |                       |               |
+| Idle inhibitor    | Toggle inhibit    |                       |               |
+| Clock             | Toggle format     | Mode (calendar nav)   | Shift months  |
+
+## After a re-bake
+
+Edit `~/.config/sway/config` to add bindings; this cheatsheet does
+NOT auto-update. The next nosi re-bake leaves your live config alone
+but refreshes `/etc/skel/.config/sway/`, so the canonical reference is
+the one shipped at `/etc/skel/.config/sway/cheatsheet.md`.
 EOF
 
 # ---- swaylock config -----------------------------------------------
@@ -537,6 +616,8 @@ chmod -R u=rwX,go=rX /etc/skel/.config
 # files across an apply.sh re-run.
 if id -u odus >/dev/null 2>&1; then
     install -d -m 0700 -o odus -g odus /home/odus/.config
+    # The `sway` entry below also pulls cheatsheet.md (it lives
+    # under /etc/skel/.config/sway/ alongside the sway config).
     for sub in sway swaylock waybar foot fuzzel mako; do
         if [ ! -d /home/odus/.config/$sub ]; then
             cp -r /etc/skel/.config/$sub /home/odus/.config/
