@@ -103,9 +103,19 @@ ram_kib="$(awk '"'"'/MemTotal:/ {print $2}'"'"' /proc/meminfo)"
 ram_gib=$(( ram_kib / 1024 / 1024 ))
 nvme_count="$(find /dev -maxdepth 1 -name '"'"'nvme*n*'"'"' 2>/dev/null | wc -l)"
 
+# Default-password warning. Touched by step 29 when odus is still on the
+# baked default. Operator removes it after rotating (or step 29 clears
+# it on a re-run if the hash changed). Single ANSI yellow line so the
+# warning stands out from the rest of the banner.
+default_pw_warning=""
+if [ -f /etc/nosi/default-password-active ]; then
+    default_pw_warning="$(printf "\033[33m  !! odus is on the baked default password 'odus.321' -- rotate with: sudo passwd odus\033[0m\n")"
+fi
+
 cat <<EOM
 
   nosi ${flavor} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
+${default_pw_warning}
 
   hostname:  ${host}
   ip:        ${ips}

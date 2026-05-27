@@ -119,18 +119,26 @@ wsl -d nosi-aidev -u odus
 
 ## Password rotation
 
-Step 29 marks the baked `odus.321` as expired:
+The default `odus.321` ships **active** so a freshly flashed image is
+ready for any consumer immediately: ssh password auth, ssh key auth,
+sftp / scp, non-TTY automation. CI jobs that flash and run against the
+image do not have to negotiate a PAM password-change challenge.
 
-* `chage -d 0 odus` makes `login(1)` and `sshd-via-PAM` force a change
-  before granting a shell. Works for any SSH client that connects with
-  a TTY (`ssh -t odus@host`); non-TTY connections fail closed until
-  the password is rotated.
-* `/etc/profile.d/nosi-rotate-password.sh` covers WSL2, where the
-  session bypasses login + PAM. Inert outside WSL.
+Step 29 only *marks* the system, it doesn't *force* anything:
 
-Skip is detected by comparing `/etc/shadow`'s hash to the baked one,
-so re-running `apply.sh` on a system whose operator has already
-rotated does not touch the password.
+* `/etc/nosi/default-password-active` is touched while `odus`'s hash
+  matches the baked default. Step 99-motd reads it and prints a
+  prominent yellow warning at every interactive login until the
+  operator rotates. `passwd odus` is enough; the next `apply.sh`
+  re-run detects the new hash and removes the marker (or do it by
+  hand: `sudo rm /etc/nosi/default-password-active`).
+* `/etc/profile.d/nosi-rotate-password.sh` *offers* (does not force)
+  a `passwd` prompt on the first interactive WSL shell. Gated on TTY
+  so `wsl exec`-style automation never sees it; inert outside WSL.
+
+Operators who do want the old "force rotate on first SSH login"
+behaviour can `sudo chage -d 0 odus` post-flash; nosi has stopped
+imposing it by default.
 
 ## Personalization
 

@@ -30,8 +30,10 @@ bootcmd:
 # later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
 # salt is fixed so identical bakes produce identical /etc/shadow.
 # `- default` is intentionally absent; the base image's default user is
-# gone (bootcmd). Root is locked in runcmd below. provision step 29
-# expires the password so the first interactive login forces a change.
+# gone (bootcmd). Root is locked in runcmd below. The default password
+# stays active out of the box so CI jobs can flash and ssh straight in;
+# step 29 just marks the system as on the default and the motd warns at
+# every interactive login until the operator rotates with `passwd odus`.
 # Operators who want a personal identity rename odus rather than create
 # a second account (see provision/README.md).
 users:

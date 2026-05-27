@@ -214,20 +214,17 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     (workdir / "meta-data").write_text(
         f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n"
     )
-    # Authorise the per-run key on odus and disarm step 29's chage so PAM
-    # does not block key auth with "Password change required but no TTY
-    # available". -d <today> is the load-bearing one (clears sp_lstchg=0
-    # so the account is not in "must change" state); -E/-M/-W also turn
-    # off future expiry policy. No power_state -- the VM stays up for
-    # the assertion run.
+    # Authorise the per-run key on odus. Step 29 no longer forces a
+    # password rotation (it only marks the system as on the default and
+    # offers an interactive prompt on WSL), so PAM doesn't block key
+    # auth on a non-TTY session anymore -- no chage workaround needed.
+    # No power_state -- the VM stays up for the assertion run.
     (workdir / "user-data").write_text(
         "#cloud-config\n"
         "users:\n"
         "  - name: odus\n"
         "    ssh_authorized_keys:\n"
         f"      - {pubkey}\n"
-        "runcmd:\n"
-        "  - chage -d $(date -u +%Y-%m-%d) -E -1 -M -1 -W -1 odus\n"
     )
     seed = workdir / "smoketest-seed.iso"
     subprocess.run(

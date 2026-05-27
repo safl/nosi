@@ -1,32 +1,34 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/29-rotate-password.sh
 #
-# Force the baked default password to expire so the first interactive
-# login has to set a fresh one. Belt and suspenders, because the two
-# login paths nosi cares about treat password aging differently:
+# Mark the system as running with the baked default odus password and
+# offer (NOT force) a rotation on first interactive WSL shell. The
+# previous iteration ran `chage -d 0 odus` to force PAM to demand a
+# rotation on first SSH login -- great for security on a bare-metal
+# flash, terrible for the CI use case where a job flashes the image
+# and immediately tries to ssh in with `odus:odus.321` or a baked key:
+# PAM's account-management phase rejects the session with "password
+# change required, no TTY available" and the job dies with no shell.
 #
-#   * login(1) + sshd-via-PAM (bare metal, Hetzner VM, anywhere SSH
-#     password auth is on): `chage -d 0 odus` makes /etc/shadow's
-#     last-change column zero, which PAM reads as "expired"; PAM's
-#     chauthtok exchange then runs before the shell is granted. A
-#     non-TTY connection (sftp, scp) fails closed, which is the
-#     intended behaviour: rotate first, automate second.
-#   * WSL2: `wsl -d <name>` spawns bash directly as the configured
-#     default user without going through login(1) or PAM auth, so
-#     password aging is never consulted. The /etc/profile.d snippet
-#     below covers that gap by detecting the marker file and running
-#     `passwd` from the interactive shell itself. Gated on /proc/version
-#     containing microsoft so the snippet is inert on the flashable
-#     bare-metal target (where chage already handles it).
+# New behaviour:
 #
-# Skip when re-running on a system that has already rotated: comparing
-# /etc/shadow's hash to the known baked default tells us whether odus
-# is still on `odus.321`. A Hetzner-VM operator's existing password
-# does not get clobbered.
+#   * No `chage -d 0`. The default password just works. SSH password
+#     auth, SSH key auth, sftp / scp, non-TTY sessions all succeed.
+#   * /etc/nosi/default-password-active gets touched so consumers can
+#     tell the system is on the baked credential. The motd renderer
+#     (step 99) keys off this file to print a prominent "rotate the
+#     default password" warning at every interactive login until the
+#     operator rotates and removes the marker.
+#   * The WSL profile.d snippet still offers an interactive `passwd`
+#     prompt on first non-root interactive shell. It is gated on TTY,
+#     so a `wsl exec` style automated invocation never sees it.
+#
+# Operators who want the old force-rotate behaviour can run
+# `sudo chage -d 0 odus` manually post-flash.
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
-nosi_info "step 29-rotate-password"
+nosi_info "step 29-rotate-password (mark default, do not force)"
 nosi_require_root
 
 # Hashed_passwd as written by the flavor templates' users: block.
@@ -38,27 +40,28 @@ if ! getent passwd odus >/dev/null 2>&1; then
 fi
 
 current_hash=$(getent shadow odus 2>/dev/null | cut -d: -f2)
+install -d -m 0755 /etc/nosi
+
 if [ "$current_hash" != "$DEFAULT_HASH" ]; then
-    nosi_info "odus password already rotated; skipping"
-    # Also clear the marker if a previous run left it behind.
+    # Operator has already rotated; clear the marker if a previous run
+    # left it behind so the motd warning stops nagging.
+    nosi_info "odus password already rotated; clearing default-password marker"
     rm -f /etc/nosi/default-password-active
-    exit 0
+else
+    nosi_info "odus password is still the baked default; touching marker"
+    touch /etc/nosi/default-password-active
 fi
 
-# Mark the password expired so login(1) + sshd-via-PAM force a change.
-chage -d 0 odus
-
-# Drop the marker file the profile.d snippet keys off.
-install -d -m 0755 /etc/nosi
-touch /etc/nosi/default-password-active
-
-# Profile.d snippet for the WSL path. Inert outside WSL (login already
-# handles it via chage above).
+# Profile.d snippet: interactive-only `passwd` offer on WSL where there
+# is no login(1) and PAM never runs. Skipped silently for non-TTY shells
+# (i.e. `wsl exec`-style automation) so CI is not interrupted. Inert
+# outside WSL (the bare-metal / Hetzner path lands on login(1) +
+# PAM-aware shells where the warning in motd is sufficient).
 nosi_write_if_changed \
 '# Managed by nosi/provision/steps/29-rotate-password.sh
-# WSL bypasses login(1) so password expiry never gates the session.
-# Prompt for `passwd` on the first interactive shell when the marker
-# file is present.
+# WSL bypasses login(1) entirely. Offer (not force) a passwd rotation
+# the first interactive shell sees the marker. Skipped on non-TTY
+# shells so `wsl exec` style automation is not interrupted.
 
 if [ -z "$PS1" ] || [ "$(id -u)" -eq 0 ] || [ ! -f /etc/nosi/default-password-active ]; then
     :
@@ -67,14 +70,14 @@ elif ! grep -qi microsoft /proc/version 2>/dev/null; then
 elif [ ! -t 0 ] || [ ! -t 1 ]; then
     :
 else
-    printf "\n\033[33m=== nosi: rotate the default odus password ===\033[0m\n"
+    printf "\n\033[33m=== nosi: optionally rotate the default odus password ===\033[0m\n"
     printf "You are running with the baked default (odus.321).\n"
-    printf "Set a new password now:\n\n"
+    printf "Set a new password now (or press Ctrl-D to skip and be reminded next login):\n\n"
     if passwd; then
         sudo rm -f /etc/nosi/default-password-active
         printf "\n\033[32m  password rotated; this prompt will not appear again\033[0m\n\n"
     else
-        printf "\n\033[31m  rotation declined; you will be prompted again on next login\033[0m\n\n"
+        printf "\n\033[33m  skipped; the motd warning stays until you rotate\033[0m\n\n"
     fi
 fi
 ' /etc/profile.d/nosi-rotate-password.sh 0644

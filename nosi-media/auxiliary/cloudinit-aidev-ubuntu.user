@@ -41,9 +41,12 @@ bootcmd:
 # `- default` is intentionally absent (bootcmd above removes the base
 # `ubuntu` user). render+video on top of sysdev's sudo+kvm so odus can
 # drive a GPU /dev/dri device without sudo once the operator installs a
-# vendor stack. Root is locked in runcmd below. provision step 29
-# expires the password so the first interactive login forces a change;
-# the WSL tarball path is covered by the same step's profile.d snippet.
+# vendor stack. Root is locked in runcmd below. The default password
+# stays active out of the box so CI jobs can flash and ssh straight in;
+# step 29 just marks the system as on the default and the motd warns at
+# every interactive login until the operator rotates with `passwd odus`.
+# On WSL, step 29 also offers an interactive `passwd` prompt on the
+# first non-root TTY shell (silent for `wsl exec`-style automation).
 # Operators who want a personal identity rename odus rather than create
 # a second account (see provision/README.md).
 users:
