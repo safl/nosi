@@ -18,6 +18,7 @@ dependencies = [
 nosi-docs-serve = "nosi_docs.cli:serve"
 nosi-docs-build-html = "nosi_docs.cli:build_html"
 nosi-docs-build-pdf = "nosi_docs.cli:build_pdf"
+nosi-docs-fetch-catalog = "nosi_docs.catalog:cli"
 
 [build-system]
 requires = ["hatchling"]

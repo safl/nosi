@@ -24,40 +24,19 @@ required.
 
 ## Scope
 
-Two flavors today:
+Two flavors today: **`sysdev`** (C / Python / Rust systems work on bare
+metal, headless-server-friendly) and **`aidev`** (`sysdev` superset with
+Node and a curated set of agentic-AI CLIs, additionally published as a
+WSL2 rootfs `.tar.gz`). A **`freebsd-sysdev`** scaffold landed in
+2026-05 (Phase 1: bake + identity + baseline packages + kernel source,
+no provision chain yet).
 
-- **`sysdev`** -- C / Python / Rust systems work on bare metal. Tight
-  package set with no Node runtime; headless-server-friendly. Built-in
-  toolchains and editors (`clang`, `gcc`, `rustup` + `rust-analyzer`,
-  `uv`, `helix`, `zellij`), shell flair (`rg`, `fd`, `fzf`, `lazygit`,
-  `yazi`, `git-delta` wired as the system-wide git pager, `direnv`,
-  `just`, `gh`, `shellcheck`, `oras` + `jq` for pulling nosi's own
-  images from GHCR), LSPs that round out helix coverage (`clangd`,
-  `rust-analyzer`, `ruff`, `pyright`, `taplo`, `marksman`),
-  hardware/storage inspection (`dmidecode`, `lshw`, `nvme-cli`,
-  `pciutils`, `smartmontools`, `usbutils`), container stack (`podman`,
-  `buildah`, `skopeo`, `podman-docker`), local QEMU (`qemu-system-x86`,
-  `ovmf`), user space PCI plumbing (`vfio-pci`, `uio_pci_generic`, IOMMU
-  helpers) for DPDK/SPDK and xNVMe/uPCIe workflows.
-- **`aidev`** -- `sysdev` superset, plus Node and a curated set of
-  agentic-AI CLIs (`claude`, `codex`, `gemini`, `opencode`, `pi`),
-  Node-based LSPs (`bash-language-server`, `yaml-language-server`),
-  distro RDMA user space, and the JetBrainsMono Nerd Font. Ships as both
-  a flashable `.img.gz` and a WSL2 rootfs `.tar.gz` derived from the
-  same bake; the WSL tarball goes to a sibling GHCR repo named
-  `<variant>-wsl`.
-
-See [`docs/src/flavors.md`](docs/src/flavors.md) for the deep dive
-(rationale per tool, system-wide config touchpoints, login banner).
-
-### Variants
-
-| Variant          | Distribution | Version    | Codename  | Arch    | Flavor   |
-| ---------------- | ------------ | ---------- | --------- | ------- | -------- |
-| `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
-| `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
-| `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
-| `ubuntu-aidev`   | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | aidev    |
+For the up-to-date list of variants, baked tool versions, default
+credentials, pull/flash recipes, and full package inventories see the
+**[catalog](https://safl.github.io/nosi/_generated/catalog.html)**. The
+catalog is regenerated on every docs build from the ORAS metadata layer
+each image publishes to GHCR, so it reflects the bytes actually on
+disk rather than hand-curated prose that can drift.
 
 ## Quick start
 

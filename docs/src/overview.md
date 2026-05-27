@@ -25,19 +25,21 @@ Two flavors ship today: `sysdev` (C / Python / Rust systems work) and
 
 ## Variants
 
-| Variant          | Distribution | Version    | Codename  | Arch    | Flavor   |
-| ---------------- | ------------ | ---------- | --------- | ------- | -------- |
-| `debian-sysdev`  | Debian       | 13         | trixie    | x86_64  | sysdev   |
-| `ubuntu-sysdev`  | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | sysdev   |
-| `fedora-sysdev`  | Fedora       | 44         |           | x86_64  | sysdev   |
-| `ubuntu-aidev`   | Ubuntu       | 26.04 LTS  | resolute  | x86_64  | aidev    |
+The currently-published variants, their distros, baked tool versions,
+default credentials, and pull/flash recipes live in the
+[catalog](_generated/catalog.md). The catalog page is regenerated on
+every docs build from the ORAS metadata layer each image publishes
+to GHCR, so it reflects the bytes actually on disk rather than
+hand-curated prose that can drift.
 
-`ubuntu-aidev` is the first variant with two deployment targets from one
-bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2 rootfs
-`.tar.gz` consumable by `wsl --import`. The WSL artifact is published to
-a sibling GHCR repo named `<variant>-wsl`. See [](#aidev).
+`ubuntu-aidev` is the first variant with two deployment targets from
+one bake: the standard flashable `.img.gz` (`x86_64`) and a WSL2 rootfs
+`.tar.gz` consumable by `wsl --import`. The WSL artefact is published
+to a sibling GHCR repo named `<variant>-wsl`.
 
-FreeBSD and Windows variants are planned.
+Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
+scaffold (bake + identity + baseline packages + kernel source, no
+provision chain yet).
 
 ## Build pipeline
 

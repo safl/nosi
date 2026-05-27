@@ -36,6 +36,12 @@ jobs:
           pipx ensurepath
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Set up oras
+        # The docs build pulls /etc/nosi-metadata.json from each
+        # published image's ORAS manifest to render the catalog page;
+        # oras is required on the runner's PATH for that.
+        uses: oras-project/setup-oras@v1
+
       - name: Build HTML
         working-directory: docs
         run: nosi-docs-build-html

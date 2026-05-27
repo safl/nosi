@@ -24,9 +24,9 @@ quickstart
 
 ```{toctree}
 :maxdepth: 2
-:caption: Flavors
+:caption: Catalog
 
-flavors
+_generated/catalog
 ```
 
 ```{toctree}

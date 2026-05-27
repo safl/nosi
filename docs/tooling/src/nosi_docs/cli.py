@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
+
+from . import catalog as _catalog
 
 
 def _docs_root() -> Path:
@@ -25,8 +28,21 @@ def _docs_root() -> Path:
     )
 
 
+def _refresh_catalog(root: Path) -> None:
+    """Pull current image metadata from GHCR and render the catalog page.
+
+    Called automatically before every html/pdf build so the catalog
+    reflects the latest published images. Non-fatal: a network failure
+    or missing oras CLI leaves the previous _generated/catalog.md in
+    place (or renders a placeholder for variants that fail to fetch).
+    """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    _catalog.fetch_and_render(root)
+
+
 def build_html() -> None:
     root = _docs_root()
+    _refresh_catalog(root)
     src = root / "src"
     out = root / "_build" / "html"
     subprocess.run(
@@ -37,6 +53,7 @@ def build_html() -> None:
 
 def build_pdf() -> None:
     root = _docs_root()
+    _refresh_catalog(root)
     src = root / "src"
     latex_out = root / "_build" / "latex"
     subprocess.run(
@@ -48,6 +65,7 @@ def build_pdf() -> None:
 
 def serve() -> None:
     root = _docs_root()
+    _refresh_catalog(root)
     src = root / "src"
     out = root / "_build" / "html"
     subprocess.run(
