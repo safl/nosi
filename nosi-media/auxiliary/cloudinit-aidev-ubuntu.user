@@ -93,6 +93,9 @@ packages:
   - ripgrep
   - shellcheck           # bash linter; complements bash-language-server below
   - unzip                # yazi ships as a zip in its releases
+  - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
+                         # without it dotnet aborts with "Couldn't find a valid
+                         # ICU package" and step 20 fails fast on marksman
   - fontconfig           # fc-cache for the JetBrainsMono Nerd Font install
   - curl
   - dnsutils

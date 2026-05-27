@@ -103,6 +103,9 @@ packages:
   - shellcheck           # bash linter; sysdev's substitute for the
                          # Node-based bash-language-server (aidev only)
   - unzip                # yazi ships as a zip in its releases
+  - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
+                         # without it dotnet aborts with "Couldn't find a valid
+                         # ICU package" and step 20 fails fast on marksman
   # network & debug
   - curl
   - dnsutils
