@@ -167,12 +167,16 @@ packages:
   - pavucontrol
   # Laptop bits: brightness control, bluetooth stack, MPRIS player
   # control for media-key binds, power profiles daemon (Fedora default;
-  # ships balanced / performance / power-saver via dbus).
+  # ships balanced / performance / power-saver via dbus). network-
+  # manager-applet provides nm-applet (tray icon, runs in Sway via
+  # exec in the sway config) and nm-connection-editor (GTK wifi/VPN
+  # config, wired to right-click on waybar's network module).
   - brightnessctl
   - bluez
   - bluez-tools
   - power-profiles-daemon
   - playerctl
+  - network-manager-applet
   # Fonts: Noto covers most scripts + emoji. JetBrainsMono Nerd Font
   # is not packaged on Fedora 44 mainline (the upstream Nerd Fonts
   # release is the canonical source); step 50-desktop-stack pulls the

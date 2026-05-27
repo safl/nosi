@@ -88,8 +88,17 @@ set $term foot
 set $menu fuzzel
 set $lockcmd swaylock
 
-# Output: autodetect; sway handles hotplug
-output * bg #151515 solid_color
+# Output: autodetect; sway handles hotplug. Wallpaper is a calm
+# solid color out of the Catppuccin Mocha base palette; operators
+# swap in their own with `output * bg /path/to/file.png fill` or
+# `output * bg #<hex> solid_color` from the sway config.
+output * bg #1e1e2e solid_color
+
+# Stock sway can't round window corners (that's a swayfx feature, not
+# in F44 mainline). Foot terminal carries its own alpha (~0.90, see
+# foot.ini) so it's translucent over the wallpaper / other windows.
+# Waybar IS rounded (border-radius in style.css); the per-window
+# rounding is the bit operators trade up to swayfx for.
 
 # Input
 input * {
@@ -98,12 +107,22 @@ input * {
     tap enabled
 }
 
-# Gaps + borders
-gaps inner 4
-gaps outer 8
+# Gaps + borders -- i3-gaps style: roomier than the default, smart_*
+# variants drop the gap when only one window is on screen so a single
+# foot fills the workspace edge-to-edge.
+gaps inner 8
+gaps outer 16
+smart_borders on
+smart_gaps on
 default_border pixel 2
+default_floating_border pixel 2
+titlebar_padding 0
+
+# Focus follows the click, not the mouse motion.
+focus_follows_mouse no
 
 # Autostart
+exec nm-applet --indicator
 exec waybar
 exec mako
 exec /usr/libexec/polkit-gnome-authentication-agent-1
@@ -187,88 +206,276 @@ EOF
 install -d -m 0755 /etc/skel/.config/waybar
 cat > /etc/skel/.config/waybar/config <<'EOF'
 {
-    "layer":   "top",
+    "layer":    "top",
     "position": "top",
-    "height":   28,
-    "spacing":  8,
-    "modules-left":   ["sway/workspaces", "sway/window"],
+    "height":   30,
+    "spacing":  6,
+    "margin-top":    6,
+    "margin-left":   12,
+    "margin-right":  12,
+    "modules-left":   ["sway/workspaces", "sway/mode", "sway/window"],
     "modules-center": ["clock"],
-    "modules-right":  ["pulseaudio", "network", "battery", "tray"],
+    "modules-right":  [
+        "idle_inhibitor",
+        "custom/power-profile",
+        "pulseaudio",
+        "network",
+        "battery",
+        "tray"
+    ],
 
     "sway/workspaces": {
-        "format":   "{name}",
-        "on-click": "activate"
+        "format":            "{name}",
+        "disable-scroll":    false,
+        "all-outputs":       true,
+        "on-click":          "activate"
+    },
+    "sway/mode": {
+        "format": "<span style=\"italic\">{}</span>"
     },
     "sway/window": {
-        "max-length": 60
+        "max-length": 60,
+        "tooltip":    false
     },
-    "clock": {
-        "format":         "{:%a %d %b %H:%M}",
-        "tooltip-format": "<big>{:%Y-%m-%d %H:%M:%S}</big>"
+
+    "idle_inhibitor": {
+        "format": "{icon}",
+        "format-icons": {
+            "activated":   "",
+            "deactivated": ""
+        },
+        "tooltip-format-activated":   "idle inhibit ON  (presentation mode)",
+        "tooltip-format-deactivated": "idle inhibit OFF (normal idle/lock/suspend)"
     },
+
+    "custom/power-profile": {
+        "format":      "{} {icon}",
+        "exec":        "powerprofilesctl get",
+        "exec-on-event": true,
+        "return-type": "",
+        "interval":    10,
+        "format-icons": {
+            "performance": "",
+            "balanced":    "",
+            "power-saver": ""
+        },
+        "on-click": "powerprofilesctl set $(powerprofilesctl get | awk '/performance/{print \"power-saver\"; exit} /power-saver/{print \"balanced\"; exit} /balanced/{print \"performance\"; exit}')",
+        "tooltip-format": "power-profiles-daemon\nclick to cycle: balanced -> performance -> power-saver"
+    },
+
     "pulseaudio": {
-        "format":       "{volume}% {icon}",
-        "format-muted": "muted",
-        "format-icons": {"default": ["", "", ""]},
-        "on-click":     "pavucontrol"
+        "format":              "{volume}% {icon}",
+        "format-bluetooth":    "{volume}% {icon}",
+        "format-muted":        "muted ",
+        "format-source":       "{volume}% ",
+        "format-source-muted": " ",
+        "format-icons": {
+            "headphone":  "",
+            "hands-free": "",
+            "headset":    "",
+            "phone":      "",
+            "portable":   "",
+            "car":        "",
+            "default":    ["", "", ""]
+        },
+        "scroll-step":     5,
+        "on-click":        "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "on-click-right":  "pavucontrol",
+        "tooltip-format":  "{desc}  -  {volume}%"
     },
+
     "network": {
-        "format-wifi":         "{essid} {signalStrength}%",
-        "format-ethernet":     "eth",
-        "format-disconnected": "off",
-        "tooltip-format":      "{ifname}: {ipaddr}/{cidr}"
+        "format-wifi":         "{essid} {signalStrength}% ",
+        "format-ethernet":     "{ipaddr} ",
+        "format-disconnected": "offline ",
+        "tooltip-format-wifi":     "{ifname} via {gwaddr}\n{ipaddr}/{cidr}\n{essid} ({signalStrength}%)",
+        "tooltip-format-ethernet": "{ifname} via {gwaddr}\n{ipaddr}/{cidr}",
+        "tooltip-format-disconnected": "no active network",
+        "on-click":       "foot --title nmtui nmtui",
+        "on-click-right": "nm-connection-editor"
     },
+
     "battery": {
-        "format":       "{capacity}% {icon}",
-        "format-icons": ["", "", "", "", ""],
         "states": {
+            "good":     90,
             "warning":  30,
             "critical": 15
+        },
+        "format":          "{capacity}% {icon}",
+        "format-charging": "{capacity}% ",
+        "format-plugged":  "{capacity}% ",
+        "format-alt":      "{time} {icon}",
+        "format-icons":    ["", "", "", "", ""],
+        "tooltip-format":  "{timeTo}, {power}W"
+    },
+
+    "clock": {
+        "format":         "{:%a %d %b  %H:%M}",
+        "format-alt":     "{:%Y-%m-%d %H:%M:%S}",
+        "tooltip-format": "<tt><big>{calendar}</big></tt>",
+        "calendar": {
+            "mode":           "year",
+            "mode-mon-col":   3,
+            "weeks-pos":      "right",
+            "on-scroll":      1,
+            "format": {
+                "months":     "<span color='#cba6f7'><b>{}</b></span>",
+                "days":       "<span color='#c8c8c8'><b>{}</b></span>",
+                "weeks":      "<span color='#7f849c'><b>W{}</b></span>",
+                "weekdays":   "<span color='#89b4fa'><b>{}</b></span>",
+                "today":      "<span color='#f38ba8'><b><u>{}</u></b></span>"
+            }
+        },
+        "actions": {
+            "on-click-right": "mode",
+            "on-scroll-up":   "shift_up",
+            "on-scroll-down": "shift_down"
         }
     },
+
     "tray": {
-        "spacing": 8
+        "icon-size": 18,
+        "spacing":   10
     }
 }
 EOF
 
 cat > /etc/skel/.config/waybar/style.css <<'EOF'
+/* Catppuccin Mocha-ish palette, kept minimal so the bar looks calm
+   against most wallpapers. */
+
 * {
-    font-family: "JetBrainsMono Nerd Font", monospace;
-    font-size:   12px;
+    font-family: "JetBrainsMono Nerd Font", "Symbols Nerd Font", monospace;
+    font-size:   13px;
+    font-weight: 500;
     border:      none;
     border-radius: 0;
     min-height:  0;
+    padding:     0;
+    margin:      0;
 }
 
 window#waybar {
-    background-color: rgba(15, 15, 15, 0.9);
-    color:            #c8c8c8;
+    background-color: rgba(24, 24, 37, 0.88);   /* base */
+    color:            #cdd6f4;                  /* text */
+    border-radius:    14px;
+    border:           1px solid rgba(180, 190, 254, 0.10);
 }
 
+#workspaces {
+    margin: 0 4px;
+}
 #workspaces button {
-    padding:    0 6px;
-    color:      #707070;
+    padding:    2px 12px;
+    margin:     4px 2px;
+    color:      #6c7086;
     background: transparent;
+    border-radius: 12px;
+    transition: background 120ms ease, color 120ms ease;
 }
-
+#workspaces button:hover {
+    background: rgba(180, 190, 254, 0.10);
+    color:      #cdd6f4;
+    box-shadow: none;
+}
+#workspaces button.focused,
 #workspaces button.active {
-    color:      #ffffff;
-    background: #2a2a2a;
+    color:      #1e1e2e;
+    background: #b4befe;                        /* lavender */
+}
+#workspaces button.urgent {
+    color:      #1e1e2e;
+    background: #f38ba8;                        /* red */
 }
 
-#clock, #pulseaudio, #network, #battery, #tray, #window {
-    padding: 0 8px;
+#window {
+    padding: 0 12px;
+    color:   #a6adc8;                           /* subtext0 */
+    font-weight: 400;
 }
 
-#battery.warning  { color: #f0c674; }
-#battery.critical { color: #cc6666; }
+#mode {
+    padding: 0 12px;
+    color:   #1e1e2e;
+    background: #fab387;                        /* peach */
+    border-radius: 12px;
+    margin:  4px 4px;
+}
+
+#clock {
+    padding: 0 14px;
+    color:   #cdd6f4;
+    font-weight: 600;
+}
+
+#idle_inhibitor,
+#custom-power-profile,
+#pulseaudio,
+#network,
+#battery,
+#tray {
+    padding: 2px 12px;
+    margin:  4px 2px;
+    border-radius: 12px;
+    background: rgba(49, 50, 68, 0.55);          /* surface0 */
+    color:      #cdd6f4;
+}
+
+#idle_inhibitor.activated         { color: #fab387; background: rgba(250, 179, 135, 0.18); }
+#custom-power-profile             { color: #94e2d5; }                  /* teal */
+#pulseaudio.muted                 { color: #6c7086; }
+#network.disconnected             { color: #f38ba8; }
+#battery.charging,
+#battery.plugged                  { color: #a6e3a1; }                  /* green */
+#battery.warning:not(.charging)   { color: #fab387; }
+#battery.critical:not(.charging)  {
+    color: #f38ba8;
+    background: rgba(243, 139, 168, 0.18);
+    animation: blink 1s steps(2) infinite;
+}
+@keyframes blink {
+    50% { background: rgba(243, 139, 168, 0.05); }
+}
+
+#tray > .passive   { -gtk-icon-effect: dim; }
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background: rgba(243, 139, 168, 0.18);
+}
 EOF
 
 # ---- foot -----------------------------------------------------------
+# Translucent terminal: alpha < 1.0 lets the wallpaper / other windows
+# show through under foot. Sway itself doesn't blur (swayfx, the Sway
+# fork with blur effects, is the route for picom-style background blur
+# but isn't packaged on F44 mainline). Catppuccin Mocha palette
+# matches the waybar styling.
 install -d -m 0755 /etc/skel/.config/foot
 cat > /etc/skel/.config/foot/foot.ini <<'EOF'
 font = JetBrainsMono Nerd Font:size=11
+pad  = 8x8
+dpi-aware = yes
+
+[colors]
+alpha    = 0.90
+background = 1e1e2e
+foreground = cdd6f4
+regular0 = 45475a
+regular1 = f38ba8
+regular2 = a6e3a1
+regular3 = f9e2af
+regular4 = 89b4fa
+regular5 = f5c2e7
+regular6 = 94e2d5
+regular7 = bac2de
+bright0  = 585b70
+bright1  = f38ba8
+bright2  = a6e3a1
+bright3  = f9e2af
+bright4  = 89b4fa
+bright5  = f5c2e7
+bright6  = 94e2d5
+bright7  = a6adc8
 
 [scrollback]
 lines = 10000
@@ -284,13 +491,24 @@ cat > /etc/skel/.config/fuzzel/fuzzel.ini <<'EOF'
 font     = JetBrainsMono Nerd Font:size=12
 prompt   = "> "
 terminal = foot
+lines    = 12
+width    = 36
+horizontal-pad = 16
+vertical-pad   = 12
+inner-pad      = 8
+
+[border]
+width  = 1
+radius = 12
 
 [colors]
-background     = 151515ee
-text           = c8c8c8ff
-selection      = 2a2a2aff
-selection-text = ffffffff
-border         = 606060ff
+background     = 1e1e2eee
+text           = cdd6f4ff
+match          = f9e2afff
+selection      = b4befeff
+selection-text = 1e1e2eff
+selection-match = f9e2afff
+border         = b4befeff
 EOF
 
 # ---- mako -----------------------------------------------------------
@@ -298,13 +516,13 @@ install -d -m 0755 /etc/skel/.config/mako
 cat > /etc/skel/.config/mako/config <<'EOF'
 font             = JetBrainsMono Nerd Font 10
 default-timeout  = 7000
-background-color = #151515ee
-text-color       = #c8c8c8
-border-color     = #606060
+background-color = #1e1e2eee
+text-color       = #cdd6f4
+border-color     = #b4befe
 border-size      = 1
-padding          = 10
-margin           = 8
-border-radius    = 4
+padding          = 12
+margin           = 10
+border-radius    = 12
 EOF
 
 # Skel permissions: world-readable directories so /etc/skel-copied
