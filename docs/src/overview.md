@@ -4,24 +4,36 @@
 work. The output is a vanilla `.img.gz` flashable with any standard tool;
 nothing about the image format ties it to a specific deployment workflow.
 
-## Bare bases + opinionated flavors
+## Flavors
 
-The intended structure is **bare bases + flavors**:
+Distro + version in a variant name are self-explanatory (Ubuntu 24.04,
+Debian 13, etc.); the **flavor** is the nosi-specific bit that needs
+an introduction. A flavor is an opinionated package selection layered
+on top of the base cloud image, named for the work it's fit for.
 
-- A **base** is a minimal distro-stock image with just enough to be SSH-
-  reachable.
-- A **flavor** is an opinionated package selection layered on top, named
-  for the work it's fit for (`sysdev` for C / C++ / Python / Rust systems work,
-  future flavors for other niches).
+Two flavors ship today:
 
-Each variant is a self-contained build keyed by `<distro>-<version>-<flavor>`. There
-is **no actual layered inheritance** (no Yocto / Nix style composition);
-the word "flavor" describes a curated package list and configuration,
-nothing more.
+- **`sysdev`** : C / C++ / Python / Rust systems work. Compilers,
+  build tooling (meson / ninja / cmake / cargo), debuggers (gdb +
+  gdb-dashboard, lldb), perf / strace / valgrind, user-space PCI
+  prereqs (vfio plumbing, hugepages, IOMMU cmdline), containers
+  (podman / buildah / skopeo), local virtualisation (qemu / OVMF),
+  hardware inspection (dmidecode / lshw / nvme-cli / smartmontools),
+  the helix / zellij / lazygit / yazi daily-driver layer, and a
+  pipx-installed Python CLI set (uv, ruff, pyright, devbind). No Node
+  runtime ([by design](https://github.com/safl/nosi/blob/main/provision/steps/41-npm-globals.sh) -- Node-based tools live in aidev).
+- **`aidev`** : `sysdev` superset plus Node and a curated set of
+  agentic-AI command-line tools (claude-code, codex, gemini-cli,
+  opencode), JetBrainsMono Nerd Font, WSL configuration. Variants
+  with this flavor additionally publish a WSL2 rootfs tarball
+  consumable by `wsl --import`.
 
-Two flavors ship today: `sysdev` (C / C++ / Python / Rust systems work) and
-`aidev` (sysdev superset plus agentic-AI command-line tooling). The bare
-`*-base` variants are still on the roadmap.
+Each variant is a self-contained build keyed by
+`<distro>-<version>-<flavor>`. There is **no actual layered
+inheritance** (no Yocto / Nix style composition); the word "flavor"
+describes a curated package list and configuration, nothing more. The
+bare `*-base` variants (cloud-image-stock plus identity, no flavor
+layer) are still on the roadmap.
 
 ## Variants
 
@@ -47,38 +59,12 @@ Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
 scaffold (bake + identity + baseline packages + kernel source, no
 provision chain yet).
 
-### Why these distros
-
-Each distro has a specific use case it covers; the version pinning is
-what makes the use cases stay sharp instead of blurring as upstream
-moves.
-
-**Ubuntu 24.04 LTS (noble)** is for hardware. NVIDIA CUDA + NOKM +
-DOCA, AMD ROCm + amdgpu-install, and Mellanox MLNX_OFED for ConnectX
-NICs / BlueField DPUs all publish first-class apt repos against
-Ubuntu 24.04 LTS specifically. The post-flash workflows in
-`cijoe/workflows/` (`setup_cudadev.yaml`, `setup_rocmdev.yaml`) pin
-to this base for exactly that reason. If your machine has a GPU, a
-ConnectX, or a BlueField in it, this is the variant.
-
-**Ubuntu 26.04 LTS (resolute)** is for a more recent kernel and
-user-land while staying on Ubuntu. The price you pay versus 24.04 is
-vendor stacks haven't qualified against it yet, so cudadev /
-rocmdev / DOCA paths are not in scope here. Otherwise it's the
-recency-leaning Ubuntu sysdev / aidev option.
-
-**Debian 13 (trixie)** is for nicer user-land choices and stability.
-Debian's package selection, sane defaults, and lower rate of
-surprising upstream re-architectures make it the preferred general-
-purpose sysdev base when HW-vendor stacks aren't load-bearing. It's
-also the personally-preferred distro of the nosi author.
-
-**Fedora 44** is for an alternative from the RHEL family. Operators
-who live in Red-Hat-shaped environments (dnf, SELinux defaults, the
-RHEL/EL package universe) get a first-class nosi variant that
-matches their world rather than being pushed onto a Debian-flavored
-base. Also a useful early signal for upstream-stable trajectories
-that eventually land in RHEL.
+Per-variant use cases live in the `org.opencontainers.image.description`
+ORAS annotation on each published artefact and are surfaced on the
+[catalog](_generated/catalog.md). That keeps the docs and the
+shippable artefact aligned: when a variant is added, retired, or its
+purpose shifts, the description on the artefact is updated and the
+docs follow on the next regen.
 
 ## Build pipeline
 

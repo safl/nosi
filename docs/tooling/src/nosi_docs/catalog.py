@@ -50,6 +50,7 @@ class VariantSnapshot:
     ref: str
     metadata: dict | None = None
     error: str | None = None
+    description: str | None = None  # from org.opencontainers.image.description
 
 
 def fetch_and_render(docs_root: Path) -> Path:
@@ -93,6 +94,14 @@ def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
             check=True, capture_output=True, text=True, timeout=60,
         )
         manifest = json.loads(mres.stdout)
+        # Per-variant use-case prose lives in the manifest's
+        # org.opencontainers.image.description annotation (set by
+        # .github/workflows/build.yml at push time). Surfaced in the
+        # catalog so docs and ORAS consumers see the same string.
+        snap.description = (
+            manifest.get("annotations", {})
+            .get("org.opencontainers.image.description")
+        )
         digest = None
         for layer in manifest.get("layers", []):
             if layer.get("mediaType") == METADATA_MEDIA_TYPE:
@@ -175,9 +184,13 @@ def _render_variant_section(s: VariantSnapshot) -> str:
     pkgs = m.get("packages", {}) or {}
 
     arch = m.get("architecture") or "?"
-    parts: list[str] = [
-        f"## `{s.name}`",
-        "",
+    parts: list[str] = [f"## `{s.name}`", ""]
+    if s.description:
+        # Per-variant use-case prose from the ORAS manifest annotation.
+        # First paragraph of the variant section so "what is this for?"
+        # precedes "what's inside?".
+        parts.extend([s.description, ""])
+    parts.extend([
         f"**Distro:** {d.get('pretty_name') or '?'}  ",
         f"**Flavor:** `{n.get('flavor') or '?'}`  ",
         f"**Kernel:** `{k.get('release') or '?'}`  ",
@@ -197,7 +210,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         "",
         f"- **Username:** `{op.get('username') or 'odus'}` (uid {op.get('uid') or 1000})",
         f"- **Password:** `{op.get('default_password') or 'odus.321'}`",
-    ]
+    ])
     state = op.get("default_password_state")
     if state:
         parts.append(f"- **Default-password state:** {state}")

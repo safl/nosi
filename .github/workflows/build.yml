@@ -219,11 +219,52 @@ jobs:
           built=$(jq -r '.nosi.built // empty' "${meta_json}")
           arch=$(jq -r '.architecture // empty' "${meta_json}")
 
+          # Per-variant use-case prose for org.opencontainers.image.description.
+          # Operators (and oras consumers reading the manifest annotations)
+          # see "what is this variant for?" without having to consult the
+          # docs catalog. Single source of truth for these strings; catalog.py
+          # reads them back from the manifest annotation so docs stay aligned
+          # with the shippable artefact automatically.
+          case "${IMG}" in
+          debian-13-sysdev)
+              variant_desc="Debian 13 (trixie) sysdev. The nicer user-land choices and stability; general-purpose sysdev base when HW-vendor stacks aren't load-bearing."
+              ;;
+          ubuntu-2404-sysdev)
+              variant_desc="Ubuntu 24.04 LTS (noble) sysdev. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              ;;
+          ubuntu-2404-aidev)
+              variant_desc="Ubuntu 24.04 LTS (noble) aidev (sysdev superset + agentic AI CLIs + WSL2 rootfs target). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              ;;
+          ubuntu-2604-sysdev)
+              variant_desc="Ubuntu 26.04 LTS (resolute) sysdev. For a more recent kernel and user-land packages on Ubuntu LTS."
+              ;;
+          ubuntu-2604-aidev)
+              variant_desc="Ubuntu 26.04 LTS (resolute) aidev (sysdev superset + agentic AI CLIs + WSL2 rootfs target). For a more recent kernel and user-land packages on Ubuntu LTS."
+              ;;
+          fedora-44-sysdev)
+              variant_desc="Fedora 44 sysdev. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
+              ;;
+          freebsd-14-sysdev)
+              variant_desc="FreeBSD 14.4-RELEASE sysdev scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
+              ;;
+          freebsd-15-sysdev)
+              variant_desc="FreeBSD 15.0-RELEASE sysdev scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
+              ;;
+          *)
+              # No use-case statement registered for this variant. Fail loud
+              # rather than push a generic placeholder -- per the project's
+              # no-fallbacks-for-required-artefacts rule, a missing per-variant
+              # description should block publish so the omission is fixed.
+              echo "::error::no variant_desc registered for IMG=${IMG}; add a case in .github/workflows/build.yml" >&2
+              exit 1
+              ;;
+          esac
+
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.nosi.disk-image.v1+gzip \
               --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64" \
-              --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} image for DPDK / SPDK / xNVMe / uPCIe development" \
+              --annotation "org.opencontainers.image.description=${variant_desc}" \
               --annotation "org.opencontainers.image.version=${ROLLING}" \
               --annotation "org.opencontainers.image.created=${built}" \
               --annotation "org.opencontainers.image.revision=${SHA}" \
@@ -283,11 +324,26 @@ jobs:
           built=$(jq -r '.nosi.built // empty' "${meta_json}")
           arch=$(jq -r '.architecture // empty' "${meta_json}")
 
+          # WSL artefact gets a tweak of the disk-image description: same
+          # variant identity, but flagged as the WSL rootfs derivative.
+          case "${IMG}" in
+          ubuntu-2404-aidev)
+              variant_desc="Ubuntu 24.04 LTS (noble) aidev WSL2 rootfs (derived from the same bake as nosi-${IMG}). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
+              ;;
+          ubuntu-2604-aidev)
+              variant_desc="Ubuntu 26.04 LTS (resolute) aidev WSL2 rootfs (derived from the same bake as nosi-${IMG}). For a more recent kernel and user-land packages on Ubuntu LTS."
+              ;;
+          *)
+              echo "::error::no WSL variant_desc registered for IMG=${IMG}; add a case in .github/workflows/build.yml" >&2
+              exit 1
+              ;;
+          esac
+
           oras push \
               "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" \
               --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
               --annotation "org.opencontainers.image.title=nosi-${IMG}-wsl" \
-              --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} WSL2 rootfs derived from the same bake as nosi-${IMG}" \
+              --annotation "org.opencontainers.image.description=${variant_desc}" \
               --annotation "org.opencontainers.image.version=${ROLLING}" \
               --annotation "org.opencontainers.image.created=${built}" \
               --annotation "org.opencontainers.image.revision=${SHA}" \
