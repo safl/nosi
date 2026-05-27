@@ -195,7 +195,64 @@ floating_modifier $mod normal
 # window (~/.config/sway/cheatsheet.md). Helix-style "what binds do I
 # have again?" without having to re-read the config.
 bindsym $mod+F1 exec foot --title cheatsheet -e less ~/.config/sway/cheatsheet.md
+
+# Interactive binding picker: $mod+slash (think vim's / for find) pops
+# a fuzzel --dmenu over every bindsym in the live sway config, with
+# `$mod`/`$term`/etc. expanded. Type-to-filter to find the binding
+# you want; selection is informational (just shows it). Selected
+# rows close the picker without firing anything -- press the actual
+# combo afterwards.
+bindsym $mod+slash exec nosi-keys
 EOF
+
+# ---- nosi-keys: interactive binding picker -------------------------
+# A small wrapper that pipes the operator's sway `bindsym` lines
+# through fuzzel --dmenu, with `set $foo` substitutions resolved.
+# Helix-style discoverability: type "screenshot" to find the Print
+# binding without reading the cheatsheet end-to-end. Installed
+# system-wide at /usr/local/bin/nosi-keys.
+cat > /usr/local/bin/nosi-keys <<'EOF'
+#!/usr/bin/env bash
+# nosi-keys: fuzzel-dmenu over the operator's sway bindings.
+set -euo pipefail
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config"
+[ -r "$CFG" ] || {
+    notify-send "nosi-keys" "Cannot read $CFG" 2>/dev/null \
+        || echo "nosi-keys: cannot read $CFG" >&2
+    exit 1
+}
+
+awk '
+# Capture `set $var value` definitions for later expansion.
+$1 == "set" && substr($2, 1, 1) == "$" {
+    name = substr($2, 2)
+    val  = $0
+    sub(/^set[[:space:]]+\$[A-Za-z_][A-Za-z0-9_]*[[:space:]]+/, "", val)
+    vars[name] = val
+    next
+}
+# Format every bindsym line as "key : action", with variable expansion.
+$1 == "bindsym" {
+    line = $0
+    # Strip the leading bindsym and any --flag modifiers (--locked, etc.)
+    sub(/^bindsym[[:space:]]+(--[a-zA-Z-]+[[:space:]]+)*/, "", line)
+    sp = index(line, " ")
+    if (sp == 0) next
+    key    = substr(line, 1, sp - 1)
+    action = substr(line, sp + 1)
+    # Expand $foo references.
+    for (k in vars) {
+        gsub("\\$" k, vars[k], key)
+        gsub("\\$" k, vars[k], action)
+    }
+    # Drop the meta bind that launches us (avoid recursion suggestion).
+    if (action ~ /nosi-keys/) next
+    printf "%-30s : %s\n", key, action
+}
+' "$CFG" | fuzzel --dmenu --lines 15 --width 80 --prompt 'binding > ' >/dev/null || true
+EOF
+chmod 0755 /usr/local/bin/nosi-keys
 
 # ---- Sway cheatsheet -----------------------------------------------
 # Plain markdown -- less doesn't render the syntax but the # / ** /
@@ -248,9 +305,10 @@ Press `q` to close this window.
 
 ## Help
 
-| Combo            | Action                       |
-|------------------|------------------------------|
-| Mod + F1         | Show this cheatsheet         |
+| Combo            | Action                                                         |
+|------------------|----------------------------------------------------------------|
+| Mod + F1         | Show this cheatsheet (less)                                    |
+| Mod + /          | Interactive binding picker (fuzzel; type to filter, Esc close) |
 
 ## Waybar interactions
 
