@@ -1,0 +1,89 @@
+#cloud-config
+# nosi base : FreeBSD 14.4-RELEASE. Default credentials: operator account
+# `odus` with password `odus.321`, root locked, SSH password auth on.
+# Per-instance SSH identity: host keys stripped at end of init,
+# regenerated on first boot.
+#
+# Phase 1 scaffold. No apply.sh provision chain yet -- the four Linux
+# variants migrated to provision/steps/*.sh over the course of nosi
+# 2026-05, and porting that to FreeBSD is its own audit (pkg vs
+# apt/dnf, rc.d vs systemd, kld vs DKMS, loader.conf vs grub, vfio vs
+# vmm, /proc/cmdline vs kenv ...). This template gives us a working
+# FreeBSD .img.gz with the right identity story so we can layer in
+# steps incrementally.
+#
+# Important: FreeBSD's BASIC-CLOUDINIT image runs *nuageinit*, the
+# FreeBSD-native cloud-init-compatible re-implementation, not the
+# Python cloud-init. nuageinit speaks a SUBSET of the user-data
+# spec: users, ssh_authorized_keys, hashed_passwd, packages, runcmd,
+# hostname all work; `power_state:`, `final_message:`, `growpart:`,
+# `manage_etc_hosts:` do NOT. Hence the explicit `poweroff` at the end
+# of runcmd (no power_state module) and the absence of those keys.
+
+hostname: nosi-freebsd
+
+ssh_pwauth: true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1000. `wheel` is FreeBSD's sudo group. The `freebsd`
+# user from the base cloud image is left in place for now (Phase 2 may
+# `pw userdel freebsd` once nuageinit's coverage is mapped out;
+# nuageinit may not run a bootcmd that does that cleanly).
+users:
+  - name: odus
+    uid: 1000
+    gecos: nosi operator
+    shell: /bin/sh
+    groups: [wheel, operator]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
+# Minimal package set. No upstream-release tools, no python helpers,
+# no provision/ chain -- those are Phase 2 work.
+packages:
+  - bash
+  - git
+  - sudo
+  - curl
+  - ca_root_nss
+
+runcmd:
+  # Reclaim uid 1000 for odus. nuageinit's users module runs before
+  # runcmd and silently ignored our `uid: 1000` because the BASIC-
+  # CLOUDINIT image's `freebsd` user already owned 1000 -- odus came
+  # out at uid 1001. Delete the freebsd user, then `pw usermod -u 1000`
+  # to align with the Linux variants' UID convention (and the
+  # WSL/Linux-standard "first interactive user owns 1000" assumption
+  # baked into wsl-distribution.conf etc.).
+  - pw userdel -r freebsd 2>/dev/null || true
+  - pw usermod odus -u 1000
+  - chown -R 1000:1000 /home/odus
+
+  # Lock root so the only login channel is odus (matches Linux variants).
+  - pw lock root
+
+  # Strip per-instance identity so first boot of the flashed image
+  # regenerates it (host keys via sshd's first-boot keygen path,
+  # hostid via /etc/rc.d/hostid).
+  - rm -f /etc/ssh/ssh_host_*
+  - rm -f /etc/hostid
+
+  # Light cleanup; pkg cache is the main thing worth dropping.
+  - pkg clean -aqy
+
+  # Wipe nuageinit's state cache before we power off. nuageinit caches
+  # the compiled runcmd script at /var/cache/nuageinit/runcmds and will
+  # replay it on EVERY subsequent boot if left in place -- the first
+  # bake attempt's smoketest VM caught that the hard way (poweroff
+  # re-ran during smoketest boot, sshd never came up, timeout). Clearing
+  # the cache means a fresh boot picks up whatever new seed it finds
+  # (smoketest VM gets its own SSH key seed; operator-flashed first boot
+  # gets no seed and nuageinit exits cleanly).
+  - rm -rf /var/cache/nuageinit
+
+  # nuageinit doesn't implement cloud-init's power_state module; an
+  # explicit poweroff is how we hand control back to cijoe so the bake
+  # completes. Must be the last entry: nuageinit runs runcmds serially
+  # and anything after this won't execute.
+  - poweroff

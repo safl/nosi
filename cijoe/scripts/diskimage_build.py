@@ -73,6 +73,30 @@ def main(args, cijoe):
             log.error(f"Failed to download {cloud_image_url}")
             return err
 
+    # FreeBSD VM images ship as xz-compressed raw disks
+    # (FreeBSD-<ver>-RELEASE-amd64-BASIC-CLOUDINIT-ufs.raw.xz) rather
+    # than qcow2; convert to qcow2 once and cache the result alongside
+    # the .raw.xz so subsequent bakes skip the decompress + convert.
+    if cloud_image_path.name.endswith(".raw.xz"):
+        cached_qcow2 = cloud_image_path.with_name(
+            cloud_image_path.name[: -len(".raw.xz")] + ".qcow2"
+        )
+        if not cached_qcow2.exists():
+            log.info(f"Converting {cloud_image_path.name} -> {cached_qcow2.name}")
+            tmp_raw = cloud_image_path.with_suffix("")  # strip .xz, leave .raw
+            err, _ = cijoe.run_local(f"xz -dkc {cloud_image_path} > {tmp_raw}")
+            if err:
+                log.error(f"Failed to xz-decompress {cloud_image_path}")
+                return err
+            err, _ = cijoe.run_local(
+                f"qemu-img convert -O qcow2 {tmp_raw} {cached_qcow2}"
+            )
+            tmp_raw.unlink(missing_ok=True)
+            if err:
+                log.error(f"Failed to convert {tmp_raw} -> {cached_qcow2}")
+                return err
+        cloud_image_path = cached_qcow2
+
     guest_name = None
     for name, guest_conf in cijoe.getconf("qemu.guests", {}).items():
         if guest_conf.get("system_label") == system_label:

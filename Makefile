@@ -26,6 +26,7 @@ help:
 	@echo "  fedora-sysdev       Fedora 44"
 	@echo "  ubuntu-aidev        Ubuntu 26.04 + NVIDIA + agentic CLIs"
 	@echo "                      (additionally publishes a WSL .tar.gz)"
+	@echo "  freebsd-sysdev      FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output:"
@@ -48,6 +49,7 @@ all:
 	$(MAKE) build VARIANT=ubuntu-sysdev
 	$(MAKE) build VARIANT=fedora-sysdev
 	$(MAKE) build VARIANT=ubuntu-aidev
+	$(MAKE) build VARIANT=freebsd-sysdev
 
 clean:
 	rm -rf cijoe/cijoe-output cijoe/cijoe-archive

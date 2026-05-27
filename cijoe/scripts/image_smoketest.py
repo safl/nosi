@@ -461,6 +461,38 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         ok, detail = predicate(rc, out)
         results.append((ok, name, detail))
 
+    # ---- FreeBSD (Phase 1 scaffold) --------------------------------------
+    # FreeBSD doesn't run apply.sh yet (the provision/steps/*.sh chain is
+    # entirely Linux-shaped: systemd / DKMS / apt / dnf / grub / /proc).
+    # Until Phase 2 audits each step and adds FreeBSD twins, the smoke
+    # test verifies the minimum: we got in, the OS fingerprints right.
+    # That alone proves the new .raw.xz -> qcow2 conversion path in
+    # diskimage_build worked and cloud-init successfully wrote odus +
+    # the rest of the seed config.
+    if distro == "freebsd":
+        check(
+            "uname -s reports FreeBSD",
+            "uname -s",
+            lambda rc, out: (out.strip() == "FreeBSD", out.strip() or f"exit {rc}"),
+        )
+        check(
+            "/etc/os-release fingerprints freebsd",
+            "cat /etc/os-release 2>/dev/null || true",
+            lambda rc, out: (
+                "freebsd" in out.lower(),
+                (out.splitlines()[0] if out else "(empty /etc/os-release)"),
+            ),
+        )
+        check(
+            "odus is uid 1000 and a member of wheel",
+            "id odus",
+            lambda rc, out: (
+                rc == 0 and "uid=1000" in out and "wheel" in out,
+                out or f"exit {rc}",
+            ),
+        )
+        return results
+
     # ---- apply.sh completed end-to-end -----------------------------------
     # /etc/nosi/apply-ok is written by the LAST line of apply.sh, only
     # after every step has succeeded under `set -e`. Its absence proves

@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-sysdev, ubuntu-sysdev, fedora-sysdev, ubuntu-aidev]
+        variant: [debian-sysdev, ubuntu-sysdev, fedora-sysdev, ubuntu-aidev, freebsd-sysdev]
 
     steps:
       - uses: actions/checkout@v5
@@ -45,7 +45,8 @@ jobs:
             qemu-utils \
             genisoimage \
             pipx \
-            cpu-checker
+            cpu-checker \
+            xz-utils
 
       - name: Stage build artefacts on the large /mnt disk
         # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
