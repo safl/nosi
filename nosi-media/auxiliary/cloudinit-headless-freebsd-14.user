@@ -4,13 +4,12 @@
 # Per-instance SSH identity: host keys stripped at end of init,
 # regenerated on first boot.
 #
-# Phase 1 scaffold. No apply.sh provision chain yet -- the four Linux
-# variants migrated to provision/steps/*.sh over the course of nosi
-# 2026-05, and porting that to FreeBSD is its own audit (pkg vs
-# apt/dnf, rc.d vs systemd, kld vs DKMS, loader.conf vs grub, vfio vs
-# vmm, /proc/cmdline vs kenv ...). This template gives us a working
-# FreeBSD .img.gz with the right identity story so we can layer in
-# steps incrementally.
+# Phase 1 scaffold. No apply.sh provision chain on FreeBSD yet: the
+# Linux provision/steps/*.sh chain assumes apt/dnf, systemd, DKMS,
+# grub, vfio, /proc/cmdline, ... -- FreeBSD's equivalents (pkg, rc.d,
+# kld, loader.conf, vmm, kenv) need a separate audit and port. This
+# template gives a working FreeBSD .img.gz with the right identity
+# story; provision steps land incrementally.
 #
 # Important: FreeBSD's BASIC-CLOUDINIT image runs *nuageinit*, the
 # FreeBSD-native cloud-init-compatible re-implementation, not the

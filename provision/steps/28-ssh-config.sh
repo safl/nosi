@@ -29,8 +29,8 @@
 # restart-loops for ~30-60s until a separate path regenerates the keys).
 # On Debian Trixie that path does NOT trigger reliably without cloud-init
 # running cc_ssh -- a flashed bare-metal box without a NoCloud seed sits
-# in a permanent ssh.service restart loop forever (real incident, see
-# nosi 2026-05). Fix is a tiny nosi-owned oneshot ordered Before
+# in a permanent ssh.service restart loop forever. Fix is a tiny
+# nosi-owned oneshot ordered Before
 # ssh.service / ssh.socket that runs `ssh-keygen -A`, which is idempotent
 # (only generates missing key types, no-op when keys exist). Pair it with
 # a drop-in adding Wants= + After= to ssh.service AND ssh.socket so it

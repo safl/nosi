@@ -136,8 +136,9 @@ packages:
   - smartmontools
   - usbutils
   # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
-  # regulatory.db, etc. The kernel package used to pull linux-firmware via
-  # weak-deps; we set install_weak_deps=False so name it explicitly.
+  # regulatory.db, etc. Named explicitly because we set
+  # install_weak_deps=False -- linux-firmware enters only via weak-deps from
+  # the kernel package.
   - linux-firmware
   # CPU microcode (early-load via dracut). AMD microcode ships through
   # linux-firmware above; microcode_ctl adds Intel's blobs and the

@@ -5,8 +5,7 @@ Smoke-test the baked qcow2 by booting it and asserting via SSH
 Runs after ``img_gz_publish`` (and ``wsl_rootfs_publish`` for wsl shape). Boots
 the just-baked image inside qemu on a copy-on-write overlay (the published
 artefact stays untouched and first-boot characteristics are preserved),
-SSHes into it as ``odus``, and runs a battery of assertions covering the
-regressions caught by hand in nosi 2026-05:
+SSHes into it as ``odus``, and runs a battery of assertions:
 
   * /etc/nosi-release exists, has NOSI_VERSION (non-unknown) and
     NOSI_VARIANT matching this build
@@ -212,10 +211,10 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     (workdir / "meta-data").write_text(
         f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n"
     )
-    # Authorise the per-run key on odus. Step 29 no longer forces a
+    # Authorise the per-run key on odus. Step 29 doesn't force a
     # password rotation (it only marks the system as on the default and
     # offers an interactive prompt on WSL), so PAM doesn't block key
-    # auth on a non-TTY session anymore -- no chage workaround needed.
+    # auth on a non-TTY session and no chage workaround is needed.
     # No power_state -- the VM stays up for the assertion run.
     (workdir / "user-data").write_text(
         "#cloud-config\n"
@@ -516,8 +515,7 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
         # missing tool fails the whole check and surfaces what's
         # missing in the detail field.
         # Check binary names, NOT package names: ripgrep's binary is
-        # `rg`, helix's is `hx`. Same lesson as the past claude-code /
-        # claude mix-up when aidev was still a baked shape.
+        # `rg`, helix's is `hx`.
         check(
             "baseline tools (git, hx, zellij, btop, meson, ninja, rg) on PATH",
             "for t in git hx zellij btop meson ninja rg jq fzf direnv; do "

@@ -30,22 +30,13 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=lib/common.sh
 . "$HERE/lib/common.sh"
 
-# Fail-fast on first step error. An earlier iteration of this script
-# tolerated per-step failures and exited 1 at the end with a list. That
-# meant a curl 404 in step 20 still left the image with a freshly-baked
-# qcow2 that LOOKED valid -- /etc/nosi-release written, motd rendered,
-# sshd enabled -- but actually missing whichever tools the failed step
-# was supposed to install. The smoketest was meant to be the safety net,
-# but a smoketest only catches what it asserts; an asserted-too-narrow
-# net let the old aidev shape ship through CI without claude / gemini
-# for one cycle, before that shape was retired in favour of the
-# agentic-cli add-on.
-#
-# Strict mode + a sentinel at the very end (see below) ties failure
-# detection to apply.sh itself: any abort means /etc/nosi/apply-ok is
-# never written, the smoketest's single sentinel-presence assertion
-# fails, and the image is refused regardless of which step actually
-# died. Nothing seeps through.
+# Fail-fast on first step error: a step abort means /etc/nosi/apply-ok
+# is never written, the smoketest's sentinel-presence assertion fails,
+# and the image is refused for publish regardless of which step died.
+# Without strict mode, a tool-install failure could leave a qcow2 that
+# looks valid (/etc/nosi-release written, motd rendered, sshd enabled)
+# but is silently missing whichever tools the failed step was supposed
+# to install -- a smoketest only catches what it asserts.
 
 VARIANT="${1:-}"
 [ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-headless | ubuntu-2604-wsl | fedora-44-desktop)"

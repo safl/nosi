@@ -21,8 +21,7 @@ doc: |
      for variants without [publish_wsl].
   8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write
      overlay, SSHes in as odus via a per-run key seeded by cloud-init,
-     and asserts that the regressions caught by hand in nosi 2026-05
-     stay caught: /etc/nosi-release populated, motd rendered, the
+     and asserts: /etc/nosi-release populated, motd rendered, the
      awesome tools on PATH, sshd enabled, ModemManager inactive,
      snapd masked (ubuntu). Failure here fails the whole build so the
      GHCR push is skipped.

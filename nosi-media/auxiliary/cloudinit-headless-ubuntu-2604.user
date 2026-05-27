@@ -146,8 +146,9 @@ packages:
   - smartmontools
   - usbutils
   # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
-  # regulatory.db, etc. The kernel package used to pull linux-firmware via
-  # Recommends; we drop Recommends so name it explicitly.
+  # regulatory.db, etc. Named explicitly because we drop apt Recommends to
+  # keep the image lean -- the kernel package pulls linux-firmware only via
+  # Recommends.
   - linux-firmware
   # CPU microcode (early-load via initramfs). intel-microcode is in
   # multiverse, amd64-microcode in main; both are default-enabled in
