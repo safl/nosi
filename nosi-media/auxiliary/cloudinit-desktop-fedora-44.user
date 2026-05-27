@@ -40,13 +40,20 @@ growpart:
 
 resize_rootfs: true
 
-# Same dnf weak-deps + base-user-strip as fedora-44-headless.
+# Same dnf weak-deps + base-user-strip as fedora-44-headless. Plus the
+# solopasha/hyprland COPR enabled at bootcmd time (before cloud-init's
+# package install runs): Hyprland + hyprlock / hypridle / hyprpaper /
+# xdg-desktop-portal-hyprland / hyprpolkitagent live there, not in
+# Fedora 44 mainline. Without this enable, the cloud-init dnf
+# transaction aborts at the first unresolved hyprland-* and skips
+# every other package in the list (dnf5 is strict by default).
 bootcmd:
   - |
     if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
         echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
     fi
   - userdel -r fedora 2>/dev/null || true
+  - dnf -y copr enable solopasha/hyprland
 
 package_update: true
 package_upgrade: true
@@ -140,11 +147,12 @@ packages:
   - cliphist
   - grim
   - slurp
-  # Greeter: tuigreet on top of greetd. The seatd dep comes in via
-  # greetd; we don't enable it explicitly because greetd's own service
-  # owns the seat.
+  # Greeter: tuigreet on top of greetd. Fedora packages them
+  # separately as `greetd` + `tuigreet` (not `greetd-tuigreet` as on
+  # other distros). The seatd dep comes in via greetd; we don't
+  # enable it explicitly because greetd's own service owns the seat.
   - greetd
-  - greetd-tuigreet
+  - tuigreet
   # Browser: Firefox (Fedora's flagship; ESR vs nightly is the operator
   # personal call -- we ship the rolling Fedora package).
   - firefox

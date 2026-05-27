@@ -273,14 +273,20 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
 
 
 def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
-    """Best-effort scp of in-VM diagnostics into the qcow2 output dir.
+    """Best-effort capture of in-VM diagnostics into the qcow2 output dir.
 
     Called when /etc/nosi-metadata.json is missing (so apply.sh aborted
     somewhere). Pulls whatever exists from the running smoketest VM into
     nosi-<variant>-x86_64.<name> files in the same dir as the qcow2, so the
     GHA workflow's artefact-upload step carries them off the ephemeral
-    runner. Each pull is best-effort: a missing source file is fine,
-    the cijoe log already records the smoketest's primary failure.
+    runner.
+
+    Uses `ssh ... sudo cat` rather than plain scp because cloud-init's
+    logs are `root:adm 0640` on every modern distro and odus is not in
+    adm -- a direct scp returns "Permission denied" silently. Each pull
+    is best-effort: a missing or unreadable source file just yields a
+    warning log line, the cijoe log already records the primary failure
+    that triggered this call.
     """
     targets = [
         ("/var/log/cloud-init-output.log", "cloud-init-output.log"),
@@ -289,19 +295,36 @@ def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
     ]
     for remote, suffix in targets:
         local = out_dir / f"{base}.{suffix}"
-        scp_cmd = [
-            "scp", "-i", str(key), *SSH_OPTS,
-            "-P", str(SSH_HOST_PORT),
-            f"{SSH_USER}@127.0.0.1:{remote}",
-            str(local),
+        ssh_cmd = [
+            "ssh", "-i", str(key), *SSH_OPTS,
+            "-p", str(SSH_HOST_PORT),
+            f"{SSH_USER}@127.0.0.1",
+            f"sudo cat {remote}",
         ]
-        res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
-        if res.returncode == 0:
+        try:
+            with open(local, "wb") as out_fh:
+                res = subprocess.run(
+                    ssh_cmd, stdout=out_fh, stderr=subprocess.PIPE,
+                    timeout=60,
+                )
+        except OSError as exc:
+            log.warning(f"failure forensics: open({local}) failed: {exc}")
+            continue
+        if res.returncode == 0 and local.stat().st_size > 0:
             log.info(f"failure forensics: pulled {remote} -> {local.name}")
         else:
+            # Empty file on success usually means the source didn't exist;
+            # remove the empty stub so the GHA upload doesn't ship a
+            # misleading zero-byte artefact.
+            try:
+                if local.stat().st_size == 0:
+                    local.unlink()
+            except OSError:
+                pass
             log.warning(
                 f"failure forensics: could not pull {remote} "
-                f"(exit {res.returncode}): {(res.stderr or res.stdout).strip()}"
+                f"(exit {res.returncode}): "
+                f"{(res.stderr or b'').decode(errors='replace').strip()}"
             )
 
 
