@@ -228,7 +228,6 @@ def _render_variant_section(s: VariantSnapshot) -> str:
     for label, key in (
         ("Upstream-release tools", "upstream_releases"),
         ("Python CLIs via pipx", "pipx_global"),
-        ("Agentic CLIs / Node LSPs (aidev)", "npm_globals"),
     ):
         tdict = tools.get(key) or {}
         if not tdict:

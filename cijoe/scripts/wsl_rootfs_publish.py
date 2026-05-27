@@ -2,9 +2,10 @@
 Publish a baked nosi qcow2 as a WSL2 rootfs .tar.gz
 ===================================================
 
-For the aidev flavor we want a single bake to feed two derived artifacts:
-the flashable .img.gz produced by ``img_gz_publish``, and a WSL2 rootfs
-tarball consumable by ``wsl --import``. This script handles the latter.
+For wsl-shape variants we want a single bake to feed two derived
+artifacts: the flashable .img.gz produced by ``img_gz_publish``, and a
+WSL2 rootfs tarball consumable by ``wsl --import``. This script handles
+the latter.
 
 Pipeline (qemu-nbd + chroot; no libguestfs):
 
@@ -18,9 +19,9 @@ Pipeline (qemu-nbd + chroot; no libguestfs):
      NetworkManager. qemu + podman/buildah + the rest of the user space
      stay (WSL2 exposes /dev/kvm via nested virt, and containers are a
      primary use case). Vendor GPU/NIC drivers aren't installed in
-     aidev today; when they are, they'll need to be added to the strip
-     list since WSL gets GPU access via the Windows-side driver rather
-     than an in-rootfs kernel module.
+     the wsl shape today; when they are, they'll need to be added to
+     the strip list since WSL gets GPU access via the Windows-side
+     driver rather than an in-rootfs kernel module.
   4. ``tar`` the stripped rootfs into a .tar (xattrs + acls preserved,
      bind-mount dirs excluded).
   5. Unmount, disconnect nbd, gzip + sha256, drop the .tar + scratch.
@@ -39,8 +40,9 @@ Reads the ``publish_wsl`` section of
   publish_wsl.gz_path           final .tar.gz path
   publish_wsl.gzip_level        compression level (1..9; 9 default)
 
-When ``publish_wsl`` is absent (headless variants), the step no-ops with a
-success return so the same cijoe task file can drive every variant.
+When ``publish_wsl`` is absent (non-wsl-shape variants), the step
+no-ops with a success return so the same cijoe task file can drive
+every variant.
 
 Retargetable: False
 """
@@ -69,8 +71,8 @@ from pathlib import Path
 # case). The r8125 source tree we register with DKMS at bake time for
 # bare-metal RTL8125 NICs is purged via the dkms package + the
 # /usr/src/r8125-* glob in the strip script (no kernel under WSL).
-# Vendor GPU stacks aren't baked into aidev today; if one ever is, add
-# its kernel-tied packages here.
+# Vendor GPU stacks aren't baked into the wsl shape today; if one ever
+# is, add its kernel-tied packages here.
 WSL_PURGE_GLOBS = [
     "linux-image-*",
     "linux-headers-*",
@@ -180,7 +182,7 @@ def main(args, cijoe):
     if not publish_wsl:
         log.info(
             f"Image '{image_name}' has no [publish_wsl] section; "
-            "skipping WSL rootfs publish (expected for non-aidev variants)."
+            "skipping WSL rootfs publish (expected for non-wsl-shape variants)."
         )
         return 0
 

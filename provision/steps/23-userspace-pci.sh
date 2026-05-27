@@ -22,7 +22,7 @@
 # the `hugepages` helper from step 22.
 #
 # IOMMU enablement on the kernel cmdline (intel_iommu=on amd_iommu=on
-# iommu=pt) is per-distro (grub vs grubby) and stays in the per-flavor
+# iommu=pt) is per-distro (grub vs grubby) and stays in the per-shape
 # cloud-init runcmd for now.
 #
 # Idempotency: nosi_write_if_changed only touches mtime when content

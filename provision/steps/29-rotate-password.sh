@@ -31,7 +31,7 @@
 nosi_info "step 29-rotate-password (mark default, do not force)"
 nosi_require_root
 
-# Hashed_passwd as written by the flavor templates' users: block.
+# Hashed_passwd as written by the variant userdata templates' users: block.
 DEFAULT_HASH='$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81'
 
 if ! getent passwd odus >/dev/null 2>&1; then

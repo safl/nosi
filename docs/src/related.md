@@ -17,7 +17,7 @@ In a lab where nosi and bty are used together, the workflow is:
 
 ## xnvme -- user space NVMe
 
-The `headless` flavor leans toward xNVMe-adjacent work: NVMe-CLI is
+The `headless` shape leans toward xNVMe-adjacent work: NVMe-CLI is
 pre-installed, vfio-pci / uio_pci_generic / IOMMU are wired up so a
 freshly-flashed box can immediately do user space NVMe development with
 DPDK/SPDK and xNVMe/uPCIe.

@@ -2,7 +2,7 @@
 # nosi/provision/steps/15-nouveau-blacklist.sh
 #
 # Blacklist the in-kernel `nouveau` (Linux's reverse-engineered NVIDIA
-# driver) on every nosi image. Always-on, not gated on flavor or distro.
+# driver) on every nosi image. Always-on, not gated on shape or distro.
 #
 # Why always-on:
 #

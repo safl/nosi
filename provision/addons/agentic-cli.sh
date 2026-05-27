@@ -9,10 +9,10 @@
 # of this script as root). Idempotent: re-running upgrades to latest.
 # No reboots required.
 #
-# This addon replaces the previously-baked "aidev" shape's tooling
-# layer (formerly provision/steps/40-nerd-font.sh + 41-npm-globals.sh)
-# without baking it into a variant. Operators flash a headless /
-# desktop / wsl variant and opt in to agentic-cli at their leisure.
+# This addon replaces the previously-baked aidev shape's tooling
+# layer (Node + npm globals + Nerd Font) without baking it into a
+# variant. Operators flash a headless / desktop / wsl variant and
+# opt in to agentic-cli at their leisure.
 
 set -euo pipefail
 

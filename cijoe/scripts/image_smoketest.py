@@ -2,7 +2,7 @@
 Smoke-test the baked qcow2 by booting it and asserting via SSH
 ==============================================================
 
-Runs after ``img_gz_publish`` (and ``wsl_rootfs_publish`` for aidev). Boots
+Runs after ``img_gz_publish`` (and ``wsl_rootfs_publish`` for wsl shape). Boots
 the just-baked image inside qemu on a copy-on-write overlay (the published
 artefact stays untouched and first-boot characteristics are preserved),
 SSHes into it as ``odus``, and runs a battery of assertions covering the
@@ -20,8 +20,6 @@ regressions caught by hand in nosi 2026-05:
   * ModemManager is NOT active (daemon-prune actually took)
   * Ubuntu only: snapd.socket is masked AND the snapd binary remains
     (soft-disabled, not purged)
-  * aidev only: claude-code, codex, gemini-cli, opencode all on PATH
-
 Why a fresh boot of an overlay instead of guestmount-style inspection:
 ``99-motd.service`` renders /etc/motd on first boot, host keys regenerate
 on first boot, our identity assertions transit ``cat /etc/nosi-release``
@@ -90,7 +88,7 @@ def main(args, cijoe):
         return errno.ENOENT
 
     variant = cijoe.getconf("nosi", {}).get("variant", "")
-    shape = variant.rsplit("-", 1)[-1]  # headless / aidev / desktop / wsl
+    shape = variant.rsplit("-", 1)[-1]  # headless / desktop / wsl
     distro = variant.split("-", 1)[0] if "-" in variant else ""
 
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
@@ -366,7 +364,6 @@ def _render_metadata_markdown(meta: dict) -> str:
     for label, key in (
         ("Upstream-release tools (step 20)", "upstream_releases"),
         ("Python CLIs via pipx --global (step 22)", "pipx_global"),
-        ("Agentic CLIs / Node LSPs (step 41, aidev only)", "npm_globals"),
     ):
         section = tool_section(label, tools.get(key) or {})
         if section:
@@ -519,8 +516,8 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
         # missing tool fails the whole check and surfaces what's
         # missing in the detail field.
         # Check binary names, NOT package names: ripgrep's binary is
-        # `rg`, helix's is `hx`. Same lesson as the claude-code/claude
-        # mix-up on aidev.
+        # `rg`, helix's is `hx`. Same lesson as the past claude-code /
+        # claude mix-up when aidev was still a baked shape.
         check(
             "baseline tools (git, hx, zellij, btop, meson, ninja, rg) on PATH",
             "for t in git hx zellij btop meson ninja rg jq fzf direnv; do "
@@ -670,22 +667,11 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
             lambda rc, out: (out == "ok", out or "missing"),
         )
 
-    # ---- aidev-only: agentic CLIs + Node-based LSPs ----------------------
-    # Binary names (NOT npm package names): step 41 installs
-    #   @anthropic-ai/claude-code -> binary `claude`
-    #   @openai/codex             -> binary `codex`
-    #   @google/gemini-cli        -> binary `gemini`
-    #   opencode-ai               -> binary `opencode`
-    # plus bash-language-server / yaml-language-server which are aidev-
-    # only because they need Node.
-    if shape == "aidev":
-        for cli in ("claude", "codex", "gemini", "opencode",
-                    "bash-language-server", "yaml-language-server"):
-            check(
-                f"aidev binary '{cli}' on PATH",
-                f"command -v {cli} >/dev/null && echo ok",
-                lambda rc, out, _c=cli: (out == "ok", out or f"missing {_c}"),
-            )
+    # Agentic CLIs (claude / codex / gemini / opencode) and the Node-based
+    # LSPs (bash-language-server / yaml-language-server) live in the
+    # agentic-cli add-on now, installed post-flash by the operator via
+    # nosi-addon -- not baked into any variant. Nothing to assert at
+    # bake-time smoketest.
 
     return results
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/24-podman-setup.sh
 #
-# Podman ergonomics common to all flavors:
+# Podman ergonomics common to all shapes:
 #
 #   * /etc/containers/nodocker: suppresses podman-docker's "emulating
 #     docker" banner so docker-compat invocations are quiet.

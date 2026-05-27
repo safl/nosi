@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/28-ssh-config.sh
 #
-# Make sshd ready for login on every flavor: drop a config snippet and
+# Make sshd ready for login on every shape: drop a config snippet and
 # make sure the daemon is enabled (so it comes up on the next boot of a
 # flashed image, and right away on a re-run on a live VM).
 #

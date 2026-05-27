@@ -24,10 +24,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    # aidev's npm-global installs + WSL post-bake (qemu-nbd mount, chroot
-    # strip, tar + gzip of a multi-GiB rootfs) add ~10-15 min over the
-    # headless runtime, which is tight against the prior 60 min ceiling.
-    # Bump uniformly rather than per-variant to keep the matrix simple.
+    # wsl shape's post-bake (qemu-nbd mount, chroot strip, tar + gzip of
+    # a multi-GiB rootfs) adds ~10-15 min over the headless runtime,
+    # which is tight against the prior 60 min ceiling. Bump uniformly
+    # rather than per-variant to keep the matrix simple.
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -51,7 +51,7 @@ jobs:
       - name: Stage build artefacts on the large /mnt disk
         # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
         # a ~70 GiB ephemeral disk at /mnt. The build writes the qcow2, the
-        # raw intermediate, the .img.gz and (aidev) the WSL tarball under
+        # raw intermediate, the .img.gz and (wsl shape) the WSL tarball under
         # ~/system_imaging; img_gz_publish's qcow2 -> raw -> gzip needs all
         # three on disk at once and overruns /. Point ~/system_imaging at
         # /mnt so the multi-GiB artefacts land on the roomy disk. Done
@@ -97,7 +97,7 @@ jobs:
         # Runs on every event (including PRs) and even if a later step
         # fails -- so the .qcow2 / .img.gz / .tar.gz sizes are visible
         # before the upload + GHCR-push happen. The WSL tarball only
-        # exists for aidev variants; missing files render as "(missing)".
+        # exists for wsl-shape variants; missing files render as "(missing)".
         if: always()
         env:
           IMG: ${{ matrix.variant }}
@@ -308,7 +308,7 @@ jobs:
         # cleanly scoped to disk-images; the WSL artifact is rootfs, not
         # a flashable disk, so colocating tags under the same repo would
         # be misleading. Gated on the artifact existing, which today
-        # means matrix.variant == 'ubuntu-2604-aidev'. Same build, same report,
+        # means matrix.variant == 'ubuntu-2604-wsl'. Same build, same report,
         # so the cijoe-report zip is attached here too for symmetry --
         # operators who pulled the WSL artifact alone still get the
         # provenance.
@@ -453,7 +453,7 @@ jobs:
                 echo '```powershell'
                 echo "curl.exe -sL 'https://ghcr.io/v2/${REPO}/${IMG}-wsl/blobs/sha256:${wsha}' \\"
                 echo "    -o ${IMG}-wsl.tar.gz"
-                echo "wsl --import nosi-aidev C:\\WSL\\nosi-aidev ${IMG}-wsl.tar.gz"
+                echo "wsl --import nosi-wsl C:\\WSL\\nosi-wsl ${IMG}-wsl.tar.gz"
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
           fi

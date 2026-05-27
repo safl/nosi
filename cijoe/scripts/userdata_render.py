@@ -17,7 +17,7 @@ an explicit ``--out`` path).
 
 The bake (``diskimage_build.py``) calls into ``render()`` directly so
 templates pass through this step before the NoCloud seed iso is built.
-Templates with no marker are copied verbatim, so existing flavors keep
+Templates with no marker are copied verbatim, so existing variants keep
 working until their inline blocks get migrated.
 
 Retargetable: False

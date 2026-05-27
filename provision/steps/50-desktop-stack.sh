@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/50-desktop-stack.sh
 #
-# desktop flavor only. Configures the Hyprland-based desktop stack:
+# desktop shape only. Configures the Hyprland-based desktop stack:
 #
 #   * greetd + tuigreet as the system display manager, defaulting to
 #     a Hyprland session

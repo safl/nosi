@@ -1,6 +1,6 @@
 # nosi post-flash workflows
 
-Single-step nosi images cover headless / aidev with everything bakeable
+Single-step nosi images cover headless / desktop / wsl with everything bakeable
 into one cloud-init pass. Some stacks fundamentally don't fit that
 model -- they want kernel-coupled DKMS modules built against the
 operator's actual hardware kernel, multi-reboot installer choreography
@@ -9,7 +9,7 @@ decoupled from nosi's. The GPU stacks (NVIDIA + AMD) sit squarely in
 that bucket.
 
 **The pattern**: flash one of nosi's Ubuntu 24.04 LTS variants
-(`ubuntu-2404-headless` or `ubuntu-2404-aidev`) on the target, then run
+(`ubuntu-2404-headless`) on the target, then run
 a workflow from this directory against
 the running box. cijoe drives the install over SSH, handles the
 reboots, and waits for the box to come back. The workflows are direct
@@ -27,7 +27,7 @@ constraints (default operator account is `odus`, root SSH is locked).
 
 Both expect the target to be running Ubuntu 24.04 noble (matching the
 kernel pin both vendor stacks qualify against). In nosi terms that's
-`ubuntu-2404-headless` or `ubuntu-2404-aidev` (the Ubuntu 24.04
+`ubuntu-2404-headless` (the Ubuntu 24.04
 variants exist precisely so the vendor stacks compose). Other
 distros / versions are not supported.
 

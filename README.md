@@ -15,7 +15,7 @@
 Automated builds of opinionated operating-system images for niches the
 stock cloud images don't quite hit. The output is a `.img.gz` (flashable
 to bare metal with `dd` / Balena Etcher / any tool that handles
-gzip-compressed disk images) and, for the `aidev` flavor, additionally a
+gzip-compressed disk images) and, for the `wsl` shape, additionally a
 `.tar.gz` consumable by `wsl --import`. The companion project
 [bty](https://github.com/safl/bty) is one convenient flasher; it is not
 required.
@@ -24,12 +24,16 @@ required.
 
 ## Scope
 
-Two flavors today: **`headless`** (C / C++ / Python / Rust systems work on bare
-metal, headless-server-friendly) and **`aidev`** (`headless` superset with
-Node and a curated set of agentic-AI CLIs, additionally published as a
-WSL2 rootfs `.tar.gz`). A **`freebsd-<N>-headless`** scaffold landed in
-2026-05 (Phase 1: bake + identity + baseline packages + kernel source,
-no provision chain yet).
+Three shapes today: **`headless`** (C / C++ / Python / Rust systems
+work on bare metal / VM / cloud), **`desktop`** (headless superset
+plus a Hyprland tiling Wayland stack for personal laptop /
+workstation use), and **`wsl`** (headless superset plus GUI dev
+tools rendered through WSLg, published as a `.tar.gz` for `wsl
+--import`). Optional tooling (agentic AI CLIs, GPU vendor stacks,
+...) is post-flash via `nosi-addon` or via cijoe workflows under
+`cijoe/workflows/`. A **`freebsd-<N>-headless`** scaffold landed in
+2026-05 (Phase 1: bake + identity + baseline packages + kernel
+source, no provision chain yet).
 
 For the up-to-date list of variants, baked tool versions, default
 credentials, pull/flash recipes, and full package inventories see the
@@ -45,9 +49,9 @@ disk rather than hand-curated prose that can drift.
     make all                               # build every variant
 
 Local builds need `qemu-system-x86_64` + KVM accessible. The
-`ubuntu-2604-aidev` WSL post-bake step additionally needs `sudo` for
-`qemu-nbd` attach + chroot tar-out -- any modern Linux host with the
-loadable `nbd` kernel module fits the bill.
+`wsl`-shape post-bake step additionally needs `sudo` for `qemu-nbd`
+attach + chroot tar-out -- any modern Linux host with the loadable
+`nbd` kernel module fits the bill.
 
 ## Releasing
 

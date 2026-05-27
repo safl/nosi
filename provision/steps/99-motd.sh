@@ -12,29 +12,23 @@
 # the end of apply.sh; /etc/nosi-release (written first, by step 05) then
 # tells the operator which build to look at.
 #
-# The renderer is identical across all four nosi flavors. The two
-# pieces of variant state (flavor name in the banner, default-hostname
-# in the Reconfigure hint) are read at render time from /etc/nosi/
-# config files written by this step, so adding a new flavor is purely
-# config, not a script edit.
+# The renderer is identical across all nosi shapes. The two pieces of
+# variant state (shape name in the banner, default-hostname in the
+# Reconfigure hint) are read at render time from /etc/nosi/ config
+# files written by this step, so adding a new shape is purely config,
+# not a script edit.
 #
 # Inputs (env vars, optional):
-#   NOSI_SHAPE             "headless" (default) or "aidev". Surfaces in
-#                           the banner header.
+#   NOSI_SHAPE              "headless" (default), "desktop", "wsl".
+#                           Surfaces in the banner header.
 #   NOSI_DEFAULT_HOSTNAME   Hostname nosi shipped with. Surfaces in the
-#                           Reconfigure hint. Default derives from
-#                           NOSI_DISTRO + NOSI_SHAPE (see below).
+#                           Reconfigure hint. Defaults to
+#                           nosi-${NOSI_DISTRO}.
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
 NOSI_SHAPE="${NOSI_SHAPE:-headless}"
-if [ -z "${NOSI_DEFAULT_HOSTNAME:-}" ]; then
-    if [ "$NOSI_SHAPE" = "aidev" ]; then
-        NOSI_DEFAULT_HOSTNAME="nosi-aidev"
-    else
-        NOSI_DEFAULT_HOSTNAME="nosi-${NOSI_DISTRO}"
-    fi
-fi
+NOSI_DEFAULT_HOSTNAME="${NOSI_DEFAULT_HOSTNAME:-nosi-${NOSI_DISTRO}}"
 
 nosi_info "step 99-motd (shape=$NOSI_SHAPE, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
 nosi_require_root

@@ -126,7 +126,7 @@ def main(args, cijoe):
     # Render the cloud-init template: replace the __NOSI_PROVISION_FILES__
     # marker (if present) with write_files: entries for every script under
     # provision/. Templates without the marker pass through unchanged so
-    # flavors that haven't been migrated yet keep working.
+    # variants that haven't been migrated yet keep working.
     provision_root = repo_root / "provision"
     try:
         rendered = render_userdata(userdata_path, provision_root)

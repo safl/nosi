@@ -37,7 +37,9 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # sshd enabled -- but actually missing whichever tools the failed step
 # was supposed to install. The smoketest was meant to be the safety net,
 # but a smoketest only catches what it asserts; an asserted-too-narrow
-# net let aidev ship through CI without claude / gemini for one cycle.
+# net let the old aidev shape ship through CI without claude / gemini
+# for one cycle, before that shape was retired in favour of the
+# agentic-cli add-on.
 #
 # Strict mode + a sentinel at the very end (see below) ties failure
 # detection to apply.sh itself: any abort means /etc/nosi/apply-ok is
@@ -46,9 +48,9 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # died. Nothing seeps through.
 
 VARIANT="${1:-}"
-[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-headless | ubuntu-2604-aidev | fedora-44-desktop)"
+[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-headless | ubuntu-2604-wsl | fedora-44-desktop)"
 
-# Flavor is the trailing -headless / -aidev / -desktop segment. Distro +
+# Shape is the trailing -headless / -desktop / -wsl segment. Distro +
 # version are carried in the variant name but not enforced here:
 # lib/common.sh derives the live NOSI_DISTRO / NOSI_PKGMGR from
 # /etc/os-release, so an operator-side `apply.sh ubuntu-2604-headless` on
@@ -64,7 +66,7 @@ esac
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
 export NOSI_VARIANT="$VARIANT"
 
-# Steps the flavor wants, in order. As more steps are extracted from
+# Steps the shape wants, in order. As more steps are extracted from
 # the inline cloud-init blocks they get appended here. Each entry is a
 # basename under provision/steps/ minus the .sh extension.
 STEPS=(

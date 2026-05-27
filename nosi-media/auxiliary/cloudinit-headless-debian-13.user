@@ -58,7 +58,7 @@ growpart:
 resize_rootfs: true
 
 # cloud-init's apt module pulls Install-Recommends by default, which
-# inflates the image by GBs on a dev-flavor package list this size.
+# inflates the image by GBs on a dev-shape package list this size.
 # Drop Recommends + Suggests; the explicit packages: list already names
 # everything we want.
 apt:
@@ -104,7 +104,7 @@ packages:
   - parallel             # GNU parallel
   - ripgrep
   - shellcheck           # bash linter; headless's substitute for the
-                         # Node-based bash-language-server (aidev only)
+                         # Node-based bash-language-server (agentic-cli addon)
   - stress-ng            # CPU / memory stress for thermals + bench
   - sysstat              # iostat / sar / mpstat
   - time                 # GNU time (verbose vs the bash builtin)

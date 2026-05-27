@@ -20,7 +20,7 @@ help:
 	@echo "  docs-serve        Live-rebuild on http://localhost:8000"
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
-	@echo "Variants (<distro>-<version>-<flavor>):"
+	@echo "Variants (<distro>-<version>-<shape>):"
 	@echo "  debian-13-headless    Debian 13 trixie"
 	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble"
 	@echo "                        (HW vendor stacks; cudadev/rocmdev workflows pin here)"

@@ -96,7 +96,7 @@ packages:
   - parallel             # GNU parallel
   - ripgrep
   - shellcheck           # bash linter; headless's substitute for the
-                         # Node-based bash-language-server (aidev only)
+                         # Node-based bash-language-server (agentic-cli addon)
   - stress-ng            # CPU / memory stress for thermals + bench
   - sysstat              # iostat / sar / mpstat
   - time                 # GNU time (verbose vs the bash builtin)

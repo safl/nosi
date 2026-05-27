@@ -123,17 +123,6 @@ meta = {
     },
 }
 
-# aidev-only additions: step 41 npm globals
-if nosi_release.get("NOSI_SHAPE") == "aidev":
-    meta["tools"]["npm_globals"] = {
-        "claude": ver("claude", "--version"),
-        "codex": ver("codex", "--version"),
-        "gemini": ver("gemini", "--version"),
-        "opencode": ver("opencode", "--version"),
-        "bash-language-server": ver("bash-language-server", "--version"),
-        "yaml-language-server": ver("yaml-language-server", "--version"),
-    }
-
 # Manually-installed packages from the distro's package manager. Captures
 # what the cloud-init template's packages: list (plus anything apply.sh
 # explicitly installed) put on the system, sorted. Excludes the cloud
