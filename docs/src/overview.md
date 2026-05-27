@@ -37,12 +37,23 @@ Three shapes ship today:
 
 Optional tooling collections that don't define a shape (agentic AI
 CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,
-...) are out-of-scope for the baked variants. GPU + NIC vendor stacks
-live as post-flash cijoe workflows under `cijoe/workflows/`
-(`setup_cudadev.yaml`, `setup_rocmdev.yaml`); other tooling is
-operator-installed from upstream after flashing. The intent: a
-flashable variant stays focused on **what kind of system it is**;
-"what extras you want installed" is the operator's call.
+...) are out-of-scope for the baked variants. The dividing line is
+**reboots**:
+
+- **No-reboot installs** ship as **add-ons** under `/opt/nosi/addons/`
+  on the flashed image, launched via `nosi-addon` (fzf-based TUI
+  that filters by shape / distro / version). Today:
+  `agentic-cli` (Node + claude-code / codex / gemini-cli / opencode +
+  LSPs + JetBrainsMono Nerd Font).
+- **Multi-reboot installs** stay as **cijoe workflows** under
+  `cijoe/workflows/setup_*.yaml`, run from a control box over SSH.
+  cijoe's `wait_for_transport` step handles the reboots transparently.
+  Today: `setup_cudadev.yaml` (NVIDIA stack), `setup_rocmdev.yaml`
+  (AMD stack).
+
+The intent: a flashable variant stays focused on **what kind of
+system it is**; "what extras you want installed" is the operator's
+call post-flash.
 
 Each variant is a self-contained build keyed by
 `<distro>-<version>-<shape>`. There is **no actual layered

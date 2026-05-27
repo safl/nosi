@@ -33,10 +33,43 @@ provision/
     ├── 29-rotate-password.sh       # force first-login passwd change
     ├── 30-clock-from-http.sh
     ├── 32-firstboot-inventory.sh
+    ├── 45-nosi-addons.sh           # install /opt/nosi/addons/ + /usr/local/bin/nosi-addon
     ├── 50-desktop-stack.sh         # desktop-shape only: greetd / Hyprland / waybar configs
     ├── 98-metadata.sh              # /etc/nosi-metadata.json (tool versions, packages, identity)
     └── 99-motd.sh                  # LAST: login banner = "all earlier steps ran"
 ```
+
+## Add-ons
+
+Optional tooling collections that don't define a shape (agentic AI
+CLIs, ...) ship as **add-ons** rather than baked variants. Each addon
+is a one-shot, no-reboot installer under `/opt/nosi/addons/*.sh`
+launched via `nosi-addon`. The launcher reads `/etc/nosi-release` on
+the running system and only offers addons whose declared compatibility
+matches the current shape / distro / version:
+
+```
+$ nosi-addon
+[fzf menu of eligible addons]
+> agentic-cli    Node 22 + agentic AI CLIs (claude/codex/gemini/opencode) + LSPs + Nerd Font
+```
+
+Each addon declares its eligibility in a short header:
+
+```bash
+# nosi-addon: agentic-cli
+# description: ...
+# shapes: headless desktop wsl     (or *)
+# distros: ubuntu debian fedora    (or *)
+# versions: *
+```
+
+Multi-reboot installs (NVIDIA CUDA + NOKM + DOCA, AMD ROCm,
+MLNX_OFED) are **not** addons — they live as cijoe workflows under
+`cijoe/workflows/setup_*.yaml` and run from a control box over SSH,
+because cijoe's `core.wait_for_transport` step handles reboots
+transparently. `nosi-addon` is for installs that finish without
+asking the operator to reboot.
 
 `apply.sh` is fail-fast: any step error aborts the chain and the
 `/etc/nosi/apply-ok` sentinel never gets written. The smoketest's

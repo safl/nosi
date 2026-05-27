@@ -87,6 +87,7 @@ STEPS=(
     29-rotate-password
     30-clock-from-http
     32-firstboot-inventory
+    45-nosi-addons
     50-desktop-stack
     # 98-metadata captures the actual installed inventory (kernel, tool
     # versions, manually-installed packages) into /etc/nosi-metadata.json
