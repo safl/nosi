@@ -65,6 +65,12 @@ STEPS=(
     # identity even if a later step explodes -- forensics need the version
     # tag before anything else can break.
     05-nosi-release
+    # 06-package-presence runs RIGHT AFTER the identity-log step so any
+    # cloud-init package-install failure (e.g. dnf transaction aborted by
+    # one bad name) fails the bake here with a list of missing baseline
+    # tools, instead of silently cascading into step 22 dying on a
+    # missing pipx.
+    06-package-presence
     10-r8125-dkms
     12-gdb-dashboard
     15-nouveau-blacklist

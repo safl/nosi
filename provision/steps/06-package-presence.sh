@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# nosi/provision/steps/06-package-presence.sh
+#
+# Pre-flight: verify cloud-init's packages: install actually populated
+# the baseline tools. dnf5 (Fedora) aborts the whole transaction on a
+# single missing package name, so a typo / rename in the variant's
+# userdata cascades to every package being skipped -- and the symptom
+# downstream is misleading (apply.sh dies at step 22 with "pipx:
+# command not found" rather than naming the package that broke the
+# transaction). apt is more forgiving but a baseline missing still
+# cascades. This step fires immediately after the identity-log step
+# so forensics keep /etc/nosi-release.
+#
+# Fast-fail with the list of missing tools, no recovery. The
+# operator's next move is to check /var/log/cloud-init.log (or the
+# smoketest forensics) for the rejected package name.
+
+. "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
+
+nosi_info "step 06-package-presence"
+
+# Commands that must exist after cloud-init's package install on every
+# shape / variant. Each maps to a package name in every userdata
+# packages: list. Keeping the list small so the check is fast and so
+# legitimate per-shape additions aren't a maintenance burden.
+must_have=(
+    git
+    curl
+    jq
+    python3
+    pipx
+    make
+    gcc
+    pkg-config
+)
+
+# Fedora ships `pkg-config` from `pkgconf-pkg-config`; apt distros from
+# the `pkg-config` package. Both expose `pkg-config` on PATH, so the
+# command-based check above works.
+
+missing=()
+for cmd in "${must_have[@]}"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+done
+
+if [ ${#missing[@]} -gt 0 ]; then
+    nosi_die "cloud-init package install incomplete -- missing baseline tools: ${missing[*]}. \
+Likely cause: a typo / nonexistent package name in the variant's cloud-init packages: list caused \
+dnf/apt to abort the transaction. Check /var/log/cloud-init.log (or the bake's smoketest-forensics) \
+for the rejected name."
+fi
+
+nosi_info "step 06-package-presence ok"
