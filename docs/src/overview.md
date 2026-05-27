@@ -11,7 +11,7 @@ The intended structure is **bare bases + flavors**:
 - A **base** is a minimal distro-stock image with just enough to be SSH-
   reachable.
 - A **flavor** is an opinionated package selection layered on top, named
-  for the work it's fit for (`sysdev` for C / Python / Rust systems work,
+  for the work it's fit for (`sysdev` for C / C++ / Python / Rust systems work,
   future flavors for other niches).
 
 Each variant is a self-contained build keyed by `<distro>-<flavor>`. There
@@ -19,7 +19,7 @@ is **no actual layered inheritance** (no Yocto / Nix style composition);
 the word "flavor" describes a curated package list and configuration,
 nothing more.
 
-Two flavors ship today: `sysdev` (C / Python / Rust systems work) and
+Two flavors ship today: `sysdev` (C / C++ / Python / Rust systems work) and
 `aidev` (sysdev superset plus agentic-AI command-line tooling). The bare
 `*-base` variants are still on the roadmap.
 

@@ -121,10 +121,14 @@ packages:
   - wget
   # build & dev (compilers, LSPs, linters, debugger / memory tools)
   - build-essential
+  - ccache              # transparent compiler cache; wraps gcc/clang
   - clang
   - clang-tools         # clang-format, clang-tidy
   - clangd              # C/C++ LSP
+  - cmake               # ubiquitous C/C++ build orchestrator
+  - cppcheck            # standalone C/C++ static analyzer
   - gdb
+  - lldb                # helix DAP debugger backend (lldb-dap binary)
   - make
   - pipx
   - pkg-config

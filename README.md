@@ -24,7 +24,7 @@ required.
 
 ## Scope
 
-Two flavors today: **`sysdev`** (C / Python / Rust systems work on bare
+Two flavors today: **`sysdev`** (C / C++ / Python / Rust systems work on bare
 metal, headless-server-friendly) and **`aidev`** (`sysdev` superset with
 Node and a curated set of agentic-AI CLIs, additionally published as a
 WSL2 rootfs `.tar.gz`). A **`freebsd-sysdev`** scaffold landed in

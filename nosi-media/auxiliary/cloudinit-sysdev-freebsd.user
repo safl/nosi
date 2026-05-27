@@ -56,11 +56,17 @@ packages:
   - wget
   - unzip
   # build / dev
+  - ccache               # transparent compiler cache; wraps gcc/clang
+  - cmake                # ubiquitous C/C++ build orchestrator
+  - cppcheck             # standalone C/C++ static analyzer
   - gmake                # gnu make; FreeBSD's `make` is bsdmake
   - meson
   - ninja
   - pkgconf
   - python3
+  # Compilers + lldb are in the FreeBSD base system, not a pkg (clang
+  # has been the system C/C++ compiler since FreeBSD 10). The helix
+  # `lldb-dap` binary used for DAP debugging ships with base lldb.
   # baseline tools (per user-memory: must be pre-installed)
   - btop
   - helix                # binary is /usr/local/bin/hx

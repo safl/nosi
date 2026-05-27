@@ -102,11 +102,15 @@ packages:
   - strace
   - tcpdump
   - wget
+  - ccache               # transparent compiler cache; wraps gcc/clang
   - clang
   - clang-tools-extra    # clangd (C/C++ LSP), clang-format, clang-tidy
+  - cmake                # ubiquitous C/C++ build orchestrator
+  - cppcheck             # standalone C/C++ static analyzer
   - gcc
   - gcc-c++
   - gdb
+  - lldb                 # helix DAP debugger backend (lldb-dap binary)
   - make
   - pipx
   - pkgconf-pkg-config
