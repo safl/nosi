@@ -177,6 +177,20 @@ packages:
   - power-profiles-daemon
   - playerctl
   - network-manager-applet
+  # Printing: CUPS daemon + filters, cups-pdf as a virtual PDF printer
+  # (any GTK/Qt print dialog can "Print to PDF" -> ~/PDF/). Avahi for
+  # IPP / mDNS network-printer discovery (modern AirPrint-style
+  # printers Just Work). system-config-printer is the GUI for adding /
+  # managing printers when discovery doesn't suffice. Driver bundles
+  # (hplip, gutenprint, splix) intentionally not pre-installed -- they
+  # add hundreds of MiB and most operators only need one vendor's;
+  # `dnf install hplip` etc. after first flash is the path.
+  - cups
+  - cups-filters
+  - cups-pdf
+  - avahi
+  - avahi-tools
+  - system-config-printer
   # Fonts: Noto covers most scripts + emoji. JetBrainsMono Nerd Font
   # is not packaged on Fedora 44 mainline (the upstream Nerd Fonts
   # release is the canonical source); step 50-desktop-stack pulls the

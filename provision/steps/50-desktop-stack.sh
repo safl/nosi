@@ -10,6 +10,8 @@
 #   * mirror of those defaults into /home/odus/.config/ so the baked
 #     operator account boots into a usable desktop on first login
 #   * graphical.target as the default systemd target
+#   * cups.socket + avahi-daemon enabled so printing works on first
+#     boot (lazy-activates the daemon when a print actually fires)
 #
 # The configs target a CLI-heavy operator's muscle memory:
 #
@@ -688,5 +690,13 @@ fi
 nosi_info "enabling greetd.service + graphical.target"
 systemctl enable greetd.service
 systemctl set-default graphical.target
+
+# ---- enable CUPS + Avahi for printing ------------------------------
+# cups.socket starts CUPS on first print attempt (lazy activation, no
+# always-on daemon). avahi-daemon enables mDNS so network printers
+# advertise themselves on the local link; modern IPP-Everywhere /
+# AirPrint discovery flows through this.
+nosi_info "enabling cups.socket + avahi-daemon.service"
+systemctl enable cups.socket avahi-daemon.service
 
 nosi_info "step 50-desktop-stack done"
