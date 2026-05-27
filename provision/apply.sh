@@ -2,17 +2,19 @@
 # nosi/provision/apply.sh <variant>
 #
 # Run every provision step for <variant> in order. The variant is
-# `<distro>-<version>-<flavor>`, e.g.:
+# `<distro>-<version>-<shape>`, e.g.:
 #
 #   debian-13-headless    headless on Debian 13 (apt)
 #   ubuntu-2604-headless  headless on Ubuntu 26.04 (apt)
-#   ubuntu-2604-aidev   aidev on Ubuntu 26.04 (apt; headless superset + AI CLIs)
 #   fedora-44-headless    headless on Fedora 44 (dnf)
-#   fedora-44-desktop   desktop on Fedora 44 (dnf; Hyprland tiling stack)
+#   fedora-44-desktop     desktop on Fedora 44 (dnf; Hyprland tiling stack)
 #
-# Flavor is parsed from the suffix (-headless / -aidev / -desktop); the
-# rest is informational (lib/common.sh detects the live distro/pkgmgr
-# from /etc/os-release, so version-in-name doesn't gate any step).
+# Shape is parsed from the suffix (-headless / -desktop); the rest is
+# informational (lib/common.sh detects the live distro/pkgmgr from
+# /etc/os-release, so version-in-name doesn't gate any step). Optional
+# post-flash tooling (agentic CLIs, GPU vendor stacks, ...) lives in
+# /opt/nosi/addons/ and is operator-launched via nosi-addon -- not part
+# of the baked apply chain.
 #
 # Each step is independently idempotent, so apply.sh is also idempotent:
 # re-running on the same system does nothing the second time. Steps that
@@ -53,10 +55,9 @@ VARIANT="${1:-}"
 # a different-version Ubuntu box still works -- the variant string is
 # identity / catalog metadata, not a runtime selector.
 case "$VARIANT" in
-*-headless)  export NOSI_SHAPE=headless  ;;
-*-aidev)   export NOSI_SHAPE=aidev   ;;
-*-desktop) export NOSI_SHAPE=desktop ;;
-*)         nosi_die "variant must end in -headless, -aidev, or -desktop: $VARIANT" ;;
+*-headless) export NOSI_SHAPE=headless ;;
+*-desktop)  export NOSI_SHAPE=desktop  ;;
+*)          nosi_die "variant must end in -headless or -desktop: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
@@ -85,10 +86,6 @@ STEPS=(
     29-rotate-password
     30-clock-from-http
     32-firstboot-inventory
-    40-nerd-font
-    41-npm-globals
-    42-pi-cli
-    43-wsl-config
     50-desktop-stack
     # 98-metadata captures the actual installed inventory (kernel, tool
     # versions, manually-installed packages) into /etc/nosi-metadata.json

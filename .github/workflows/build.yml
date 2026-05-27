@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2404-aidev, ubuntu-2604-headless, ubuntu-2604-aidev, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
+        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
 
     steps:
       - uses: actions/checkout@v5
@@ -232,14 +232,8 @@ jobs:
           ubuntu-2404-headless)
               variant_desc="Ubuntu 24.04 LTS (noble) headless. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
               ;;
-          ubuntu-2404-aidev)
-              variant_desc="Ubuntu 24.04 LTS (noble) aidev (headless superset + agentic AI CLIs). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
-              ;;
           ubuntu-2604-headless)
               variant_desc="Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel and user-land packages on Ubuntu LTS."
-              ;;
-          ubuntu-2604-aidev)
-              variant_desc="Ubuntu 26.04 LTS (resolute) aidev (headless superset + agentic AI CLIs + WSL2 rootfs target). For a more recent kernel and user-land packages on Ubuntu LTS."
               ;;
           fedora-44-headless)
               variant_desc="Fedora 44 headless. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
