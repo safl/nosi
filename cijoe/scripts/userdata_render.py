@@ -79,19 +79,30 @@ def add_args(parser: ArgumentParser):
 
 
 def render(src: Path, provision_root: Path) -> str:
-    """Return the user-data text with the marker expanded.
+    """Return the user-data text with markers expanded.
 
-    If the marker is absent the source is returned unchanged so legacy
-    templates keep working during the migration.
+    Two markers are honoured:
+
+      * ``__NOSI_VERSION__`` is replaced inline anywhere in the template
+        with the build identifier (rolling-tag format from git, or the
+        ``NOSI_VERSION`` env var). Works for cloud-init implementations
+        that don't honour ``write_files:`` (notably FreeBSD's nuageinit),
+        where the marker-via-write_files path below is a no-op.
+
+      * ``# __NOSI_PROVISION_FILES__`` as a standalone comment line in a
+        ``write_files:`` list is expanded into write_files entries for
+        every provision script + an ``/opt/nosi/.nosi-version`` file.
+        Templates without this marker still get __NOSI_VERSION__
+        substitution above.
     """
     template = src.read_text()
 
-    # The marker is expected to appear as a standalone comment line
-    # inside a `write_files:` list, e.g. `  # __NOSI_PROVISION_FILES__`.
-    # Surrounding prose can mention the marker by name without triggering
-    # substitution, as long as the line carries more than just the
-    # comment marker. We match lines where the stripped content is
-    # exactly `# <MARKER>`.
+    # 1. Inline __NOSI_VERSION__ substitution -- always, regardless of
+    #    whether the write_files marker is present.
+    version = _resolve_version(provision_root.parent)
+    template = template.replace("__NOSI_VERSION__", version)
+
+    # 2. write_files marker expansion.
     expected = f"# {MARKER}"
     marker_line = next(
         (line for line in template.splitlines() if line.strip() == expected),
@@ -129,12 +140,11 @@ def render(src: Path, provision_root: Path) -> str:
             f"{body_lines}"
         )
 
-    # Build identifier captured at render time. Consumed in the guest by
-    # provision/steps/33-nosi-release.sh, which writes /etc/nosi-release
-    # and surfaces this in /etc/motd via 31-motd. Single-line text file,
-    # 0644, lives under /opt/nosi/ so a Hetzner-VM operator can drop the
-    # same file in by hand if they want a custom identifier.
-    version = _resolve_version(provision_root.parent)
+    # Build identifier captured at render time. Same value already
+    # substituted inline above for __NOSI_VERSION__ users; the
+    # write_files entry below is for the apply.sh step 05 path on
+    # Linux (which reads /opt/nosi/.nosi-version via the cloud-init
+    # users + files modules).
     body_indent = indent + "    "
     blocks.append(
         f"{indent}- path: /opt/nosi/.nosi-version\n"

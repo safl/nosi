@@ -81,14 +81,12 @@ packages:
   - jq
   - ripgrep
 
-# nosi cijoe renderer expands this marker into write_files: entries for
-# /opt/nosi/provision/*.sh (apply.sh + lib + steps) AND /opt/nosi/.nosi-
-# version capturing the build identity. FreeBSD Phase 1 doesn't run
-# apply.sh, so the .sh files just sit on disk (~100 KB, inert), but the
-# .nosi-version file is the source of truth our inline metadata writer
-# pulls the rolling-tag from.
-write_files:
-  # __NOSI_PROVISION_FILES__
+# nuageinit doesn't honour cloud-init's write_files: directive in the
+# shape our renderer emits (used by the Linux variants to drop the
+# provision tree + /opt/nosi/.nosi-version). FreeBSD instead relies on
+# the renderer's inline __NOSI_VERSION__ substitution -- the marker
+# below in runcmd gets replaced with the actual rolling tag at bake
+# time, no write_files needed.
 
 runcmd:
   # Reclaim uid 1000 for odus. nuageinit's users module runs before
@@ -134,11 +132,15 @@ runcmd:
   # ORAS catalog layer, same shape as step 98-metadata produces on the
   # Linux variants. apply.sh doesn't run on FreeBSD Phase 1, hence
   # inline. Pulls the rolling-tag from /opt/nosi/.nosi-version which
-  # the cijoe renderer writes at bake time.
+  # the cijoe renderer writes at bake time. Absolute path to jq because
+  # nuageinit's runcmd PATH does not include /usr/local/bin. No stub /
+  # graceful-degrade fallback -- if jq isn't there or fails, the bake
+  # fails. The smoketest's metadata-parse assertion catches any silent
+  # truncation too.
   - |
-    NV=$(cat /opt/nosi/.nosi-version 2>/dev/null || echo unknown)
-    jq -n \
-        --arg version "$NV" \
+    set -e
+    /usr/local/bin/jq -n \
+        --arg version "__NOSI_VERSION__" \
         --arg flavor sysdev \
         --arg variant freebsd-sysdev \
         --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

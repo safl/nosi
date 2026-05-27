@@ -280,9 +280,12 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
 
     The destination is the same directory as the baked qcow2 so the GHA
     workflow's oras push step can attach both files as image-provenance
-    layers without juggling paths. Failure is logged but non-fatal: the
-    smoketest's own assertion that /etc/nosi-metadata.json exists and
-    parses inside the VM is the load-bearing check.
+    layers without juggling paths.
+
+    Hard failure on every error path. The image is supposed to ship a
+    metadata.json; if scp can't fetch it or the file isn't parseable,
+    the smoketest fails and the build is refused. Don't let a partial-
+    success ship a crappy image to the operator.
     """
     out_dir = qcow2.parent
     base = qcow2.stem  # nosi-<variant>-x86_64
@@ -297,18 +300,16 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     ]
     res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
     if res.returncode != 0:
-        log.error(
+        raise RuntimeError(
             f"scp /etc/nosi-metadata.json failed (exit {res.returncode}): "
             f"{(res.stderr or res.stdout).strip()}"
         )
-        return
 
     import json as _json
     try:
         meta = _json.loads(json_local.read_text())
     except (OSError, ValueError) as exc:
-        log.error(f"extracted metadata.json did not parse: {exc}")
-        return
+        raise RuntimeError(f"extracted metadata.json did not parse: {exc}") from exc
 
     md_local.write_text(_render_metadata_markdown(meta))
     log.info(f"metadata written: {json_local.name}, {md_local.name}")
@@ -461,6 +462,27 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         ok, detail = predicate(rc, out)
         results.append((ok, name, detail))
 
+    # ---- universal: metadata file exists, parses, has the right variant ---
+    # Every variant must emit /etc/nosi-metadata.json (Linux variants via
+    # step 98-metadata; FreeBSD via inline jq in cloud-init runcmd). The
+    # ORAS push step trusts the smoketest's verdict to know whether the
+    # file is publishable. Gate here, before any distro-specific branch,
+    # so a missing or malformed file fails the smoketest -- never silently
+    # drops the metadata layer from the published artefact.
+    check(
+        "/etc/nosi-metadata.json present and parses as JSON",
+        "python3 -c 'import json; json.load(open(\"/etc/nosi-metadata.json\"))' && echo ok",
+        lambda rc, out: (out == "ok", out or f"exit {rc}"),
+    )
+    check(
+        "/etc/nosi-metadata.json carries the right NOSI_VARIANT",
+        "python3 -c 'import json,sys; "
+        "d=json.load(open(\"/etc/nosi-metadata.json\")); "
+        "sys.exit(0 if d.get(\"nosi\",{}).get(\"variant\")==\"" + variant + "\" else 1)' "
+        "&& echo ok",
+        lambda rc, out: (out == "ok", out or f"exit {rc}"),
+    )
+
     # ---- FreeBSD (Phase 1 scaffold) --------------------------------------
     # FreeBSD doesn't run apply.sh yet (the provision/steps/*.sh chain is
     # entirely Linux-shaped: systemd / DKMS / apt / dnf / grub / /proc).
@@ -525,16 +547,6 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         "/etc/nosi/apply-ok sentinel present (apply.sh completed cleanly)",
         "test -r /etc/nosi/apply-ok && cat /etc/nosi/apply-ok",
         lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
-    )
-
-    # ---- metadata file exists --------------------------------------------
-    # /etc/nosi-metadata.json is written by step 98 and contains the
-    # full bake inventory. Smoketest just verifies presence + parses as
-    # JSON to catch syntax errors in the in-VM emitter.
-    check(
-        "/etc/nosi-metadata.json present and parses as JSON",
-        "python3 -c 'import json; json.load(open(\"/etc/nosi-metadata.json\"))' && echo ok",
-        lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
 
     # ---- build identity ---------------------------------------------------
