@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-sysdev, ubuntu-2404-sysdev, ubuntu-2404-aidev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, freebsd-14-sysdev, freebsd-15-sysdev]
+        variant: [debian-13-sysdev, ubuntu-2404-sysdev, ubuntu-2404-aidev, ubuntu-2604-sysdev, ubuntu-2604-aidev, fedora-44-sysdev, fedora-44-desktop, freebsd-14-sysdev, freebsd-15-sysdev]
 
     steps:
       - uses: actions/checkout@v5
@@ -243,6 +243,9 @@ jobs:
               ;;
           fedora-44-sysdev)
               variant_desc="Fedora 44 sysdev. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
+              ;;
+          fedora-44-desktop)
+              variant_desc="Fedora 44 desktop. Hyprland tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the sysdev baseline. For personal laptop / workstation use."
               ;;
           freebsd-14-sysdev)
               variant_desc="FreeBSD 14.4-RELEASE sysdev scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."

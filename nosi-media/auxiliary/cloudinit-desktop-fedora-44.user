@@ -1,0 +1,222 @@
+#cloud-config
+# nosi desktop : Fedora 44 + Hyprland (Wayland) for personal laptop /
+# workstation use. Same sysdev baseline as fedora-44-sysdev plus a
+# desktop layer: Hyprland tiling compositor, tuigreet greeter, Firefox,
+# audio (PipeWire + WirePlumber), bluetooth, brightness, power
+# management. Opinionated default configs live in
+# provision/steps/50-desktop-stack.sh which drops them under
+# /etc/skel/.config/ + /home/odus/.config/ at bake time. Same default
+# credentials: `odus` / `odus.321`, root locked.
+
+hostname: nosi-fedora-desktop
+fqdn: nosi-fedora-desktop.local
+manage_etc_hosts: true
+
+timezone: UTC
+
+ssh_pwauth: true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1000. Same construction as fedora-44-sysdev plus
+# desktop-relevant groups: `video` for direct render access (Wayland
+# compositors talk to /dev/dri/* via the seat manager but
+# membership matches the conventional laptop-user setup), `input` for
+# evdev access to lid / keyboard / touchpad without seat-elevated
+# helpers. `audio` is intentionally absent: PipeWire uses ACLs via
+# logind and the group is legacy ALSA.
+users:
+  - name: odus
+    uid: 1000
+    gecos: nosi operator
+    shell: /bin/bash
+    groups: [wheel, kvm, video, input]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
+growpart:
+  mode: auto
+  devices: ["/"]
+
+resize_rootfs: true
+
+# Same dnf weak-deps + base-user-strip as fedora-44-sysdev.
+bootcmd:
+  - |
+    if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
+        echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
+    fi
+  - userdel -r fedora 2>/dev/null || true
+
+package_update: true
+package_upgrade: true
+
+packages:
+  # --- baseline sysdev set (mirrors cloudinit-sysdev-fedora-44.user) ---
+  - ca-certificates
+  - openssh-server
+  - sudo
+  - systemd-resolved
+  - chrony
+  - bash-completion
+  - btop
+  - direnv
+  - fd-find
+  - fzf
+  - gh
+  - git
+  - git-delta
+  - htop
+  - just
+  - meson
+  - ninja-build
+  - parallel
+  - ripgrep
+  - ShellCheck
+  - stress-ng
+  - sysstat
+  - time
+  - unzip
+  - libicu
+  - kernel-devel
+  - perf
+  - bind-utils
+  - curl
+  - jq
+  - lsof
+  - mtr
+  - NetworkManager-tui
+  - nmap
+  - strace
+  - tcpdump
+  - wget
+  - ccache
+  - clang
+  - clang-tools-extra
+  - cmake
+  - cppcheck
+  - gcc
+  - gcc-c++
+  - gdb
+  - lldb
+  - make
+  - pipx
+  - pkgconf-pkg-config
+  - python3
+  - valgrind
+  - buildah
+  - passt
+  - podman
+  - podman-docker
+  - skopeo
+  - dmidecode
+  - hdparm
+  - lshw
+  - nvme-cli
+  - pciutils
+  - smartmontools
+  - usbutils
+  - linux-firmware
+  - microcode_ctl
+  - edk2-ovmf
+  - qemu-img
+  - qemu-system-x86-core
+  # --- desktop additions ------------------------------------------------
+  # Hyprland tiling compositor + Hyprland-family lock / idle / portal /
+  # polkit agent. hyprpolkitagent is in Fedora 44 main; if it's not
+  # available on a later rebuild, polkit-gnome is the drop-in fallback.
+  - hyprland
+  - hyprlock
+  - hypridle
+  - xdg-desktop-portal-hyprland
+  - hyprpolkitagent
+  # wlroots-shared desktop bits: terminal, bar, launcher, notifications,
+  # clipboard, screenshots. All compositor-agnostic Wayland tools.
+  - foot
+  - waybar
+  - fuzzel
+  - mako
+  - wl-clipboard
+  - cliphist
+  - grim
+  - slurp
+  # Greeter: tuigreet on top of greetd. The seatd dep comes in via
+  # greetd; we don't enable it explicitly because greetd's own service
+  # owns the seat.
+  - greetd
+  - greetd-tuigreet
+  # Browser: Firefox (Fedora's flagship; ESR vs nightly is the operator
+  # personal call -- we ship the rolling Fedora package).
+  - firefox
+  # Audio: PipeWire + WirePlumber + the PulseAudio compat shim so legacy
+  # apps that talk to PulseAudio Just Work. pavucontrol is a useful
+  # graphical mixer; everything else runs through wpctl from CLI.
+  - pipewire
+  - pipewire-pulseaudio
+  - wireplumber
+  - pavucontrol
+  # Laptop bits: brightness control, bluetooth stack, MPRIS player
+  # control for media-key binds, power profiles daemon (Fedora default;
+  # ships balanced / performance / power-saver via dbus).
+  - brightnessctl
+  - bluez
+  - bluez-tools
+  - power-profiles-daemon
+  - playerctl
+  # Fonts: JetBrainsMono Nerd Font for terminal + waybar icon glyphs.
+  # Noto covers most other scripts + emoji.
+  - jetbrains-mono-nerd-fonts
+  - google-noto-sans-fonts
+  - google-noto-color-emoji-fonts
+  # XDG plumbing: xdg-utils for xdg-open, xdg-desktop-portal as the
+  # base portal stack (xdg-desktop-portal-hyprland plugs into it).
+  - xdg-utils
+  - xdg-desktop-portal
+
+# Drop the nosi provision/ tree into /opt/nosi/provision/. The
+# __NOSI_PROVISION_FILES__ marker is expanded at bake time by
+# cijoe/scripts/userdata_render.py: it replaces this comment with one
+# write_files: entry per file under provision/ (apply.sh, lib/*,
+# steps/*), chmod 0755. The runcmd: section below then invokes
+# /opt/nosi/provision/apply.sh, which is also the same script
+# operators run on a vanilla Hetzner VM to reach image parity.
+write_files:
+  # __NOSI_PROVISION_FILES__
+
+runcmd:
+
+  # nosi provision: sysdev baseline + step 50-desktop-stack which drops
+  # opinionated default configs for Hyprland / waybar / foot / fuzzel /
+  # mako under /etc/skel/.config/ + /home/odus/.config/, wires greetd as
+  # the display manager pointing at tuigreet + Hyprland, and sets the
+  # default systemd target to graphical. Same apply.sh runs on a
+  # vanilla Fedora 44 box (`sudo /opt/nosi/provision/apply.sh
+  # fedora-44-desktop`) to reach this image's parity.
+  - /opt/nosi/provision/apply.sh fedora-44-desktop
+
+  - passwd -l root
+
+  - rm -f /etc/ssh/ssh_host_*
+  - ': > /etc/machine-id'
+  - rm -f /var/lib/dbus/machine-id
+  - cloud-init clean --logs --seed || true
+
+  - |
+    set -eu
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/journal/* /var/log/dnf.log* /var/log/dnf.rpm.log*
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    dnf -y autoremove
+
+  - touch /usr/lib/clock-epoch
+
+  - dnf clean all
+  - rm -rf /var/cache/dnf/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
+
+final_message: "nosi fedora-44-desktop baked in $UPTIME seconds; powering off"
+
+power_state:
+  mode: poweroff
+  timeout: 60
+  message: "nosi build complete"

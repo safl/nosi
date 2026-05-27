@@ -41,6 +41,7 @@ KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
     ("ubuntu-2604-sysdev",  "ghcr.io/safl/nosi/ubuntu-2604-sysdev:latest"),
     ("ubuntu-2604-aidev",   "ghcr.io/safl/nosi/ubuntu-2604-aidev:latest"),
     ("fedora-44-sysdev",    "ghcr.io/safl/nosi/fedora-44-sysdev:latest"),
+    ("fedora-44-desktop",   "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
     ("freebsd-14-sysdev",   "ghcr.io/safl/nosi/freebsd-14-sysdev:latest"),
     ("freebsd-15-sysdev",   "ghcr.io/safl/nosi/freebsd-15-sysdev:latest"),
 )

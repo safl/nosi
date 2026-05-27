@@ -30,6 +30,7 @@ help:
 	@echo "  ubuntu-2604-aidev   Ubuntu 26.04 resolute + agentic CLIs"
 	@echo "                      (additionally publishes a WSL .tar.gz)"
 	@echo "  fedora-44-sysdev    Fedora 44"
+	@echo "  fedora-44-desktop   Fedora 44 + Hyprland desktop (personal laptop)"
 	@echo "  freebsd-14-sysdev   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
 	@echo "  freebsd-15-sysdev   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
 	@echo
@@ -56,6 +57,7 @@ all:
 	$(MAKE) build VARIANT=ubuntu-2604-sysdev
 	$(MAKE) build VARIANT=ubuntu-2604-aidev
 	$(MAKE) build VARIANT=fedora-44-sysdev
+	$(MAKE) build VARIANT=fedora-44-desktop
 	$(MAKE) build VARIANT=freebsd-14-sysdev
 	$(MAKE) build VARIANT=freebsd-15-sysdev
 
