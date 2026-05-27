@@ -151,6 +151,31 @@ chmod 0755 /usr/local/bin/marksman
 /usr/local/bin/marksman --version 2>/dev/null \
     || /usr/local/bin/marksman --help >/dev/null
 
+# ---- zig (ziglang.org) ----------------------------------------------------
+# Zig ships as a static binary + a sibling lib/ runtime tree; the binary
+# resolves its lib via realpath, so /usr/local/zig is the canonical install
+# root and /usr/local/bin/zig is a symlink to /usr/local/zig/zig.
+# Pinned version: bump as new stable releases land at
+# https://ziglang.org/download/. The download index is at
+# https://ziglang.org/download/index.json if dynamic discovery is wanted
+# later, but pinning keeps the install reproducible across re-runs.
+
+zig_ver="0.13.0"
+case "$arch" in
+    x86_64)  zig_arch=x86_64 ;;
+    aarch64) zig_arch=aarch64 ;;
+    *) nosi_die "unsupported arch $arch for zig" ;;
+esac
+tmp=$(mktemp -d)
+curl -fsSL "https://ziglang.org/download/${zig_ver}/zig-linux-${zig_arch}-${zig_ver}.tar.xz" \
+    -o "$tmp/zig.tar.xz"
+rm -rf /usr/local/zig
+mkdir -p /usr/local/zig
+tar -xJf "$tmp/zig.tar.xz" -C /usr/local/zig --strip-components=1
+rm -rf "$tmp"
+ln -sf /usr/local/zig/zig /usr/local/bin/zig
+/usr/local/bin/zig version
+
 # ---- oras (OCI registry CLI) ----------------------------------------------
 
 case "$arch" in
