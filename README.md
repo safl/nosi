@@ -26,7 +26,7 @@ required.
 
 Three shapes today: **`headless`** (C / C++ / Python / Rust systems
 work on bare metal / VM / cloud), **`desktop`** (headless superset
-plus a Hyprland tiling Wayland stack for personal laptop /
+plus a Sway tiling Wayland stack for personal laptop /
 workstation use), and **`wsl`** (headless superset plus GUI dev
 tools rendered through WSLg, published as a `.tar.gz` for `wsl
 --import`). Optional tooling (agentic AI CLIs, GPU vendor stacks,

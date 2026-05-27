@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/50-desktop-stack.sh
 #
-# desktop shape only. Configures the Hyprland-based desktop stack:
+# desktop shape only. Configures the Sway-based desktop stack:
 #
 #   * greetd + tuigreet as the system display manager, defaulting to
-#     a Hyprland session
-#   * opinionated default configs for Hyprland / hyprlock / hypridle
-#     / waybar / foot / fuzzel / mako under /etc/skel/.config/
+#     a sway session
+#   * opinionated default configs for sway / swaylock / waybar / foot /
+#     fuzzel / mako under /etc/skel/.config/
 #   * mirror of those defaults into /home/odus/.config/ so the baked
 #     operator account boots into a usable desktop on first login
 #   * graphical.target as the default systemd target
@@ -15,7 +15,7 @@
 #
 #   Super + Return  foot
 #   Super + Space   fuzzel (app launcher)
-#   Super + L       hyprlock (screen lock)
+#   Super + L       swaylock (screen lock)
 #   Super + Q       kill focused window
 #   Super + 1..9    switch workspace
 #   Print           screenshot whole screen to clipboard
@@ -57,7 +57,7 @@ if [ ! -d "$NERD_FONT_DEST" ]; then
 fi
 
 # ---- greetd ---------------------------------------------------------
-# Launch tuigreet on vt1, default to Hyprland. --remember +
+# Launch tuigreet on vt1, default to sway. --remember +
 # --remember-user-session save the chosen user + session command to
 # /var/cache/greetd/state.toml so the operator's last selection
 # carries across reboots. --asterisks shows password masking instead
@@ -68,164 +68,119 @@ cat > /etc/greetd/config.toml <<'EOF'
 vt = 1
 
 [default_session]
-command = "tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd Hyprland"
+command = "tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd sway"
 user = "greeter"
 EOF
 chmod 0644 /etc/greetd/config.toml
 
-# ---- Hyprland config ------------------------------------------------
-install -d -m 0755 /etc/skel/.config/hypr
-cat > /etc/skel/.config/hypr/hyprland.conf <<'EOF'
-# nosi default Hyprland config. Copied from /etc/skel/.config/hypr/
-# on first login; personalise in place, nosi never overwrites it.
-# Reference: https://wiki.hyprland.org/Configuring/
+# ---- Sway config ----------------------------------------------------
+install -d -m 0755 /etc/skel/.config/sway
+cat > /etc/skel/.config/sway/config <<'EOF'
+# nosi default sway config. Copied from /etc/skel/.config/sway/ on
+# first login; personalise in place, nosi never overwrites it.
+# Reference: https://github.com/swaywm/sway/wiki
 
-monitor = , preferred, auto, 1
+# Mod = Super (left Windows key)
+set $mod Mod4
 
-$mod = SUPER
-$terminal = foot
-$launcher = fuzzel
-$lockcmd  = hyprlock
+# Programs
+set $term foot
+set $menu fuzzel
+set $lockcmd swaylock
 
-# Autostart
-exec-once = waybar
-exec-once = mako
-exec-once = hypridle
-exec-once = hyprpolkitagent
-exec-once = wl-paste --watch cliphist store
+# Output: autodetect; sway handles hotplug
+output * bg #151515 solid_color
 
 # Input
-input {
-    kb_layout = us
-    follow_mouse = 1
-    touchpad {
-        natural_scroll = yes
-        tap-to-click   = yes
-    }
+input * {
+    xkb_layout us
+    natural_scroll enabled
+    tap enabled
 }
 
-general {
-    gaps_in     = 4
-    gaps_out    = 8
-    border_size = 2
-    layout      = dwindle
-}
+# Gaps + borders
+gaps inner 4
+gaps outer 8
+default_border pixel 2
 
-decoration {
-    rounding = 4
-}
-
-animations {
-    enabled = true
-}
+# Autostart
+exec waybar
+exec mako
+exec /usr/libexec/polkit-gnome-authentication-agent-1
+exec wl-paste --watch cliphist store
+# swayidle: lock after 5 min, screen off after 10, suspend after 15.
+exec swayidle -w \
+    timeout 300 'swaylock -f' \
+    timeout 600 'swaymsg "output * dpms off"' \
+        resume 'swaymsg "output * dpms on"' \
+    timeout 900 'systemctl suspend' \
+    before-sleep 'swaylock -f'
 
 # Window management
-bind = $mod,       Return, exec, $terminal
-bind = $mod,       Space,  exec, $launcher
-bind = $mod,       Q,      killactive
-bind = $mod SHIFT, E,      exit
-bind = $mod,       V,      togglefloating
-bind = $mod,       L,      exec, $lockcmd
-bind = $mod,       F,      fullscreen, 0
+bindsym $mod+Return       exec $term
+bindsym $mod+space        exec $menu
+bindsym $mod+q            kill
+bindsym $mod+Shift+e      exit
+bindsym $mod+v            floating toggle
+bindsym $mod+l            exec $lockcmd
+bindsym $mod+f            fullscreen toggle
 
 # Focus
-bind = $mod, left,  movefocus, l
-bind = $mod, right, movefocus, r
-bind = $mod, up,    movefocus, u
-bind = $mod, down,  movefocus, d
+bindsym $mod+Left         focus left
+bindsym $mod+Right        focus right
+bindsym $mod+Up           focus up
+bindsym $mod+Down         focus down
 
 # Workspaces
-bind = $mod, 1, workspace, 1
-bind = $mod, 2, workspace, 2
-bind = $mod, 3, workspace, 3
-bind = $mod, 4, workspace, 4
-bind = $mod, 5, workspace, 5
-bind = $mod, 6, workspace, 6
-bind = $mod, 7, workspace, 7
-bind = $mod, 8, workspace, 8
-bind = $mod, 9, workspace, 9
+bindsym $mod+1            workspace number 1
+bindsym $mod+2            workspace number 2
+bindsym $mod+3            workspace number 3
+bindsym $mod+4            workspace number 4
+bindsym $mod+5            workspace number 5
+bindsym $mod+6            workspace number 6
+bindsym $mod+7            workspace number 7
+bindsym $mod+8            workspace number 8
+bindsym $mod+9            workspace number 9
 
-bind = $mod SHIFT, 1, movetoworkspace, 1
-bind = $mod SHIFT, 2, movetoworkspace, 2
-bind = $mod SHIFT, 3, movetoworkspace, 3
-bind = $mod SHIFT, 4, movetoworkspace, 4
-bind = $mod SHIFT, 5, movetoworkspace, 5
-bind = $mod SHIFT, 6, movetoworkspace, 6
-bind = $mod SHIFT, 7, movetoworkspace, 7
-bind = $mod SHIFT, 8, movetoworkspace, 8
-bind = $mod SHIFT, 9, movetoworkspace, 9
+bindsym $mod+Shift+1      move container to workspace number 1
+bindsym $mod+Shift+2      move container to workspace number 2
+bindsym $mod+Shift+3      move container to workspace number 3
+bindsym $mod+Shift+4      move container to workspace number 4
+bindsym $mod+Shift+5      move container to workspace number 5
+bindsym $mod+Shift+6      move container to workspace number 6
+bindsym $mod+Shift+7      move container to workspace number 7
+bindsym $mod+Shift+8      move container to workspace number 8
+bindsym $mod+Shift+9      move container to workspace number 9
 
 # Screenshots
-bind = ,      Print, exec, grim - | wl-copy
-bind = SHIFT, Print, exec, slurp | grim -g - - | wl-copy
+bindsym Print             exec grim - | wl-copy
+bindsym Shift+Print       exec slurp | grim -g - - | wl-copy
 
-# Brightness + volume (XF86 keys on laptops). bindel = bindable
-# event-triggered + locked-state-allowed (keys work with screen locked).
-bindel = , XF86MonBrightnessUp,   exec, brightnessctl s 10%+
-bindel = , XF86MonBrightnessDown, exec, brightnessctl s 10%-
-bindel = , XF86AudioRaiseVolume,  exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
-bindel = , XF86AudioLowerVolume,  exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
-bindel = , XF86AudioMute,         exec, wpctl set-mute   @DEFAULT_AUDIO_SINK@ toggle
-bindel = , XF86AudioMicMute,      exec, wpctl set-mute   @DEFAULT_AUDIO_SOURCE@ toggle
+# Brightness + volume (XF86 keys on laptops)
+bindsym --locked XF86MonBrightnessUp   exec brightnessctl s 10%+
+bindsym --locked XF86MonBrightnessDown exec brightnessctl s 10%-
+bindsym --locked XF86AudioRaiseVolume  exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym --locked XF86AudioLowerVolume  exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym --locked XF86AudioMute         exec wpctl set-mute   @DEFAULT_AUDIO_SINK@ toggle
+bindsym --locked XF86AudioMicMute      exec wpctl set-mute   @DEFAULT_AUDIO_SOURCE@ toggle
 
 # Media keys (MPRIS via playerctl)
-bindl = , XF86AudioPlay, exec, playerctl play-pause
-bindl = , XF86AudioNext, exec, playerctl next
-bindl = , XF86AudioPrev, exec, playerctl previous
+bindsym --locked XF86AudioPlay         exec playerctl play-pause
+bindsym --locked XF86AudioNext         exec playerctl next
+bindsym --locked XF86AudioPrev         exec playerctl previous
 
-# Window drag with mouse
-bindm = $mod, mouse:272, movewindow
-bindm = $mod, mouse:273, resizewindow
+# Floating drag/resize with Super + mouse
+floating_modifier $mod normal
 EOF
 
-# ---- Hyprlock -------------------------------------------------------
-cat > /etc/skel/.config/hypr/hyprlock.conf <<'EOF'
-background {
-    color = rgba(15, 15, 15, 1.0)
-}
-
-input-field {
-    size            = 250, 50
-    position        = 0, 0
-    halign          = center
-    valign          = center
-    placeholder_text = password
-    hide_input      = false
-    fade_on_empty   = false
-}
-
-label {
-    text       = cmd[update:1000] echo "$(date +'%H:%M:%S')"
-    font_size  = 32
-    position   = 0, 80
-    halign     = center
-    valign     = center
-}
-EOF
-
-# ---- Hypridle -------------------------------------------------------
-cat > /etc/skel/.config/hypr/hypridle.conf <<'EOF'
-general {
-    lock_cmd         = pidof hyprlock || hyprlock
-    before_sleep_cmd = loginctl lock-session
-    after_sleep_cmd  = hyprctl dispatch dpms on
-}
-
-listener {
-    timeout    = 300                                    # 5 min
-    on-timeout = loginctl lock-session
-}
-
-listener {
-    timeout    = 600                                    # 10 min
-    on-timeout = hyprctl dispatch dpms off
-    on-resume  = hyprctl dispatch dpms on
-}
-
-listener {
-    timeout    = 900                                    # 15 min
-    on-timeout = systemctl suspend
-}
+# ---- swaylock config -----------------------------------------------
+install -d -m 0755 /etc/skel/.config/swaylock
+cat > /etc/skel/.config/swaylock/config <<'EOF'
+ignore-empty-password
+color=151515
+font=JetBrainsMono Nerd Font
+indicator-radius=100
+indicator-thickness=10
 EOF
 
 # ---- Waybar ---------------------------------------------------------
@@ -236,15 +191,15 @@ cat > /etc/skel/.config/waybar/config <<'EOF'
     "position": "top",
     "height":   28,
     "spacing":  8,
-    "modules-left":   ["hyprland/workspaces", "hyprland/window"],
+    "modules-left":   ["sway/workspaces", "sway/window"],
     "modules-center": ["clock"],
     "modules-right":  ["pulseaudio", "network", "battery", "tray"],
 
-    "hyprland/workspaces": {
+    "sway/workspaces": {
         "format":   "{name}",
         "on-click": "activate"
     },
-    "hyprland/window": {
+    "sway/window": {
         "max-length": 60
     },
     "clock": {
@@ -364,7 +319,7 @@ chmod -R u=rwX,go=rX /etc/skel/.config
 # files across an apply.sh re-run.
 if id -u odus >/dev/null 2>&1; then
     install -d -m 0700 -o odus -g odus /home/odus/.config
-    for sub in hypr waybar foot fuzzel mako; do
+    for sub in sway swaylock waybar foot fuzzel mako; do
         if [ ! -d /home/odus/.config/$sub ]; then
             cp -r /etc/skel/.config/$sub /home/odus/.config/
             chown -R odus:odus /home/odus/.config/$sub

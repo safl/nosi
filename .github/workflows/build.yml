@@ -245,7 +245,7 @@ jobs:
               variant_desc="Fedora 44 headless. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
               ;;
           fedora-44-desktop)
-              variant_desc="Fedora 44 desktop. Hyprland tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the headless baseline. For personal laptop / workstation use."
+              variant_desc="Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the headless baseline. For personal laptop / workstation use."
               ;;
           freebsd-14-headless)
               variant_desc="FreeBSD 14.4-RELEASE headless scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."

@@ -28,7 +28,7 @@ help:
 	@echo "  ubuntu-2604-wsl       Ubuntu 26.04 resolute + meld/gitk/git-gui"
 	@echo "                        (WSL2 rootfs; renders GUI tools via WSLg)"
 	@echo "  fedora-44-headless    Fedora 44"
-	@echo "  fedora-44-desktop     Fedora 44 + Hyprland desktop (personal laptop)"
+	@echo "  fedora-44-desktop     Fedora 44 + Sway desktop (personal laptop)"
 	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
 	@echo "  freebsd-15-headless   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
 	@echo

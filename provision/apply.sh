@@ -7,7 +7,7 @@
 #   debian-13-headless    headless on Debian 13 (apt)
 #   ubuntu-2604-headless  headless on Ubuntu 26.04 (apt)
 #   fedora-44-headless    headless on Fedora 44 (dnf)
-#   fedora-44-desktop     desktop on Fedora 44 (dnf; Hyprland tiling stack)
+#   fedora-44-desktop     desktop on Fedora 44 (dnf; Sway tiling stack)
 #
 # Shape is parsed from the suffix (-headless / -desktop); the rest is
 # informational (lib/common.sh detects the live distro/pkgmgr from

@@ -25,7 +25,7 @@ Three shapes ship today:
   (dmidecode / lshw / nvme-cli / smartmontools), the helix / zellij
   / lazygit / yazi daily-driver layer, and a pipx-installed Python
   CLI set (uv, ruff, pyright, devbind).
-- **`desktop`** : headless superset plus a Hyprland tiling Wayland
+- **`desktop`** : headless superset plus a Sway tiling Wayland
   compositor + tuigreet greeter + Firefox + audio (PipeWire +
   WirePlumber) + bluetooth + brightness + power-profiles-daemon. For
   personal laptop / workstation use.

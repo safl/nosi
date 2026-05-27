@@ -1,7 +1,7 @@
 #cloud-config
-# nosi desktop : Fedora 44 + Hyprland (Wayland) for personal laptop /
-# workstation use. Same headless baseline as fedora-44-headless plus a
-# desktop layer: Hyprland tiling compositor, tuigreet greeter, Firefox,
+# nosi desktop : Fedora 44 + Sway (Wayland) for personal laptop /
+# workstation use. Same headless baseline as fedora-44-headless plus
+# a desktop layer: Sway tiling compositor, tuigreet greeter, Firefox,
 # audio (PipeWire + WirePlumber), bluetooth, brightness, power
 # management. Opinionated default configs live in
 # provision/steps/50-desktop-stack.sh which drops them under
@@ -40,20 +40,19 @@ growpart:
 
 resize_rootfs: true
 
-# Same dnf weak-deps + base-user-strip as fedora-44-headless. Plus the
-# solopasha/hyprland COPR enabled at bootcmd time (before cloud-init's
-# package install runs): Hyprland + hyprlock / hypridle / hyprpaper /
-# xdg-desktop-portal-hyprland / hyprpolkitagent live there, not in
-# Fedora 44 mainline. Without this enable, the cloud-init dnf
-# transaction aborts at the first unresolved hyprland-* and skips
-# every other package in the list (dnf5 is strict by default).
+# Same dnf weak-deps + base-user-strip as fedora-44-headless. The
+# compositor is Sway (in Fedora mainline; no COPR / third-party repo)
+# rather than Hyprland because the latest Hyprland on F44 has an
+# unresolved libdisplay-info.so.2 dep (the COPR built aquamarine
+# against F45's libdisplay-info 0.4.x; F44 ships 0.3.0). Same
+# tiling-Wayland operator UX, just an i3-style config language
+# instead of hyprlang.
 bootcmd:
   - |
     if [ -f /etc/dnf/dnf.conf ] && ! grep -q '^install_weak_deps' /etc/dnf/dnf.conf; then
         echo 'install_weak_deps=False' >> /etc/dnf/dnf.conf
     fi
   - userdel -r fedora 2>/dev/null || true
-  - dnf -y copr enable solopasha/hyprland
 
 package_update: true
 package_upgrade: true
@@ -129,14 +128,17 @@ packages:
   - qemu-img
   - qemu-system-x86-core
   # --- desktop additions ------------------------------------------------
-  # Hyprland tiling compositor + Hyprland-family lock / idle / portal /
-  # polkit agent. hyprpolkitagent is in Fedora 44 main; if it's not
-  # available on a later rebuild, polkit-gnome is the drop-in fallback.
-  - hyprland
-  - hyprlock
-  - hypridle
-  - xdg-desktop-portal-hyprland
-  - hyprpolkitagent
+  # Sway tiling Wayland compositor + Sway-family lock / idle / wallpaper.
+  - sway
+  - swaylock
+  - swayidle
+  - swaybg
+  # Wayland portals: xdg-desktop-portal-wlr handles screencast / file
+  # picker for wlroots-based compositors (Sway is wlroots). polkit-gnome
+  # is the GTK polkit auth agent -- compositor-agnostic, runs fine under
+  # Sway via an `exec` in the Sway config.
+  - xdg-desktop-portal-wlr
+  - polkit-gnome
   # wlroots-shared desktop bits: terminal, bar, launcher, notifications,
   # clipboard, screenshots. All compositor-agnostic Wayland tools.
   - foot
@@ -178,7 +180,7 @@ packages:
   - google-noto-sans-fonts
   - google-noto-color-emoji-fonts
   # XDG plumbing: xdg-utils for xdg-open, xdg-desktop-portal as the
-  # base portal stack (xdg-desktop-portal-hyprland plugs into it).
+  # base portal stack (xdg-desktop-portal-wlr plugs into it).
   - xdg-utils
   - xdg-desktop-portal
 
@@ -195,9 +197,9 @@ write_files:
 runcmd:
 
   # nosi provision: headless baseline + step 50-desktop-stack which drops
-  # opinionated default configs for Hyprland / waybar / foot / fuzzel /
+  # opinionated default configs for Sway / waybar / foot / fuzzel /
   # mako under /etc/skel/.config/ + /home/odus/.config/, wires greetd as
-  # the display manager pointing at tuigreet + Hyprland, and sets the
+  # the display manager pointing at tuigreet + sway, and sets the
   # default systemd target to graphical. Same apply.sh runs on a
   # vanilla Fedora 44 box (`sudo /opt/nosi/provision/apply.sh
   # fedora-44-desktop`) to reach this image's parity.

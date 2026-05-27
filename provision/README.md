@@ -34,7 +34,7 @@ provision/
     ├── 30-clock-from-http.sh
     ├── 32-firstboot-inventory.sh
     ├── 45-nosi-addons.sh           # install /opt/nosi/addons/ + /usr/local/bin/nosi-addon
-    ├── 50-desktop-stack.sh         # desktop-shape only: greetd / Hyprland / waybar configs
+    ├── 50-desktop-stack.sh         # desktop-shape only: greetd / sway / waybar configs
     ├── 98-metadata.sh              # /etc/nosi-metadata.json (tool versions, packages, identity)
     └── 99-motd.sh                  # LAST: login banner = "all earlier steps ran"
 ```
@@ -86,7 +86,7 @@ that an asserted-too-narrow smoketest would miss otherwise.
 | `ubuntu-2604-headless` | Ubuntu 26.04 resolute| -- |
 | `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |
 | `fedora-44-headless`   | Fedora 44            | -- |
-| `fedora-44-desktop`    | Fedora 44            | Hyprland + tuigreet + Firefox + audio/bluetooth/power-management |
+| `fedora-44-desktop`    | Fedora 44            | Sway + tuigreet + Firefox + audio/bluetooth/power-management |
 | `freebsd-14-headless`  | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
 | `freebsd-15-headless`  | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
 
