@@ -1,0 +1,71 @@
+# nosi wsl : Ubuntu 26.04 LTS (resolute) WSL2 rootfs
+#
+# Same headless baseline as ubuntu-2604-headless plus GUI dev tools
+# (meld / gitk / git-gui) that render through WSLg without a compositor
+# inside the rootfs. Single bake produces both a flashable .img.gz
+# (functional but mostly useless on bare metal -- you'd want headless
+# or desktop for that) and the WSL2 .tar.gz that gets imported via
+# `wsl --import`.
+#
+# Why 2604 and not 2404: this variant exists for daily-driver WSL use,
+# so the recency-leaning Ubuntu LTS is the natural pick. ubuntu-2404
+# stays focused on HW vendor stacks (cudadev / rocmdev), which run on
+# bare metal not WSL.
+#
+# Usage (from repo root, the Makefile cd's into cijoe/):
+#   make build VARIANT=ubuntu-2604-wsl
+
+[nosi]
+variant = "ubuntu-2604-wsl"
+
+[cijoe.transport.qemu_guest]
+username = "root"
+password = "root"
+hostname = "localhost"
+port = 4200
+
+[cijoe.workflow]
+fail_fast = true
+
+[qemu]
+img_bin = "qemu-img"
+
+[qemu.systems.x86_64]
+bin = "/usr/bin/qemu-system-x86_64"
+
+[qemu.guests.nosi-ubuntu-2604-wsl-x86_64]
+path = "{{ local.env.HOME }}/system_imaging/guests/nosi-ubuntu-2604-wsl-x86_64"
+system_label = "x86_64"
+system_image_name = "nosi-ubuntu-2604-wsl-x86_64"
+system_args.kwa = { cpu = "host", smp = 4, m = "4G", accel = "kvm" }
+system_args.tcp_forward = { host = 4200, guest = 22 }
+
+[system-imaging.images.nosi-ubuntu-2604-wsl-x86_64]
+system_label = "x86_64"
+
+cloud.url = "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/resolute-server-cloudimg-amd64.img"
+cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
+cloud.userdata_path = "nosi-media/auxiliary/cloudinit-wsl-ubuntu-2604.user"
+
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-x86_64.qcow2"
+
+# Flashable .img.gz output. The wsl shape's primary artefact is the
+# .tar.gz below; the .img.gz exists because the cijoe pipeline produces
+# it as a side-effect of the bake (qcow2 -> raw -> gz), and shipping
+# both is cheaper than wiring a per-variant publish-skip path. Operators
+# who want a flashable Ubuntu image should pick a headless or desktop
+# variant; this one is GUI-tools-on-CLI-rootfs and only really makes
+# sense imported into WSL.
+publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-x86_64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-x86_64.img.gz"
+publish.gzip_level = 9
+
+# WSL rootfs .tar.gz output. wsl_rootfs_publish attaches the baked
+# qcow2 via qemu-nbd, mounts the ext4 rootfs partition, chroot-purges
+# kernel/grub/firmware/cloud-init/netplan/NM plumbing (Windows owns
+# all of that under WSL2), and tar-gzips the stripped rootfs.
+publish_wsl.work_qcow2_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-wsl.work.qcow2"
+publish_wsl.tar_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-wsl.tar"
+publish_wsl.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-wsl-wsl.tar.gz"
+publish_wsl.gzip_level = 9

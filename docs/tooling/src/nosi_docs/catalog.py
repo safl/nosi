@@ -38,6 +38,7 @@ KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
     ("debian-13-headless",   "ghcr.io/safl/nosi/debian-13-headless:latest"),
     ("ubuntu-2404-headless", "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
     ("ubuntu-2604-headless", "ghcr.io/safl/nosi/ubuntu-2604-headless:latest"),
+    ("ubuntu-2604-wsl",      "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"),
     ("fedora-44-headless",   "ghcr.io/safl/nosi/fedora-44-headless:latest"),
     ("fedora-44-desktop",    "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
     ("freebsd-14-headless",  "ghcr.io/safl/nosi/freebsd-14-headless:latest"),

@@ -57,7 +57,8 @@ VARIANT="${1:-}"
 case "$VARIANT" in
 *-headless) export NOSI_SHAPE=headless ;;
 *-desktop)  export NOSI_SHAPE=desktop  ;;
-*)          nosi_die "variant must end in -headless or -desktop: $VARIANT" ;;
+*-wsl)      export NOSI_SHAPE=wsl      ;;
+*)          nosi_die "variant must end in -headless, -desktop, or -wsl: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.

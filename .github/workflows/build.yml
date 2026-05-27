@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
+        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, ubuntu-2604-wsl, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
 
     steps:
       - uses: actions/checkout@v5
@@ -235,6 +235,9 @@ jobs:
           ubuntu-2604-headless)
               variant_desc="Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel and user-land packages on Ubuntu LTS."
               ;;
+          ubuntu-2604-wsl)
+              variant_desc="Ubuntu 26.04 LTS (resolute) WSL2 rootfs. Headless baseline + meld / gitk / git-gui rendered through WSLg (no compositor in the rootfs). Imported via wsl --import."
+              ;;
           fedora-44-headless)
               variant_desc="Fedora 44 headless. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
               ;;
@@ -342,11 +345,8 @@ jobs:
           # WSL artefact gets a tweak of the disk-image description: same
           # variant identity, but flagged as the WSL rootfs derivative.
           case "${IMG}" in
-          ubuntu-2404-aidev)
-              variant_desc="Ubuntu 24.04 LTS (noble) aidev WSL2 rootfs (derived from the same bake as nosi-${IMG}). For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
-              ;;
-          ubuntu-2604-aidev)
-              variant_desc="Ubuntu 26.04 LTS (resolute) aidev WSL2 rootfs (derived from the same bake as nosi-${IMG}). For a more recent kernel and user-land packages on Ubuntu LTS."
+          ubuntu-2604-wsl)
+              variant_desc="Ubuntu 26.04 LTS (resolute) WSL2 rootfs (kernel/grub/firmware/cloud-init stripped post-bake). Headless baseline + meld / gitk / git-gui rendered through WSLg. Import via wsl --import."
               ;;
           *)
               echo "::error::no WSL variant_desc registered for IMG=${IMG}; add a case in .github/workflows/build.yml" >&2

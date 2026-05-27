@@ -25,6 +25,8 @@ help:
 	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble"
 	@echo "                        (HW vendor stacks; cudadev/rocmdev workflows pin here)"
 	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute"
+	@echo "  ubuntu-2604-wsl       Ubuntu 26.04 resolute + meld/gitk/git-gui"
+	@echo "                        (WSL2 rootfs; renders GUI tools via WSLg)"
 	@echo "  fedora-44-headless    Fedora 44"
 	@echo "  fedora-44-desktop     Fedora 44 + Hyprland desktop (personal laptop)"
 	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
@@ -50,6 +52,7 @@ all:
 	$(MAKE) build VARIANT=debian-13-headless
 	$(MAKE) build VARIANT=ubuntu-2404-headless
 	$(MAKE) build VARIANT=ubuntu-2604-headless
+	$(MAKE) build VARIANT=ubuntu-2604-wsl
 	$(MAKE) build VARIANT=fedora-44-headless
 	$(MAKE) build VARIANT=fedora-44-desktop
 	$(MAKE) build VARIANT=freebsd-14-headless

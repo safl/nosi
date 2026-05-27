@@ -427,5 +427,5 @@ def _find_rootfs_partition(cijoe, work_path, nbd_dev, attempts=10):
 
 def _default_image_name(cijoe) -> str:
     nosi = cijoe.getconf("nosi", {})
-    variant = nosi.get("variant", "ubuntu-2604-aidev")
+    variant = nosi.get("variant", "ubuntu-2604-wsl")
     return f"nosi-{variant}-x86_64"
