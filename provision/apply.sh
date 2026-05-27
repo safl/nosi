@@ -80,6 +80,11 @@ STEPS=(
     41-npm-globals
     42-pi-cli
     43-wsl-config
+    # 98-metadata captures the actual installed inventory (kernel, tool
+    # versions, manually-installed packages) into /etc/nosi-metadata.json
+    # AFTER every tool-install step has finished. Smoketest scp's it out so
+    # it ships as an ORAS layer next to the .img.gz.
+    98-metadata
     # 99-motd runs LAST so the login banner's presence is the at-a-glance
     # signal that the whole apply chain succeeded: see the nosi banner ->
     # everything before it ran; no banner -> something broke before the end,

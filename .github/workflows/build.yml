@@ -190,6 +190,7 @@ jobs:
           REPO: ${{ github.repository }}
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
+          SHA: ${{ github.sha }}
         run: |
           # cd into the artefacts dir and push by basename so ORAS records
           # plain filenames in the manifest (default behaviour blocks
@@ -198,13 +199,47 @@ jobs:
           cd "$HOME/system_imaging/disk"
           gz="nosi-${IMG}-x86_64.img.gz"
           report="nosi-${IMG}-x86_64.cijoe-report.zip"
+          meta_json="nosi-${IMG}-x86_64.metadata.json"
+          meta_md="nosi-${IMG}-x86_64.metadata.md"
+
+          # OCI manifest annotations sourced from the smoketest-extracted
+          # metadata. Visible via `oras manifest fetch` without pulling any
+          # layer -- the "tell me what this image is" path. Well-known
+          # org.opencontainers.image.* keys plus dev.nosi.* for variant
+          # / flavor / distro since those are nosi-specific concepts.
+          jq -r . "${meta_json}" >/dev/null   # sanity-parse before annotating
+          variant=$(jq -r '.nosi.variant // empty' "${meta_json}")
+          flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
+          distro=$(jq -r '.distro.id // empty' "${meta_json}")
+          distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
+          distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
+          kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
+          built=$(jq -r '.nosi.built // empty' "${meta_json}")
+          arch=$(jq -r '.architecture // empty' "${meta_json}")
+
           oras push \
               "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               --artifact-type application/vnd.nosi.disk-image.v1+gzip \
+              --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64" \
+              --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} image for DPDK / SPDK / xNVMe / uPCIe development" \
+              --annotation "org.opencontainers.image.version=${ROLLING}" \
+              --annotation "org.opencontainers.image.created=${built}" \
+              --annotation "org.opencontainers.image.revision=${SHA}" \
+              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.architecture=${arch}" \
+              --annotation "org.opencontainers.image.os=linux" \
+              --annotation "dev.nosi.variant=${variant}" \
+              --annotation "dev.nosi.flavor=${flavor}" \
+              --annotation "dev.nosi.distro=${distro}" \
+              --annotation "dev.nosi.distro-version=${distro_version}" \
+              --annotation "dev.nosi.kernel-release=${kernel_release}" \
               "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip" \
               "${gz}.sha256:text/plain" \
               "${report}:application/vnd.nosi.build-report.v1+zip" \
-              "${report}.sha256:text/plain"
+              "${report}.sha256:text/plain" \
+              "${meta_json}:application/vnd.nosi.metadata.v1+json" \
+              "${meta_md}:text/markdown"
           oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
 
       - name: Push ${{ matrix.variant }} WSL rootfs to GHCR
@@ -221,6 +256,7 @@ jobs:
           REPO: ${{ github.repository }}
           IMG:  ${{ matrix.variant }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
+          SHA: ${{ github.sha }}
         run: |
           set -eu
           cd "$HOME/system_imaging/disk"
@@ -230,13 +266,44 @@ jobs:
               exit 0
           fi
           report="nosi-${IMG}-x86_64.cijoe-report.zip"
+          meta_json="nosi-${IMG}-x86_64.metadata.json"
+          meta_md="nosi-${IMG}-x86_64.metadata.md"
+
+          # Same metadata, same annotations as the disk-image artefact.
+          # Operators who pull just the WSL tag should not have to also
+          # pull the disk-image tag to learn what's inside.
+          variant=$(jq -r '.nosi.variant // empty' "${meta_json}")
+          flavor=$(jq -r '.nosi.flavor // empty' "${meta_json}")
+          distro=$(jq -r '.distro.id // empty' "${meta_json}")
+          distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
+          distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
+          kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
+          built=$(jq -r '.nosi.built // empty' "${meta_json}")
+          arch=$(jq -r '.architecture // empty' "${meta_json}")
+
           oras push \
               "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" \
               --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
+              --annotation "org.opencontainers.image.title=nosi-${IMG}-wsl" \
+              --annotation "org.opencontainers.image.description=${distro_pretty} ${flavor} WSL2 rootfs derived from the same bake as nosi-${IMG}" \
+              --annotation "org.opencontainers.image.version=${ROLLING}" \
+              --annotation "org.opencontainers.image.created=${built}" \
+              --annotation "org.opencontainers.image.revision=${SHA}" \
+              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.architecture=${arch}" \
+              --annotation "org.opencontainers.image.os=linux" \
+              --annotation "dev.nosi.variant=${variant}" \
+              --annotation "dev.nosi.flavor=${flavor}" \
+              --annotation "dev.nosi.distro=${distro}" \
+              --annotation "dev.nosi.distro-version=${distro_version}" \
+              --annotation "dev.nosi.kernel-release=${kernel_release}" \
               "${tarball}:application/vnd.nosi.wsl-rootfs.layer.v1+gzip" \
               "${tarball}.sha256:text/plain" \
               "${report}:application/vnd.nosi.build-report.v1+zip" \
-              "${report}.sha256:text/plain"
+              "${report}.sha256:text/plain" \
+              "${meta_json}:application/vnd.nosi.metadata.v1+json" \
+              "${meta_md}:text/markdown"
           oras tag "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" latest
 
       - name: Write build summary

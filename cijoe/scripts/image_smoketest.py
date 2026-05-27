@@ -130,6 +130,14 @@ def main(args, cijoe):
             _dump_serial(workdir / "serial.log")
             return errno.ETIMEDOUT
 
+        # Pull /etc/nosi-metadata.json (and render a .md alongside) out of
+        # the running smoketest VM into the disk dir, so the ORAS push step
+        # can attach both as image-provenance layers. Best-effort: the
+        # presence-of-metadata.json assertion below catches a failure to
+        # write it in-VM; this extraction logs and continues if scp itself
+        # fails so the assertion (not the extract) is the source of truth.
+        _extract_metadata(key, qcow2)
+
         results = _run_assertions(key, variant, flavor, distro)
         _report(results)
         rc = 0 if all(ok for ok, _name, _detail in results) else 1
@@ -270,6 +278,123 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
         raise RuntimeError(f"qemu failed to start smoketest VM (exit {err})")
 
 
+def _extract_metadata(key: Path, qcow2: Path) -> None:
+    """scp /etc/nosi-metadata.json out and render a sibling .md.
+
+    The destination is the same directory as the baked qcow2 so the GHA
+    workflow's oras push step can attach both files as image-provenance
+    layers without juggling paths. Failure is logged but non-fatal: the
+    smoketest's own assertion that /etc/nosi-metadata.json exists and
+    parses inside the VM is the load-bearing check.
+    """
+    out_dir = qcow2.parent
+    base = qcow2.stem  # nosi-<variant>-x86_64
+    json_local = out_dir / f"{base}.metadata.json"
+    md_local = out_dir / f"{base}.metadata.md"
+
+    scp_cmd = [
+        "scp", "-i", str(key), *SSH_OPTS,
+        "-P", str(SSH_HOST_PORT),
+        f"{SSH_USER}@127.0.0.1:/etc/nosi-metadata.json",
+        str(json_local),
+    ]
+    res = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
+    if res.returncode != 0:
+        log.error(
+            f"scp /etc/nosi-metadata.json failed (exit {res.returncode}): "
+            f"{(res.stderr or res.stdout).strip()}"
+        )
+        return
+
+    import json as _json
+    try:
+        meta = _json.loads(json_local.read_text())
+    except (OSError, ValueError) as exc:
+        log.error(f"extracted metadata.json did not parse: {exc}")
+        return
+
+    md_local.write_text(_render_metadata_markdown(meta))
+    log.info(f"metadata written: {json_local.name}, {md_local.name}")
+
+
+def _render_metadata_markdown(meta: dict) -> str:
+    """Render the metadata JSON as a human-readable Markdown summary."""
+    n = meta.get("nosi", {})
+    d = meta.get("distro", {})
+    k = meta.get("kernel", {})
+    op = meta.get("operator", {})
+    tools = meta.get("tools", {})
+    pkgs = meta.get("packages", {})
+
+    def kv_section(title, kv):
+        lines = [f"## {title}", "", "| | |", "|---|---|"]
+        for key, val in kv.items():
+            if val is None:
+                val = "_(missing)_"
+            lines.append(f"| `{key}` | {val} |")
+        return "\n".join(lines)
+
+    def tool_section(title, tdict):
+        if not tdict:
+            return ""
+        lines = [f"## {title}", "", "| tool | version |", "|---|---|"]
+        for name, ver in sorted(tdict.items()):
+            ver = ver if ver is not None else "_(missing)_"
+            lines.append(f"| `{name}` | {ver} |")
+        return "\n".join(lines)
+
+    sections = [
+        f"# `{n.get('variant', '?')}` ({n.get('version', '?')})",
+        "",
+        d.get("pretty_name") or "_(distro unknown)_",
+        f"on Linux {k.get('release', '?')} ({meta.get('architecture', '?')}),"
+        f" built {n.get('built', '?')}",
+        "",
+        kv_section("Identity", n),
+        "",
+        kv_section("Distro", d),
+        "",
+        kv_section("Kernel", k),
+        "",
+        kv_section("Operator", {
+            "username": op.get("username"),
+            "uid": op.get("uid"),
+            "default_password": f"`{op.get('default_password')}` "
+                                f"({op.get('default_password_state')})",
+            "root_locked": op.get("root_locked"),
+        }),
+    ]
+
+    for label, key in (
+        ("Upstream-release tools (step 20)", "upstream_releases"),
+        ("Python CLIs via pipx --global (step 22)", "pipx_global"),
+        ("Agentic CLIs / Node LSPs (step 41, aidev only)", "npm_globals"),
+    ):
+        section = tool_section(label, tools.get(key) or {})
+        if section:
+            sections.append("")
+            sections.append(section)
+
+    manual = pkgs.get("manually_installed") or []
+    if manual:
+        sections.append("")
+        sections.append(
+            f"## Manually-installed packages ({pkgs.get('manager', '?')}, "
+            f"{pkgs.get('count', len(manual))} packages)"
+        )
+        sections.append("")
+        # Three columns for compactness.
+        col = 3
+        rows = [manual[i:i + col] for i in range(0, len(manual), col)]
+        sections.append("| | | |")
+        sections.append("|---|---|---|")
+        for r in rows:
+            r = (r + ["", "", ""])[:col]
+            sections.append("| " + " | ".join(f"`{x}`" if x else "" for x in r) + " |")
+
+    return "\n".join(sections) + "\n"
+
+
 def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
     """Wait until sshd accepts a real key-auth handshake (not just TCP).
 
@@ -351,6 +476,16 @@ def _run_assertions(key: Path, variant: str, flavor: str, distro: str) -> list[t
         "/etc/nosi/apply-ok sentinel present (apply.sh completed cleanly)",
         "test -r /etc/nosi/apply-ok && cat /etc/nosi/apply-ok",
         lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
+    )
+
+    # ---- metadata file exists --------------------------------------------
+    # /etc/nosi-metadata.json is written by step 98 and contains the
+    # full bake inventory. Smoketest just verifies presence + parses as
+    # JSON to catch syntax errors in the in-VM emitter.
+    check(
+        "/etc/nosi-metadata.json present and parses as JSON",
+        "python3 -c 'import json; json.load(open(\"/etc/nosi-metadata.json\"))' && echo ok",
+        lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
 
     # ---- build identity ---------------------------------------------------
