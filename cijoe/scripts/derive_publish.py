@@ -193,35 +193,45 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
     post_cleanup = [f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true"]
     try:
         cijoe.run_local(f"sudo partprobe {NBD_DEV} >/dev/null 2>&1 || true")
-        rootfs = _find_rootfs_partition(cijoe, work)
-        if not rootfs:
-            log.error(f"no ext4 rootfs partition found on {NBD_DEV}")
+        rootfs_part = _find_rootfs_partition(cijoe, work)
+        if not rootfs_part:
+            log.error(f"no ext4/btrfs/xfs rootfs partition found on {NBD_DEV}")
             return errno.ENODEV
 
         cijoe.run_local(f"sudo mkdir -p {mnt}")
-        err, _ = cijoe.run_local(f"sudo mount {rootfs} {mnt}")
+        err, _ = cijoe.run_local(f"sudo mount {rootfs_part} {mnt}")
         if err:
-            log.error(f"mount {rootfs} failed")
+            log.error(f"mount {rootfs_part} failed")
             return err
-        post_cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
+        post_cleanup.append(f"sudo umount -R {mnt} 2>/dev/null || true")
         post_cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
+
+        # Where the rootfs actually lives (mount point, or a btrfs `root`
+        # subvol underneath it). Everything below operates on `rootfs`.
+        rootfs = _rootfs_dir(cijoe, mnt)
+        if not rootfs:
+            log.error(
+                f"{rootfs_part} mounted at {mnt} but no /etc/os-release at "
+                f"the top level or a `root` subvol"
+            )
+            return errno.ENOENT
 
         # Kernel API filesystems + DNS for the chroot's package installs.
         for sub in ("dev", "proc", "sys", "run"):
-            err, _ = cijoe.run_local(f"sudo mount --bind /{sub} {mnt}/{sub}")
+            err, _ = cijoe.run_local(f"sudo mount --bind /{sub} {rootfs}/{sub}")
             if err:
                 log.error(f"bind-mount {sub} failed")
                 return err
-            bind_cleanup.append(f"sudo umount {mnt}/{sub} 2>/dev/null || true")
+            bind_cleanup.append(f"sudo umount {rootfs}/{sub} 2>/dev/null || true")
         # Bind the host's resolv.conf so apt/dnf/curl/uvx resolve. Bind
         # (not copy) leaves the image's own resolv config intact underneath.
-        err, _ = cijoe.run_local(f"sudo mount --bind /etc/resolv.conf {mnt}/etc/resolv.conf")
+        err, _ = cijoe.run_local(f"sudo mount --bind /etc/resolv.conf {rootfs}/etc/resolv.conf")
         if err:
             log.error("bind-mount /etc/resolv.conf failed")
             return err
-        bind_cleanup.append(f"sudo umount {mnt}/etc/resolv.conf 2>/dev/null || true")
+        bind_cleanup.append(f"sudo umount {rootfs}/etc/resolv.conf 2>/dev/null || true")
 
-        rc = _chroot_provision(cijoe, mnt, variant, strip)
+        rc = _chroot_provision(cijoe, rootfs, variant, strip)
         if rc:
             return rc
 
@@ -231,7 +241,7 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
         # the derived artifact's ORAS annotations rather than the base's.
         meta_dst = disk_dir / f"nosi-{variant}.metadata.json"
         cijoe.run_local(
-            f"sudo cp {mnt}/etc/nosi-metadata.json {meta_dst} && "
+            f"sudo cp {rootfs}/etc/nosi-metadata.json {meta_dst} && "
             f"sudo chown $(id -u):$(id -g) {meta_dst}"
         )
 
@@ -241,7 +251,7 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
             for cmd in reversed(bind_cleanup):
                 cijoe.run_local(cmd)
             bind_cleanup.clear()
-            return _package_rootfs(cijoe, mnt, variant, output, disk_dir)
+            return _package_rootfs(cijoe, rootfs, variant, output, disk_dir)
 
         # img: unmount everything + disconnect, then convert the qcow2.
         for cmd in reversed(bind_cleanup):
@@ -372,9 +382,13 @@ def _package_img(cijoe, work, variant, disk_dir) -> int:
 
 
 def _find_rootfs_partition(cijoe, work, attempts=10):
-    """Largest ext4 partition on NBD_DEV (the rootfs; /boot is smaller)."""
+    """Largest ext4 / btrfs / xfs partition on NBD_DEV -- the rootfs
+    (/boot, ESP, BIOS-boot are smaller or other fstypes). Cloud images
+    differ by distro: Ubuntu / Debian ship ext4, Fedora ships btrfs,
+    others ship xfs; pick the largest rootfs-capable filesystem."""
     import json
 
+    rootfs_fstypes = ("ext4", "btrfs", "xfs")
     out_file = work.with_suffix(".lsblk.json")
     try:
         for _ in range(attempts):
@@ -389,7 +403,7 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
                 candidates = []
                 for dev in data.get("blockdevices", []):
                     for part in dev.get("children") or []:
-                        if part.get("type") == "part" and part.get("fstype") == "ext4":
+                        if part.get("type") == "part" and part.get("fstype") in rootfs_fstypes:
                             size = part.get("size")
                             if size is not None:
                                 candidates.append((int(size), part["name"]))
@@ -400,6 +414,23 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
         return None
     finally:
         out_file.unlink(missing_ok=True)
+
+
+def _rootfs_dir(cijoe, mnt: Path) -> Path | None:
+    """The directory holding the rootfs under a freshly-mounted partition.
+
+    ext4 / xfs (and a btrfs image whose default subvolume is the root)
+    put /etc/os-release right at the mount point. A btrfs image mounted
+    at its top-level subvolume (subvolid 5) instead keeps the rootfs in
+    the `root` subvolume (Fedora's layout), so it lives at <mnt>/root.
+    Returns whichever has /etc/os-release, or None. `sudo test` because
+    the mounted tree is root-owned.
+    """
+    for cand in (mnt, mnt / "root"):
+        err, _ = cijoe.run_local(f"sudo test -e {cand}/etc/os-release")
+        if err == 0:
+            return cand
+    return None
 
 
 def _read_os_release_id(mnt: Path) -> str | None:
