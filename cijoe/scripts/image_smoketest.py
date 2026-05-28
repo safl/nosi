@@ -602,6 +602,17 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
             lambda rc, out, _t=tool: (out == "ok", out or f"missing {_t}"),
         )
 
+    # ---- cloud-init seed tooling (baseline packages) ---------------------
+    # cloud-localds + mkisofs let an on-target cijoe (or the operator)
+    # build a NoCloud seed.iso to boot cloud-init guests -- the docker
+    # bootstrap shape's whole job, and any cijoe-driven guest workflow.
+    for tool in ("cloud-localds", "mkisofs"):
+        check(
+            f"{tool} on PATH (seed.iso tooling)",
+            f"command -v {tool} >/dev/null 2>&1 && echo ok",
+            lambda rc, out, _t=tool: (out == "ok", out or f"missing {_t}"),
+        )
+
     # ---- sshd enabled ----------------------------------------------------
     # Already proven by the fact that we SSHed in. Record the unit state
     # explicitly so the assertion log surfaces it.

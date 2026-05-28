@@ -179,6 +179,12 @@ packages:
   - ovmf
   - qemu-system-x86
   - qemu-utils
+  # cloud-init seed tooling: cloud-localds (cloud-image-utils) + mkisofs
+  # (genisoimage) let an on-target cijoe build a NoCloud seed.iso to boot
+  # cloud-init guests -- the docker bootstrap shape's job, and any guest
+  # workflow cijoe drives.
+  - genisoimage
+  - cloud-image-utils
 
 # Drop the nosi provision/ tree into /opt/nosi/provision/. The
 # __NOSI_PROVISION_FILES__ marker is expanded at bake time by
