@@ -159,15 +159,18 @@ chmod 0755 /usr/local/bin/marksman
 # https://ziglang.org/download/. The download index is at
 # https://ziglang.org/download/index.json if dynamic discovery is wanted
 # later, but pinning keeps the install reproducible across re-runs.
+# Tarball naming is `zig-<arch>-linux-<ver>` (arch before os); the
+# pre-0.14 `zig-linux-<arch>` ordering is gone, so a version bump that
+# crosses that boundary has to keep this order.
 
-zig_ver="0.13.0"
+zig_ver="0.16.0"
 case "$arch" in
     x86_64)  zig_arch=x86_64 ;;
     aarch64) zig_arch=aarch64 ;;
     *) nosi_die "unsupported arch $arch for zig" ;;
 esac
 tmp=$(mktemp -d)
-curl -fsSL "https://ziglang.org/download/${zig_ver}/zig-linux-${zig_arch}-${zig_ver}.tar.xz" \
+curl -fsSL "https://ziglang.org/download/${zig_ver}/zig-${zig_arch}-linux-${zig_ver}.tar.xz" \
     -o "$tmp/zig.tar.xz"
 rm -rf /usr/local/zig
 mkdir -p /usr/local/zig
@@ -179,9 +182,9 @@ ln -sf /usr/local/zig/zig /usr/local/bin/zig
 # ---- zls (zig language server, github.com/zigtools/zls) -------------------
 # Helix auto-spawns zls from PATH for *.zig buffers (out-of-the-box
 # language.toml entry); no editor config needed. Versioned in lockstep
-# with zig itself -- zls 0.13.x matches zig 0.13.x and breaks against
-# zig master / mismatched stable. Pin to the same version as zig_ver
-# above; bump both together.
+# with zig itself -- zls 0.16.x matches zig 0.16.x and breaks against
+# zig master / a mismatched stable. Pin to the same version as zig_ver
+# above; bump both together (zls publishes a release per zig stable).
 
 case "$arch" in
     x86_64)  zls_arch=x86_64-linux ;;
