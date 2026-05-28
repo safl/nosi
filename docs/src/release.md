@@ -7,11 +7,20 @@ nosi is **rolling**, not semver. Every publish gets:
 - `ghcr.io/<owner>/<repo>/<variant>:latest` -- moves to the most recent
   publish
 
-Variants that produce a WSL rootfs alongside the flashable image
-(`ubuntu-2604-wsl` today) push that artifact to a sibling repo named
-`<variant>-wsl` with the same tag scheme. Keeping the WSL tarball
-under its own repo means bty's flashable catalog stays cleanly scoped
-to disk images.
+Each shape publishes to its own repo named for the full variant
+(`ubuntu-2604-headless`, `ubuntu-2604-wsl`, `ubuntu-2604-docker`,
+`fedora-44-desktop`, ...) with the same tag scheme. Three artifact
+classes ride those repos:
+
+- **disk image** (`.img.gz`) for the flashable shapes (headless,
+  desktop) -- an ORAS artifact, `dd`-able.
+- **WSL rootfs** (`.tar.gz`) for the wsl shape -- an ORAS artifact,
+  `wsl --import`-able.
+- **OCI image** for the docker shape -- a genuine container image
+  (`docker pull` / a GHA `container:`).
+
+Keeping each shape in its own repo keeps bty's flashable catalog
+cleanly scoped to disk images.
 
 ## When publishes fire
 
@@ -20,7 +29,7 @@ to disk images.
   even when nosi itself hasn't changed)
 - manual `workflow_dispatch` from the Actions tab
 
-PRs build all the way through `make package` but do **not** publish.
+PRs run the full bake + smoketest (and the derives) but do **not** publish.
 
 ## What consumers should pin to
 
@@ -61,17 +70,20 @@ oras push \
 oras tag ghcr.io/<repo>/<variant>:<rolling-tag> latest
 ```
 
-The WSL rootfs target pushes the same way with its own artifact type:
+The wsl shape pushes the same way with its own artifact type (the
+`-wsl` variant has its own repo):
 
 ```
 oras push \
-    ghcr.io/<repo>/<variant>-wsl:<rolling-tag> \
+    ghcr.io/<repo>/<variant>:<rolling-tag> \
     --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
-    <variant>-wsl.tar.gz:application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
-    <variant>-wsl.tar.gz.sha256:text/plain
-oras tag ghcr.io/<repo>/<variant>-wsl:<rolling-tag> latest
+    nosi-<variant>.tar.gz:application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
+    nosi-<variant>.tar.gz.sha256:text/plain
+oras tag ghcr.io/<repo>/<variant>:<rolling-tag> latest
 ```
 
-Custom `artifactType` keeps `docker pull` from misinterpreting these as
-container images, and separates the two artifact classes (disk image vs
-WSL rootfs) for downstream tooling that may filter on it.
+Custom `artifactType` keeps `docker pull` from misinterpreting the ORAS
+artifacts as container images, and lets downstream tooling filter
+disk-image vs WSL-rootfs. The docker shape is the exception: it's a
+genuine OCI image, so it's `docker push`ed (not ORAS) and consumed with
+`docker pull` or as a GHA `container:`.
