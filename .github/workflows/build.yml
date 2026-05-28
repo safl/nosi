@@ -46,7 +46,8 @@ jobs:
             genisoimage \
             pipx \
             cpu-checker \
-            xz-utils
+            xz-utils \
+            python3-yaml
 
       - name: Stage build artefacts on the large /mnt disk
         # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
@@ -225,43 +226,14 @@ jobs:
           # Per-variant use-case prose for org.opencontainers.image.description.
           # Operators (and oras consumers reading the manifest annotations)
           # see "what is this variant for?" without having to consult the
-          # docs catalog. Single source of truth for these strings; catalog.py
-          # reads them back from the manifest annotation so docs stay aligned
-          # with the shippable artefact automatically.
-          case "${IMG}" in
-          debian-13-headless)
-              variant_desc="Debian 13 (trixie) headless. The nicer user-land choices and stability; general-purpose headless base when HW-vendor stacks aren't load-bearing."
-              ;;
-          ubuntu-2404-headless)
-              variant_desc="Ubuntu 24.04 LTS (noble) headless. For HW to get driver-support for CUDA / ROCm devices and Mellanox NICs / DPUs."
-              ;;
-          ubuntu-2604-headless)
-              variant_desc="Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel and user-land packages on Ubuntu LTS."
-              ;;
-          ubuntu-2604-wsl)
-              variant_desc="Ubuntu 26.04 LTS (resolute) WSL2 rootfs. Headless baseline + meld / gitk / git-gui rendered through WSLg (no compositor in the rootfs). Imported via wsl --import."
-              ;;
-          fedora-44-headless)
-              variant_desc="Fedora 44 headless. An alternative from the RHEL family for operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL package universe)."
-              ;;
-          fedora-44-desktop)
-              variant_desc="Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet greeter + Firefox + audio / bluetooth / power-management on top of the headless baseline. For personal laptop / workstation use."
-              ;;
-          freebsd-14-headless)
-              variant_desc="FreeBSD 14.4-RELEASE headless scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
-              ;;
-          freebsd-15-headless)
-              variant_desc="FreeBSD 15.0-RELEASE headless scaffold. Phase 1: cloud-init bake + identity + baseline packages + kernel source; no provision chain yet."
-              ;;
-          *)
-              # No use-case statement registered for this variant. Fail loud
-              # rather than push a generic placeholder -- per the project's
-              # no-fallbacks-for-required-artefacts rule, a missing per-variant
-              # description should block publish so the omission is fixed.
-              echo "::error::no variant_desc registered for IMG=${IMG}; add a case in .github/workflows/build.yml" >&2
-              exit 1
-              ;;
-          esac
+          # docs catalog. Single source of truth is variants.yml; the same
+          # registry feeds tools/gen_catalog.py's bty catalog, so the manifest
+          # annotation and the published catalog can't drift. An unregistered
+          # variant makes --describe exit non-zero, which fails this step
+          # under `set -e` (no generic placeholder gets pushed). Absolute
+          # path: we cd'd into the artefacts dir above, the script lives in
+          # the checkout (it finds variants.yml relative to itself).
+          variant_desc=$(python3 "$GITHUB_WORKSPACE/tools/gen_catalog.py" --describe "${IMG}")
 
           # Retry the oras push: ghcr.io occasionally resets the HTTP/2
           # upload stream mid-blob (REFUSED_STREAM), and Go's http2
@@ -347,15 +319,11 @@ jobs:
 
           # WSL artefact gets a tweak of the disk-image description: same
           # variant identity, but flagged as the WSL rootfs derivative.
-          case "${IMG}" in
-          ubuntu-2604-wsl)
-              variant_desc="Ubuntu 26.04 LTS (resolute) WSL2 rootfs (kernel/grub/firmware/cloud-init stripped post-bake). Headless baseline + meld / gitk / git-gui rendered through WSLg. Import via wsl --import."
-              ;;
-          *)
-              echo "::error::no WSL variant_desc registered for IMG=${IMG}; add a case in .github/workflows/build.yml" >&2
-              exit 1
-              ;;
-          esac
+          # Sourced from variants.yml's wsl_description; a wsl-shape variant
+          # without one makes --describe-wsl exit non-zero and fails this
+          # step under `set -e`. Absolute path: we cd'd into the artefacts
+          # dir above (the script finds variants.yml relative to itself).
+          variant_desc=$(python3 "$GITHUB_WORKSPACE/tools/gen_catalog.py" --describe-wsl "${IMG}")
 
           # Same idempotent-retry pattern as the disk-image push above.
           attempts=0
@@ -459,4 +427,60 @@ jobs:
                 echo "wsl --import nosi-wsl C:\\WSL\\nosi-wsl ${IMG}-wsl.tar.gz"
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  publish-catalog:
+    # Cut a GitHub release carrying the bty-compatible catalog.toml so an
+    # operator can point bty at it:
+    #   bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog.toml
+    # Runs once (not per-variant) AFTER every matrix variant built + pushed,
+    # so the catalog only advertises images that actually shipped. needs:
+    # build means one failed variant leg blocks the catalog -- deliberate:
+    # the catalog should not point at an image whose build broke. PRs don't
+    # publish (same gate as the per-variant GHCR push).
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write    # create the release + upload the asset
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install catalog-generator deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-yaml
+
+      - name: Generate catalog.toml from variants.yml
+        run: python3 tools/gen_catalog.py catalog.toml
+
+      - name: Compute rolling tag
+        id: tag
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # Same scheme as the build job's rolling tag (date + short sha),
+          # recomputed here so this job doesn't depend on a matrix output.
+          date_tag=$(date -u +'%Y.%m.%d')
+          short=${SHA:0:7}
+          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish catalog.toml as a rolling release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+        run: |
+          set -eu
+          notes="Rolling nosi image catalog (schema v1). Flash nosi images with bty: bty --catalog https://github.com/${REPO}/releases/latest/download/catalog.toml -- refs are oras :latest tags, the layer digest is verified at flash time."
+          # Idempotent: a re-dispatch on the same commit reuses the tag, so
+          # create-or-clobber. --latest makes releases/latest/download/
+          # resolve to this asset.
+          if gh release view "${ROLLING}" >/dev/null 2>&1; then
+              gh release upload "${ROLLING}" catalog.toml --clobber
+          else
+              gh release create "${ROLLING}" catalog.toml \
+                  --latest \
+                  --title "nosi ${ROLLING}" \
+                  --notes "${notes}"
           fi

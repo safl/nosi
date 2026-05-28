@@ -1,0 +1,91 @@
+# nosi variant registry -- single source of truth for per-variant
+# metadata that more than one tool needs. Consumed by:
+#
+#   .github/workflows/build.yml   the matrix's ORAS image.description
+#                                 annotation (via tools/gen_catalog.py
+#                                 --describe / --describe-wsl)
+#   tools/gen_catalog.py          the bty-compatible catalog.toml
+#                                 published as a GitHub release asset
+#
+# The build matrix itself (which variants get baked) still lives in
+# build.yml; this file is the metadata keyed by that matrix's names.
+# Keep the two in sync: a variant baked but absent here fails the
+# push step's --describe lookup loudly (no generic placeholder).
+#
+# Fields:
+#   shape        headless | desktop | wsl -- the artefact's form factor.
+#   flashable    true if the published .img.gz is a flashable disk image
+#                that belongs in bty's catalog; false for the wsl rootfs
+#                (imported via `wsl --import`, not flashed to a block dev).
+#   description  org.opencontainers.image.description for the disk-image
+#                ORAS push AND the catalog entry's prose. The use-case
+#                statement: "what is this variant for?"
+#   wsl_description  (wsl shape only) the description for the separate
+#                -wsl rootfs ORAS push, flagged as the WSL derivative.
+
+variants:
+  debian-13-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      Debian 13 (trixie) headless. The nicer user-land choices and
+      stability; general-purpose headless base when HW-vendor stacks
+      aren't load-bearing.
+
+  ubuntu-2404-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      Ubuntu 24.04 LTS (noble) headless. For HW to get driver-support
+      for CUDA / ROCm devices and Mellanox NICs / DPUs.
+
+  ubuntu-2604-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel
+      and user-land packages on Ubuntu LTS.
+
+  ubuntu-2604-wsl:
+    shape: wsl
+    flashable: false
+    description: >-
+      Ubuntu 26.04 LTS (resolute) WSL2 rootfs. Headless baseline +
+      meld / gitk / git-gui rendered through WSLg (no compositor in the
+      rootfs). Imported via wsl --import.
+    wsl_description: >-
+      Ubuntu 26.04 LTS (resolute) WSL2 rootfs (kernel/grub/firmware/cloud-init
+      stripped post-bake). Headless baseline + meld / gitk / git-gui
+      rendered through WSLg. Import via wsl --import.
+
+  fedora-44-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      Fedora 44 headless. An alternative from the RHEL family for
+      operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL
+      package universe).
+
+  fedora-44-desktop:
+    shape: desktop
+    flashable: true
+    description: >-
+      Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet
+      greeter + Firefox + audio / bluetooth / power-management on top
+      of the headless baseline. For personal laptop / workstation use.
+
+  freebsd-14-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      FreeBSD 14.4-RELEASE headless scaffold. Phase 1: cloud-init bake
+      + identity + baseline packages + kernel source; no provision
+      chain yet.
+
+  freebsd-15-headless:
+    shape: headless
+    flashable: true
+    description: >-
+      FreeBSD 15.0-RELEASE headless scaffold. Phase 1: cloud-init bake
+      + identity + baseline packages + kernel source; no provision
+      chain yet.
