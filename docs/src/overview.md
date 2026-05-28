@@ -67,6 +67,7 @@ The intent: a flashable variant stays focused on **what kind of
 system it is**; "what extras you want installed" is the operator's
 call post-flash.
 
+(the-layered-model)=
 ### The layered model
 
 Per distro+version, the `headless` variant is the **base**: it bakes
