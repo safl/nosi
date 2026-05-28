@@ -2,9 +2,8 @@
 # nosi/provision/steps/22-python-tools.sh
 #
 # Install the opinionated helix LSP / linter / formatter stack and the
-# user space PCI helpers (DPDK/SPDK and xNVMe/uPCIe ergonomics) into a
-# shared venv at /opt/python-tools, with each tool's entry-point
-# symlinked into /usr/local/bin:
+# user space PCI helpers (DPDK/SPDK and xNVMe/uPCIe ergonomics) with
+# pipx, system-wide:
 #
 #   ruff      -- linter + formatter, includes built-in `ruff server` LSP
 #   pyright   -- type-checking LSP (`pyright-langserver`)
@@ -12,57 +11,47 @@
 #   hugepages -- Linux hugepages inspection + reservation (github.com/xnvme/hugepages)
 #   iommu     -- manage the Linux IOMMU substrate via the kernel cmdline (github.com/safl/iommu)
 #
-# Why a shared venv rather than `pipx install --global`: noble's pipx
-# is 1.4 (lacks --global, which only landed in 1.5). A bare-venv +
-# symlinks approach is portable across every pipx version + every
-# distro. /usr/local/bin is already on every user's PATH so no
-# profile.d wiring is needed.
+# pipx is the right tool for this (per-tool isolated venvs + managed
+# shims) and `pipx install --global` is its first-class system-wide
+# idiom -- venvs in /opt/pipx, shims in /usr/local/bin, no env-var
+# plumbing, `pipx list/upgrade/uninstall --global` stay consistent.
 #
-# Bash completions are written into /etc/bash_completion.d/ so they
-# autoload on interactive shells (via the bash-completion package's
-# loader).
+# The catch: --global is pipx 1.5+, and noble (24.04) ships pipx 1.4.
+# So we reach a modern pipx via `uvx pipx` -- uvx (installed in step 20
+# alongside uv) runs the latest pipx ephemerally, regardless of the
+# distro's pipx version. The distro pipx stays installed for operators'
+# own per-user use; this step is purely the system-wide install path.
 #
-# Idempotency: pip install --upgrade fetches latest on every re-run,
-# matching the Hetzner-VM "update everything to upstream latest"
-# semantics already established by step 20.
+# --python pins the tool venvs to the stable system interpreter.
+# Without it, pipx-run-under-uvx could bind venvs to uv's ephemeral
+# Python, which would rot when uv GCs its cache.
+#
+# Idempotency: upgrade-if-present else install, fetching latest on a
+# re-run -- the Hetzner-VM "update everything to upstream latest"
+# semantics already established by step 20. set -e in apply.sh aborts
+# the bake if any fetch fails.
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
 nosi_info "step 22-python-tools"
 nosi_require_root
 
-VENV=/opt/python-tools
-PKGS=(ruff pyright devbind hugepages iommu)
+command -v uvx >/dev/null 2>&1 || nosi_die "uvx not on PATH (step 20 installs uv + uvx)"
+py="$(command -v python3)" || nosi_die "python3 not on PATH"
 
-# Create venv on first run. python3 + ensurepip module is enough; no
-# extra packages needed from the distro side.
-if [ ! -x "$VENV/bin/pip" ]; then
-    python3 -m venv "$VENV"
-fi
-
-# Fetch pip-latest first so pip can resolve newer packaging features
-# the tools may use, then install/upgrade the tool set in one pip call
-# (faster + lets pip resolve a consistent dependency graph across all
-# tools).
-"$VENV/bin/pip" install --upgrade --quiet pip
-"$VENV/bin/pip" install --upgrade --quiet "${PKGS[@]}"
-
-# Symlink every entry-point script the venv exposes into /usr/local/bin,
-# minus the venv's own Python plumbing. ln -sf re-points existing
-# symlinks on a re-run (e.g., after a venv-recreation).
-for f in "$VENV"/bin/*; do
-    name=$(basename "$f")
-    case "$name" in
-        python*|pip*|activate*|*.pyc|wheel) continue ;;
-    esac
-    ln -sf "$f" "/usr/local/bin/$name"
+for pkg in ruff pyright devbind hugepages iommu; do
+    if uvx pipx list --global --short 2>/dev/null | awk '{print $1}' | grep -qx "$pkg"; then
+        uvx pipx upgrade --global "$pkg"
+    else
+        uvx pipx install --global --python "$py" "$pkg"
+    fi
 done
 
 # ---- bash completions for the PCI helpers --------------------------------
 
 install -d -m 0755 /etc/bash_completion.d
 for t in iommu devbind hugepages; do
-    "$VENV/bin/$t" --print-completion bash > /etc/bash_completion.d/$t 2>/dev/null || true
+    "$t" --print-completion bash > /etc/bash_completion.d/$t 2>/dev/null || true
 done
 
 nosi_info "step 22-python-tools done"
