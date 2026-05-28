@@ -14,26 +14,38 @@ Distro + numerical version in a variant name are self-explanatory
 (Ubuntu 24.04, Debian 13, ...); the shape is the nosi-specific bit
 that needs an introduction.
 
-Three shapes ship today:
+Four shapes ship today. `headless` is the **base**; the other three
+are **derived** from it (see [the layered model](#the-layered-model)):
 
-- **`headless`** : C / C++ / Python / Rust systems work; server /
-  VM / bare-metal-without-display use. Compilers, build tooling
-  (meson / ninja / cmake / cargo), debuggers (gdb + gdb-dashboard,
-  lldb), perf / strace / valgrind, user-space PCI prereqs (vfio
-  plumbing, hugepages, IOMMU cmdline), containers (podman / buildah
-  / skopeo), local virtualisation (qemu / OVMF), hardware inspection
-  (dmidecode / lshw / nvme-cli / smartmontools), the helix / zellij
-  / lazygit / yazi daily-driver layer, and a pipx-installed Python
-  CLI set (uv, ruff, pyright, devbind).
-- **`desktop`** : headless superset plus a Sway tiling Wayland
-  compositor + tuigreet greeter + Firefox + audio (PipeWire +
-  WirePlumber) + bluetooth + brightness + power-profiles-daemon. For
-  personal laptop / workstation use.
-- **`wsl`** : headless superset plus a curated set of GUI dev tools
-  (meld, gitk, git-gui) that render through WSLg without a compositor
-  inside the rootfs. wsl-shape variants publish a `.tar.gz`
-  consumable by `wsl --import` (alongside an .img.gz side-effect of
-  the bake pipeline).
+- **`headless`** : the base. C / C++ / Python / Rust / Zig systems
+  work; server / VM / bare-metal-without-display use. Compilers
+  (gcc / clang / rustc / zig), build tooling (meson / ninja / cmake /
+  cargo), language servers (clangd / pyright / rust-analyzer / zls),
+  debuggers (gdb +
+  gdb-dashboard, lldb), perf / strace / valgrind, user-space PCI
+  prereqs (vfio plumbing, hugepages, IOMMU cmdline), containers
+  (podman / buildah / skopeo), local virtualisation (qemu / OVMF),
+  hardware inspection (dmidecode / lshw / nvme-cli / smartmontools),
+  the helix / zellij / lazygit / yazi daily-driver layer, a
+  pipx-installed Python CLI set (uv, ruff, pyright, devbind), and the
+  cijoe orchestration tool (drives qemu-guest / test workflows).
+- **`desktop`** : headless plus a Sway tiling Wayland compositor +
+  tuigreet greeter + Firefox + GUI git tools (meld / gitk / git-gui) +
+  audio (PipeWire + WirePlumber) + bluetooth + brightness +
+  power-profiles-daemon. Bootable `.img.gz`. For personal laptop /
+  workstation use.
+- **`wsl`** : headless plus a curated set of GUI dev tools (meld,
+  gitk, git-gui) that render through WSLg without a compositor in the
+  rootfs, then the kernel / boot / cloud-init are stripped. Publishes
+  a `.tar.gz` consumable by `wsl --import`.
+- **`docker`** : the headless base (qemu + cijoe already in it),
+  kernel / boot / cloud-init stripped and packaged as an OCI image via
+  `docker import` -- so this shape is purely a packaging derivation, no
+  extra tools. A CI bootstrap host: a Linux environment that launches
+  qemu guests via cijoe (nested KVM on GitHub Actions when the job runs
+  `--privileged` / passes `/dev/kvm`, or real device passthrough on
+  bare metal), and a general dev base for a project's `make docker`.
+  Used as a GHA job `container:` or pulled with docker.
 
 Optional tooling collections that don't define a shape (agentic AI
 CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,
@@ -55,11 +67,28 @@ The intent: a flashable variant stays focused on **what kind of
 system it is**; "what extras you want installed" is the operator's
 call post-flash.
 
-Each variant is a self-contained build keyed by
-`<distro>-<version>-<shape>`. There is **no actual layered
-inheritance** (no Yocto / Nix style composition); the word "shape"
-describes a curated package list and configuration, nothing more. The
-bare `*-base` variants (cloud-image-stock plus identity, no shape
+### The layered model
+
+Per distro+version, the `headless` variant is the **base**: it bakes
+once from the stock cloud image, running the full
+`apply.sh <variant>` provision chain. The `desktop` / `wsl` / `docker`
+variants are **derived** from that baked rootfs rather than re-baked:
+`derive_publish` copies the base qcow2, chroots in, runs
+`apply.sh <derived-variant> --shape-only` (which re-stamps identity
+and runs only the shape's step, installing the shape's packages +
+config), optionally strips kernel / boot / cloud-init, and repackages
+(bootable `.img.gz` for desktop, `.tar.gz` for wsl, OCI image for
+docker).
+
+The shared infrastructure (the base provision steps: release stamp,
+tool installs, ssh, daemon-prune, ...) therefore runs **once** per
+base, not once per shape. `apply.sh` stays the single definition of a
+variant: each step is idempotent, so an operator on a vanilla VM runs
+the full `apply.sh <variant>` and gets the complete result, while the
+CI derive runs it `--shape-only` on the already-provisioned base and
+only the delta executes.
+
+The bare `*-base` variants (cloud-image-stock plus identity, no shape
 layer) are still on the roadmap.
 
 ## Variants
@@ -79,21 +108,25 @@ same distro coexist when their use cases call for it (for example,
 because NVIDIA / AMD / Mellanox qualify their apt repos against 24.04
 LTS while 26.04 LTS is the recency-leaning pick for non-vendor use).
 
-`ubuntu-2604-wsl` publishes a sibling GHCR repo `<variant>-wsl` with
-the WSL2 rootfs tarball alongside the regular `.img.gz`. Operators
-import it via `wsl --import`; everything inside renders through
-WSLg, so GUI tools work without a compositor in the rootfs.
+Each shape publishes to its own GHCR repo named for the variant.
+`ubuntu-2604-wsl` is a WSL2 rootfs `.tar.gz` (oras artifact;
+`wsl --import` it, GUI tools render through WSLg). `ubuntu-2604-docker`
+is a real OCI image (`docker pull` it or use it as a GHA `container:`).
+Keeping each shape in its own repo keeps bty's flashable catalog
+scoped to the real disk images (headless `.img.gz`, desktop `.img.gz`).
 
 Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
 scaffold (bake + identity + baseline packages + kernel source, no
 provision chain yet).
 
 Per-variant use cases live in the `org.opencontainers.image.description`
-ORAS annotation on each published artefact and are surfaced on the
+ORAS annotation on each published artifact and are surfaced on the
 [catalog](_generated/catalog.md). That keeps the docs and the
-shippable artefact aligned: when a variant is added, retired, or its
-purpose shifts, the description on the artefact is updated and the
-docs follow on the next regen.
+shippable artifact aligned: when a variant is added, retired, or its
+purpose shifts, the description on the artifact is updated and the
+docs follow on the next regen. (The `docker` shape, an OCI image
+without that metadata layer, is documented here in prose rather than
+auto-rendered into the catalog.)
 
 ## Build pipeline
 
@@ -109,13 +142,18 @@ user-data file under `nosi-media/auxiliary/`. A
    up the `odus` operator account, strips machine identity, powers off.
 5. Compact the baked qcow2 and gzip-publish it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
-6. For variants that declare a `[publish_wsl]` block (today:
-   `ubuntu-2604-wsl`), `wsl_rootfs_publish` derives a WSL2 rootfs
-   tarball from the same bake: attach the qcow2 via `qemu-nbd`, mount
-   the detected ext4 rootfs partition, chroot in to apt-purge the
-   kernel/grub/firmware/cloud-init/netplan/NM plumbing, `tar` the
-   stripped rootfs out (`--xattrs --acls --numeric-owner`), and gzip
-   + sha256-seal. No-op for variants without a `[publish_wsl]` block.
+6. For a base that declares `[[...derive]]` entries (today:
+   `ubuntu-2604-headless` -> wsl + docker; `fedora-44-headless` ->
+   desktop), `derive_publish` builds each derived shape from the same
+   bake without re-baking: copy the qcow2, attach via `qemu-nbd`,
+   mount the detected ext4 rootfs, bind-mount /dev /proc /sys /run +
+   the host resolv.conf, chroot in to run
+   `apply.sh <derived-variant> --shape-only` (installs the shape's
+   packages + config), optionally apt-purge the
+   kernel/grub/firmware/cloud-init/netplan/NM plumbing, then repackage:
+   bootable `.img.gz` (desktop), `tar`-ed + gzipped rootfs (wsl), or
+   `docker import` into an OCI image (docker). No-op for a base with
+   no `derive` entries.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
@@ -128,11 +166,13 @@ cijoe/
   tasks/build.yaml                  # cijoe workflow
   scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
   scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
-  scripts/wsl_rootfs_publish.py     # qcow2 -> qemu-nbd + chroot strip -> .tar.gz
+  scripts/derive_publish.py         # base qcow2 -> chroot --shape-only -> .img.gz / .tar.gz / OCI
+variants.yml                        # per-variant metadata (shape, flashable, description)
+tools/gen_catalog.py                # variants.yml -> bty-compatible catalog.toml
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data
-    cloudinit-<shape>-<distro>-<version>.user  # per-variant cloud-init user-data
+    cloudinit-headless-<distro>-<version>.user  # base cloud-init (derived shapes need none)
 docs/
   src/                              # sphinx markdown sources (this tree)
   tooling/                          # nosi-docs package (pyproject + cli)

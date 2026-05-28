@@ -24,15 +24,18 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    # wsl shape's post-bake (qemu-nbd mount, chroot strip, tar + gzip of
-    # a multi-GiB rootfs) adds ~10-15 min over the headless runtime,
-    # which is tight against the prior 60 min ceiling. Bump uniformly
-    # rather than per-variant to keep the matrix simple.
+    # The matrix is per-BASE (headless). Each leg bakes its headless base
+    # once, then derive_publish builds that base's derived shapes from the
+    # same qcow2 in-job (no re-bake, no cross-job artifact passing): the
+    # ubuntu-2604 leg also emits wsl + docker, the fedora-44 leg also emits
+    # desktop. The derive's qemu-nbd + chroot + strip + (docker import /
+    # tar / gzip) adds ~10-20 min on the bases that have derivations, hence
+    # the uniform 90 min ceiling.
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, ubuntu-2604-wsl, fedora-44-headless, fedora-44-desktop, freebsd-14-headless, freebsd-15-headless]
+        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, fedora-44-headless, freebsd-14-headless, freebsd-15-headless]
 
     steps:
       - uses: actions/checkout@v5
@@ -49,13 +52,13 @@ jobs:
             xz-utils \
             python3-yaml
 
-      - name: Stage build artefacts on the large /mnt disk
+      - name: Stage build artifacts on the large /mnt disk
         # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
         # a ~70 GiB ephemeral disk at /mnt. The build writes the qcow2, the
         # raw intermediate, the .img.gz and (wsl shape) the WSL tarball under
         # ~/system_imaging; img_gz_publish's qcow2 -> raw -> gzip needs all
         # three on disk at once and overruns /. Point ~/system_imaging at
-        # /mnt so the multi-GiB artefacts land on the roomy disk. Done
+        # /mnt so the multi-GiB artifacts land on the roomy disk. Done
         # before the cache restore so the cached cloud image lands there too.
         run: |
           sudo mkdir -p /mnt/system_imaging
@@ -96,9 +99,10 @@ jobs:
 
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
-        # fails -- so the .qcow2 / .img.gz / .tar.gz sizes are visible
-        # before the upload + GHCR-push happen. The WSL tarball only
-        # exists for wsl-shape variants; missing files render as "(missing)".
+        # fails -- so the base qcow2 + .img.gz and every derived artifact
+        # (.tar.gz for wsl, derived .img.gz for desktop) are visible before
+        # the upload + GHCR-push. The docker shape lands in the local docker
+        # daemon rather than a file, so it's reported via `docker images`.
         if: always()
         env:
           IMG: ${{ matrix.variant }}
@@ -110,18 +114,17 @@ jobs:
             echo
             echo "| File | Size | Bytes |"
             echo "|---|---:|---:|"
-            for f in nosi-${IMG}-x86_64.qcow2 \
-                     nosi-${IMG}-x86_64.img.gz \
-                     nosi-${IMG}-wsl.tar.gz; do
-                if [ -e "$f" ]; then
-                    bytes=$(stat -c%s "$f")
-                    printf '| `%s` | %s | %s |\n' \
-                        "$f" "$(numfmt --to=iec "$bytes")" "$bytes"
-                else
-                    printf '| `%s` | _(missing)_ | _(missing)_ |\n' "$f"
-                fi
+            for f in nosi-*.qcow2 nosi-*.img.gz nosi-*.tar.gz; do
+                [ -e "$f" ] || continue
+                bytes=$(stat -c%s "$f")
+                printf '| `%s` | %s | %s |\n' \
+                    "$f" "$(numfmt --to=iec "$bytes")" "$bytes"
             done
             echo
+            echo "Local OCI images (docker shape):"
+            echo '```'
+            docker images 'nosi-*' 2>/dev/null || true
+            echo '```'
           } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/stderr}"
 
       - name: Upload baked image + cijoe report (always)
@@ -132,10 +135,11 @@ jobs:
           path: |
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.qcow2
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.qcow2.sha256
-            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz
-            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz.sha256
-            ~/system_imaging/disk/nosi-${{ matrix.variant }}-wsl.tar.gz
-            ~/system_imaging/disk/nosi-${{ matrix.variant }}-wsl.tar.gz.sha256
+            ~/system_imaging/disk/nosi-*.img.gz
+            ~/system_imaging/disk/nosi-*.img.gz.sha256
+            ~/system_imaging/disk/nosi-*.tar.gz
+            ~/system_imaging/disk/nosi-*.tar.gz.sha256
+            ~/system_imaging/disk/nosi-*.metadata.json
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init-output.log
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init.log
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.nosi-release
@@ -164,6 +168,8 @@ jobs:
         uses: oras-project/setup-oras@v1
 
       - name: Log in to GHCR
+        # Both clients: oras for the disk-image / wsl-rootfs artifacts,
+        # docker for the docker-shape OCI image (`docker push`).
         if: env.PUBLISH == 'true'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -171,6 +177,8 @@ jobs:
         run: |
           printf '%s' "$GHCR_TOKEN" \
             | oras login ghcr.io -u "$GHCR_USER" --password-stdin
+          printf '%s' "$GHCR_TOKEN" \
+            | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
       - name: Bundle cijoe report into a zip
         # Ship the build provenance (report.html + per-step cmd_*.output
@@ -189,104 +197,16 @@ jobs:
           sha256sum "${report}" > "${report}.sha256"
           ls -lh "${report}"
 
-      - name: Push ${{ matrix.variant }} to GHCR
-        if: env.PUBLISH == 'true'
-        env:
-          REPO: ${{ github.repository }}
-          IMG:  ${{ matrix.variant }}
-          ROLLING: ${{ steps.tag.outputs.rolling }}
-          SHA: ${{ github.sha }}
-        run: |
-          # cd into the artefacts dir and push by basename so ORAS records
-          # plain filenames in the manifest (default behaviour blocks
-          # absolute paths to prevent leaking host paths into the artefact).
-          # GHA's working-directory: doesn't expand ~, hence the cd here.
-          cd "$HOME/system_imaging/disk"
-          gz="nosi-${IMG}-x86_64.img.gz"
-          report="nosi-${IMG}-x86_64.cijoe-report.zip"
-          meta_json="nosi-${IMG}-x86_64.metadata.json"
-          meta_md="nosi-${IMG}-x86_64.metadata.md"
-
-          # OCI manifest annotations sourced from the smoketest-extracted
-          # metadata. Visible via `oras manifest fetch` without pulling any
-          # layer -- the "tell me what this image is" path. metadata.json
-          # is REQUIRED here: the smoketest gates publish on the file
-          # existing and parsing, so if we got this far it's there. No
-          # graceful-degrade fallback -- a missing file would mean the
-          # smoketest's gate broke, which we want to find out about loudly.
-          jq -e . "${meta_json}" >/dev/null
-          shape=$(jq -r '.nosi.shape // .nosi.flavor // empty' "${meta_json}")
-          distro=$(jq -r '.distro.id // empty' "${meta_json}")
-          distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
-          distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
-          kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
-          built=$(jq -r '.nosi.built // empty' "${meta_json}")
-          arch=$(jq -r '.architecture // empty' "${meta_json}")
-
-          # Per-variant use-case prose for org.opencontainers.image.description.
-          # Operators (and oras consumers reading the manifest annotations)
-          # see "what is this variant for?" without having to consult the
-          # docs catalog. Single source of truth is variants.yml; the same
-          # registry feeds tools/gen_catalog.py's bty catalog, so the manifest
-          # annotation and the published catalog can't drift. An unregistered
-          # variant makes --describe exit non-zero, which fails this step
-          # under `set -e` (no generic placeholder gets pushed). Absolute
-          # path: we cd'd into the artefacts dir above, the script lives in
-          # the checkout (it finds variants.yml relative to itself).
-          variant_desc=$(python3 "$GITHUB_WORKSPACE/tools/gen_catalog.py" --describe "${IMG}")
-
-          # Retry the oras push: ghcr.io occasionally resets the HTTP/2
-          # upload stream mid-blob (REFUSED_STREAM), and Go's http2
-          # transport can't auto-retry once Request.Body has been
-          # consumed (no GetBody defined upstream). oras push is
-          # idempotent -- already-uploaded blobs are detected by digest
-          # and skipped -- so re-running picks up where the failure
-          # left off. 3 attempts with 15s + 30s backoff covers the
-          # typical flake without dragging the job out.
-          attempts=0
-          until oras push \
-              "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
-              --artifact-type application/vnd.nosi.disk-image.v1+gzip \
-              --annotation "org.opencontainers.image.title=nosi-${IMG}-x86_64" \
-              --annotation "org.opencontainers.image.description=${variant_desc}" \
-              --annotation "org.opencontainers.image.version=${ROLLING}" \
-              --annotation "org.opencontainers.image.created=${built}" \
-              --annotation "org.opencontainers.image.revision=${SHA}" \
-              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.architecture=${arch}" \
-              --annotation "org.opencontainers.image.os=linux" \
-              --annotation "dev.nosi.variant=${IMG}" \
-              --annotation "dev.nosi.shape=${shape}" \
-              --annotation "dev.nosi.distro=${distro}" \
-              --annotation "dev.nosi.distro-version=${distro_version}" \
-              --annotation "dev.nosi.kernel-release=${kernel_release}" \
-              "${gz}:application/vnd.nosi.disk-image.layer.v1+gzip" \
-              "${gz}.sha256:text/plain" \
-              "${report}:application/vnd.nosi.build-report.v1+zip" \
-              "${report}.sha256:text/plain" \
-              "${meta_json}:application/vnd.nosi.metadata.v1+json" \
-              "${meta_md}:text/markdown"; do
-              attempts=$((attempts + 1))
-              if [ $attempts -ge 3 ]; then
-                  echo "::error::oras push (disk-image) failed after $attempts attempts"
-                  exit 1
-              fi
-              backoff=$((attempts * 15))
-              echo "::warning::oras push (disk-image) attempt $attempts failed; retrying in ${backoff}s"
-              sleep $backoff
-          done
-          oras tag "ghcr.io/${REPO}/${IMG}:${ROLLING}" latest
-
-      - name: Push ${{ matrix.variant }} WSL rootfs to GHCR
-        # Separate repo (${IMG}-wsl) so bty's flashable catalog stays
-        # cleanly scoped to disk-images; the WSL artifact is rootfs, not
-        # a flashable disk, so colocating tags under the same repo would
-        # be misleading. Gated on the artifact existing, which today
-        # means matrix.variant == 'ubuntu-2604-wsl'. Same build, same report,
-        # so the cijoe-report zip is attached here too for symmetry --
-        # operators who pulled the WSL artifact alone still get the
-        # provenance.
+      - name: Publish base + derived shapes to GHCR
+        # One step pushes the headless base AND every shape derive_publish
+        # produced for it. Disk-image (.img.gz) + wsl-rootfs (.tar.gz) go
+        # via oras (each its own repo ghcr.io/<repo>/<variant>, so bty's
+        # flashable catalog stays scoped to real disk images). The docker
+        # shape is a real OCI image (docker import in derive_publish), so
+        # it's `docker push`ed for `docker pull` / GHA `container:` use.
+        # Annotations come from each artifact's OWN metadata.json (the base
+        # smoketest extracted the base's; derive_publish exported each
+        # derived one), description from variants.yml via gen_catalog.
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
@@ -295,71 +215,108 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -eu
+          # GHA's working-directory: doesn't expand ~, hence the cd; push
+          # by basename so ORAS records plain filenames (not host paths).
           cd "$HOME/system_imaging/disk"
-          tarball="nosi-${IMG}-wsl.tar.gz"
-          if [ ! -e "${tarball}" ]; then
-              echo "No WSL tarball for ${IMG} (expected for headless variants)."
-              exit 0
-          fi
           report="nosi-${IMG}-x86_64.cijoe-report.zip"
-          meta_json="nosi-${IMG}-x86_64.metadata.json"
-          meta_md="nosi-${IMG}-x86_64.metadata.md"
+          gc="python3 $GITHUB_WORKSPACE/tools/gen_catalog.py"
 
-          # Same metadata, same annotations as the disk-image artefact.
-          # Operators who pull just the WSL tag should not have to also
-          # pull the disk-image tag to learn what's inside.
-          variant=$(jq -r '.nosi.variant // empty' "${meta_json}")
-          shape=$(jq -r '.nosi.shape // .nosi.flavor // empty' "${meta_json}")
-          distro=$(jq -r '.distro.id // empty' "${meta_json}")
-          distro_version=$(jq -r '.distro.version_id // empty' "${meta_json}")
-          distro_pretty=$(jq -r '.distro.pretty_name // empty' "${meta_json}")
-          kernel_release=$(jq -r '.kernel.release // empty' "${meta_json}")
-          built=$(jq -r '.nosi.built // empty' "${meta_json}")
-          arch=$(jq -r '.architecture // empty' "${meta_json}")
+          # oras push with the standard nosi annotation set + idempotent
+          # retry (ghcr.io intermittently resets the HTTP/2 upload stream;
+          # oras skips already-uploaded blobs by digest, so re-running
+          # resumes). $1 ref $2 artifact-type $3 layer-media $4 file
+          # $5 metadata.json $6 description.
+          oras_push() {
+              local ref=$1 atype=$2 lmedia=$3 file=$4 meta=$5 desc=$6
+              jq -e . "$meta" >/dev/null
+              local variant shape distro distro_version kernel_release built arch
+              variant=$(jq -r '.nosi.variant // empty' "$meta")
+              shape=$(jq -r '.nosi.shape // empty' "$meta")
+              distro=$(jq -r '.distro.id // empty' "$meta")
+              distro_version=$(jq -r '.distro.version_id // empty' "$meta")
+              kernel_release=$(jq -r '.kernel.release // empty' "$meta")
+              built=$(jq -r '.nosi.built // empty' "$meta")
+              arch=$(jq -r '.architecture // empty' "$meta")
+              local attempts=0
+              until oras push "$ref" \
+                  --artifact-type "$atype" \
+                  --annotation "org.opencontainers.image.title=nosi-${variant}" \
+                  --annotation "org.opencontainers.image.description=${desc}" \
+                  --annotation "org.opencontainers.image.version=${ROLLING}" \
+                  --annotation "org.opencontainers.image.created=${built}" \
+                  --annotation "org.opencontainers.image.revision=${SHA}" \
+                  --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
+                  --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
+                  --annotation "org.opencontainers.image.architecture=${arch}" \
+                  --annotation "org.opencontainers.image.os=linux" \
+                  --annotation "dev.nosi.variant=${variant}" \
+                  --annotation "dev.nosi.shape=${shape}" \
+                  --annotation "dev.nosi.distro=${distro}" \
+                  --annotation "dev.nosi.distro-version=${distro_version}" \
+                  --annotation "dev.nosi.kernel-release=${kernel_release}" \
+                  "${file}:${lmedia}" \
+                  "${file}.sha256:text/plain" \
+                  "${report}:application/vnd.nosi.build-report.v1+zip" \
+                  "${report}.sha256:text/plain" \
+                  "${meta}:application/vnd.nosi.metadata.v1+json"; do
+                  attempts=$((attempts + 1))
+                  if [ $attempts -ge 3 ]; then
+                      echo "::error::oras push $ref failed after $attempts attempts"
+                      return 1
+                  fi
+                  echo "::warning::oras push $ref attempt $attempts failed; retrying"
+                  sleep $((attempts * 15))
+              done
+              oras tag "$ref" latest
+          }
 
-          # WSL artefact gets a tweak of the disk-image description: same
-          # variant identity, but flagged as the WSL rootfs derivative.
-          # Sourced from variants.yml's wsl_description; a wsl-shape variant
-          # without one makes --describe-wsl exit non-zero and fails this
-          # step under `set -e`. Absolute path: we cd'd into the artefacts
-          # dir above (the script finds variants.yml relative to itself).
-          variant_desc=$(python3 "$GITHUB_WORKSPACE/tools/gen_catalog.py" --describe-wsl "${IMG}")
+          # Base headless: flashable .img.gz disk-image.
+          oras_push "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
+              application/vnd.nosi.disk-image.v1+gzip \
+              application/vnd.nosi.disk-image.layer.v1+gzip \
+              "nosi-${IMG}-x86_64.img.gz" \
+              "nosi-${IMG}-x86_64.metadata.json" \
+              "$($gc --describe "${IMG}")"
 
-          # Same idempotent-retry pattern as the disk-image push above.
-          attempts=0
-          until oras push \
-              "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" \
-              --artifact-type application/vnd.nosi.wsl-rootfs.v1+gzip \
-              --annotation "org.opencontainers.image.title=nosi-${IMG}-wsl" \
-              --annotation "org.opencontainers.image.description=${variant_desc}" \
-              --annotation "org.opencontainers.image.version=${ROLLING}" \
-              --annotation "org.opencontainers.image.created=${built}" \
-              --annotation "org.opencontainers.image.revision=${SHA}" \
-              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
-              --annotation "org.opencontainers.image.architecture=${arch}" \
-              --annotation "org.opencontainers.image.os=linux" \
-              --annotation "dev.nosi.variant=${variant}" \
-              --annotation "dev.nosi.shape=${shape}" \
-              --annotation "dev.nosi.distro=${distro}" \
-              --annotation "dev.nosi.distro-version=${distro_version}" \
-              --annotation "dev.nosi.kernel-release=${kernel_release}" \
-              "${tarball}:application/vnd.nosi.wsl-rootfs.layer.v1+gzip" \
-              "${tarball}.sha256:text/plain" \
-              "${report}:application/vnd.nosi.build-report.v1+zip" \
-              "${report}.sha256:text/plain" \
-              "${meta_json}:application/vnd.nosi.metadata.v1+json" \
-              "${meta_md}:text/markdown"; do
-              attempts=$((attempts + 1))
-              if [ $attempts -ge 3 ]; then
-                  echo "::error::oras push (WSL) failed after $attempts attempts"
+          # Derived shapes, read from the base's [[...derive]] list. Bases
+          # without derivations (debian / ubuntu-2404 / freebsd) emit no
+          # rows and the loop is a no-op.
+          derives=$(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"],e["output"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "${IMG}" "$GITHUB_WORKSPACE")
+          while read -r v output; do
+              [ -z "$v" ] && continue
+              case "$output" in
+              tar)
+                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
+                      application/vnd.nosi.wsl-rootfs.v1+gzip \
+                      application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
+                      "nosi-${v}.tar.gz" \
+                      "nosi-${v}.metadata.json" \
+                      "$($gc --describe-wsl "${v}")"
+                  ;;
+              img)
+                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
+                      application/vnd.nosi.disk-image.v1+gzip \
+                      application/vnd.nosi.disk-image.layer.v1+gzip \
+                      "nosi-${v}-x86_64.img.gz" \
+                      "nosi-${v}.metadata.json" \
+                      "$($gc --describe "${v}")"
+                  ;;
+              oci)
+                  # Real OCI image (docker import in derive_publish): docker
+                  # push so consumers `docker pull` / use as a GHA container:.
+                  # Title set as a LABEL at import; the catalog carries the
+                  # use-case prose.
+                  docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:${ROLLING}"
+                  docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:latest"
+                  docker push "ghcr.io/${REPO}/${v}:${ROLLING}"
+                  docker push "ghcr.io/${REPO}/${v}:latest"
+                  ;;
+              *)
+                  echo "::error::unknown derive output '$output' for $v"
                   exit 1
-              fi
-              backoff=$((attempts * 15))
-              echo "::warning::oras push (WSL) attempt $attempts failed; retrying in ${backoff}s"
-              sleep $backoff
-          done
-          oras tag "ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}" latest
+                  ;;
+              esac
+          done <<< "$derives"
 
       - name: Write build summary
         if: env.PUBLISH == 'true'
@@ -393,7 +350,7 @@ jobs:
             echo "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress"
             echo '```'
             echo
-            echo "Pull the full artefact (image + build report) for provenance:"
+            echo "Pull the full artifact (image + build report) for provenance:"
             echo
             echo '```'
             echo "oras pull ghcr.io/${REPO}/${IMG}:${ROLLING}"
@@ -402,32 +359,34 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # When a WSL tarball was published alongside, append its summary
-          # block so consumers see the wsl --import path next to the dd one.
-          wsl="$HOME/system_imaging/disk/nosi-${IMG}-wsl.tar.gz"
-          if [ -e "${wsl}.sha256" ]; then
-              wsha=$(awk '{print $1}' "${wsl}.sha256")
-              wsize=$(numfmt --to=iec "$(stat -c%s "${wsl}")")
+          # Append a block per derived shape this leg published.
+          derives=$(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"],e["output"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "${IMG}" "$GITHUB_WORKSPACE")
+          while read -r v output; do
+              [ -z "$v" ] && continue
               {
                 echo
-                echo "### \`${IMG}-wsl\` (${ROLLING})"
+                echo "### \`${v}\` (${ROLLING}, derived from ${IMG})"
                 echo
-                echo "| | |"
+                echo "| Pull ref | \`ghcr.io/${REPO}/${v}:${ROLLING}\` (alias \`:latest\`) |"
                 echo "|---|---|"
-                echo "| Pull ref | \`ghcr.io/${REPO}/${IMG}-wsl:${ROLLING}\` |"
-                echo "| Latest alias | \`ghcr.io/${REPO}/${IMG}-wsl:latest\` |"
-                echo "| Blob digest (content-addressed pull) | \`sha256:${wsha}\` |"
-                echo "| Size | ${wsize} |"
-                echo
-                echo "Import into WSL (PowerShell):"
-                echo
-                echo '```powershell'
-                echo "curl.exe -sL 'https://ghcr.io/v2/${REPO}/${IMG}-wsl/blobs/sha256:${wsha}' \\"
-                echo "    -o ${IMG}-wsl.tar.gz"
-                echo "wsl --import nosi-wsl C:\\WSL\\nosi-wsl ${IMG}-wsl.tar.gz"
-                echo '```'
+                case "$output" in
+                tar)
+                    echo
+                    echo "WSL2 rootfs -- pull the layer blob and \`wsl --import\` it." ;;
+                img)
+                    echo
+                    echo "Flashable .img.gz -- same \`gunzip | dd\` flow as the base." ;;
+                oci)
+                    echo
+                    echo "OCI image -- use as a GHA job container or a dev base:"
+                    echo '```yaml'
+                    echo "container:"
+                    echo "  image: ghcr.io/${REPO}/${v}:latest"
+                    echo "  options: --privileged"
+                    echo '```' ;;
+                esac
               } >> "$GITHUB_STEP_SUMMARY"
-          fi
+          done <<< "$derives"
 
   publish-catalog:
     # Cut a GitHub release carrying the bty-compatible catalog.toml so an

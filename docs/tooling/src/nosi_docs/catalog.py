@@ -7,7 +7,7 @@ ghcr.io/safl/nosi/<variant>:<rolling> tag (and the :latest alias).
 This module pulls the metadata layer for every published variant and
 renders a single beautified catalog page so the docs stop maintaining
 parallel descriptions of variants/distros/tools/packages: the ORAS
-artefact is the source of truth.
+artifact is the source of truth.
 
 Failure modes are tolerated. If oras isn't installed, the network is
 down, or a variant has never been published yet, the per-variant
@@ -32,8 +32,14 @@ from typing import Iterable
 log = logging.getLogger(__name__)
 
 
-# Variants nosi publishes. Keep in sync with .github/workflows/build.yml's
-# matrix.variant list and the cijoe/configs/ directory.
+# Variants nosi publishes as ORAS artifacts carrying the
+# vnd.nosi.metadata.v1+json layer this page reads. That's every base
+# (the build matrix) plus the oras-published derived shapes (wsl
+# rootfs, desktop .img.gz). The `docker` shape is intentionally absent:
+# it's a `docker import` OCI image without the metadata layer, so it's
+# documented in prose (overview.md) rather than auto-rendered here.
+# Keep in sync with .github/workflows/build.yml + the [[...derive]]
+# entries in cijoe/configs/.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
     ("debian-13-headless",   "ghcr.io/safl/nosi/debian-13-headless:latest"),
     ("ubuntu-2404-headless", "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
@@ -158,7 +164,7 @@ def _render(snapshots: Iterable[VariantSnapshot]) -> str:
         lines.append(
             f"| `{s.name}` "
             f"| {d.get('pretty_name') or '?'} "
-            f"| {n.get('shape') or n.get('flavor') or '?'} "
+            f"| {n.get('shape') or '?'} "
             f"| {k.get('release') or '?'} "
             f"| `{n.get('version') or '?'}` "
             f"| {n.get('built') or '?'} |"
@@ -194,7 +200,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         parts.extend([s.description, ""])
     parts.extend([
         f"**Distro:** {d.get('pretty_name') or '?'}  ",
-        f"**Shape:** `{n.get('shape') or n.get('flavor') or '?'}`  ",
+        f"**Shape:** `{n.get('shape') or '?'}`  ",
         f"**Kernel:** `{k.get('release') or '?'}`  ",
         f"**Architecture:** `{arch}`  ",
         f"**Version:** `{n.get('version') or '?'}`  ",

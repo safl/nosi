@@ -41,3 +41,19 @@ disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-headless-
 publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-headless-x86_64.img"
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2604-headless-x86_64.img.gz"
 publish.gzip_level = 9
+
+# Shapes derived from this headless base (derive_publish copies the
+# baked qcow2, chroots, runs `apply.sh <variant> --shape-only`, then
+# packages). No re-bake. See cijoe/scripts/derive_publish.py.
+#   wsl    -> nosi-ubuntu-2604-wsl.tar.gz   (strip; `wsl --import`)
+#   docker -> local OCI image nosi-ubuntu-2604-docker:latest (strip;
+#             build.yml retags + pushes to ghcr.io/<repo>/ubuntu-2604-docker)
+[[system-imaging.images.nosi-ubuntu-2604-headless-x86_64.derive]]
+variant = "ubuntu-2604-wsl"
+output = "tar"
+strip = true
+
+[[system-imaging.images.nosi-ubuntu-2604-headless-x86_64.derive]]
+variant = "ubuntu-2604-docker"
+output = "oci"
+strip = true

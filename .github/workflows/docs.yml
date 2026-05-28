@@ -3,7 +3,7 @@ name: Docs
 on:
   # Docs are downstream of build-images: catalog.py pulls each variant's
   # ORAS manifest and renders the use-case description + tool inventory
-  # from the just-published artefacts. Triggering on workflow_run after
+  # from the just-published artifacts. Triggering on workflow_run after
   # build-images completes guarantees the docs always reflect the latest
   # push -- the previous push-in-parallel trigger had a race where the
   # docs job could finish before build-images' oras push step, leaving
@@ -89,7 +89,7 @@ jobs:
     # Deploy only when this docs build was triggered by a successful
     # build-images run on main. Excludes pull_request builds (no deploy
     # for PRs) and workflow_dispatch builds (manual dispatches stay as
-    # artefacts only -- if you want them on Pages, push to main).
+    # artifacts only -- if you want them on Pages, push to main).
     if: >-
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&

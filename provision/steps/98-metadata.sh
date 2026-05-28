@@ -63,6 +63,35 @@ def ver(*cmd):
     raw = run(*cmd, timeout=5)
     return first_version_token(raw)
 
+def image_kernel():
+    """Kernel of the IMAGE, not the build host.
+
+    Derives the release from /lib/modules/<release> (present on the
+    rootfs), which is correct both when booted on the image (base bake)
+    and inside a chroot during a derive -- where `uname -r` would
+    instead report the build host's / runner's kernel. `uname -v` (the
+    build-string) is only trustworthy when we're actually booted on the
+    image (release == uname -r), so it's nulled in the chroot case
+    rather than shipping the host's string. For stripped shapes the
+    release still reflects what the image was built from (98-metadata
+    runs before the strip).
+    """
+    release = None
+    try:
+        mods = sorted(
+            d for d in os.listdir("/lib/modules")
+            if os.path.isdir(os.path.join("/lib/modules", d))
+        )
+        if mods:
+            release = mods[-1]
+    except OSError:
+        pass
+    uname_r = run("uname", "-r")
+    if release is None:
+        release = uname_r
+    version = run("uname", "-v") if release == uname_r else None
+    return {"release": release, "version": version}
+
 nosi_release = read_kv("/etc/nosi-release")
 osr = read_kv("/etc/os-release")
 
@@ -80,10 +109,7 @@ meta = {
         "version_codename": osr.get("VERSION_CODENAME"),
         "pretty_name": osr.get("PRETTY_NAME"),
     },
-    "kernel": {
-        "release": run("uname", "-r"),
-        "version": run("uname", "-v"),
-    },
+    "kernel": image_kernel(),
     "architecture": run("uname", "-m"),
     "operator": {
         "username": "odus",
@@ -119,6 +145,8 @@ meta = {
             "devbind": ver("devbind", "--version"),
             "hugepages": ver("hugepages", "--version"),
             "iommu": ver("iommu", "--version"),
+            # cijoe: base tool (step 22), present on every shape.
+            "cijoe": ver("cijoe", "--version"),
         },
     },
 }

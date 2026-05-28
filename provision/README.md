@@ -117,15 +117,16 @@ no-ops there.
 
 ## Use as a WSL2 distribution
 
-The `wsl`-shape variant (today: `ubuntu-2604-wsl`) bake produces both
-a flashable `.img.gz` side-effect and a WSL2 rootfs tarball
-(`wsl_rootfs_publish` strips kernel/grub/firmware/cloud-init); the
-`.tar.gz` is the primary artefact.
+The `wsl`-shape variant (today: `ubuntu-2604-wsl`) is derived from the
+`ubuntu-2604-headless` base: `derive_publish` chroots into a copy of
+the baked headless rootfs, runs the wsl shape step (adds meld / gitk /
+git-gui), strips kernel/grub/firmware/cloud-init, and tar-gzips the
+result. The `.tar.gz` is the only artifact.
 
 Install on Windows (recommended, Win11 + WSL 2.x):
 
 ```
-wsl --install --from-file path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl --install --from-file path\to\nosi-ubuntu-2604-wsl.tar.gz
 wsl -d nosi-wsl
 ```
 
@@ -156,12 +157,12 @@ root. Two ways out:
 
 ```
 # Set the default user once via the Windows-side knob (recommended)
-wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl.tar.gz
 wsl --manage nosi-wsl --set-default-user odus
 wsl -d nosi-wsl
 
 # Or pass -u on every launch (never updates the registry)
-wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl-wsl.tar.gz
+wsl --import nosi-wsl C:\WSL\nosi-wsl path\to\nosi-ubuntu-2604-wsl.tar.gz
 wsl -d nosi-wsl -u odus
 ```
 

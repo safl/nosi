@@ -15,24 +15,28 @@
 Automated builds of opinionated operating-system images for niches the
 stock cloud images don't quite hit. The output is a `.img.gz` (flashable
 to bare metal with `dd` / Balena Etcher / any tool that handles
-gzip-compressed disk images) and, for the `wsl` shape, additionally a
-`.tar.gz` consumable by `wsl --import`. The companion project
-[bty](https://github.com/safl/bty) is one convenient flasher; it is not
-required.
+gzip-compressed disk images), for the `wsl` shape a `.tar.gz` consumable
+by `wsl --import`, and for the `docker` shape an OCI image pullable with
+docker. The companion project [bty](https://github.com/safl/bty) is one
+convenient flasher; it is not required.
 
 **Documentation: <https://safl.github.io/nosi/>** (sources in `docs/src/`)
 
 ## Scope
 
-Three shapes today: **`headless`** (C / C++ / Python / Rust systems
-work on bare metal / VM / cloud), **`desktop`** (headless superset
-plus a Sway tiling Wayland stack for personal laptop /
-workstation use), and **`wsl`** (headless superset plus GUI dev
-tools rendered through WSLg, published as a `.tar.gz` for `wsl
---import`). Optional tooling (agentic AI CLIs, GPU vendor stacks,
-...) is post-flash via `nosi-addon` or via cijoe workflows under
-`cijoe/workflows/`. A **`freebsd-<N>-headless`** scaffold landed in
-2026-05 (Phase 1: bake + identity + baseline packages + kernel
+Four shapes today, with **`headless`** as the base the others derive
+from: **`headless`** (C / C++ / Python / Rust / Zig systems work on
+bare metal / VM / cloud), **`desktop`** (headless plus a Sway tiling
+Wayland stack for personal laptop / workstation use), **`wsl`**
+(headless plus GUI dev tools rendered through WSLg, published as a
+`.tar.gz` for `wsl --import`), and **`docker`** (headless plus cijoe,
+stripped and packaged as an OCI image -- a CI bootstrap host that
+launches qemu guests via cijoe, or a `make docker` dev base). desktop
+/ wsl / docker are built by deriving from the baked headless rootfs
+rather than re-baking. Optional tooling (agentic AI CLIs, GPU vendor
+stacks, ...) is post-flash via `nosi-addon` or via cijoe workflows
+under `cijoe/workflows/`. A **`freebsd-<N>-headless`** scaffold landed
+in 2026-05 (Phase 1: bake + identity + baseline packages + kernel
 source, no provision chain yet).
 
 For the up-to-date list of variants, baked tool versions, default
@@ -48,10 +52,10 @@ disk rather than hand-curated prose that can drift.
     make build VARIANT=debian-13-headless    # build one variant
     make all                               # build every variant
 
-Local builds need `qemu-system-x86_64` + KVM accessible. The
-`wsl`-shape post-bake step additionally needs `sudo` for `qemu-nbd`
-attach + chroot tar-out -- any modern Linux host with the loadable
-`nbd` kernel module fits the bill.
+Local builds need `qemu-system-x86_64` + KVM accessible. Deriving the
+desktop / wsl / docker shapes additionally needs `sudo` for `qemu-nbd`
+attach + chroot (and `docker` for the docker shape) -- any modern Linux
+host with the loadable `nbd` kernel module fits the bill.
 
 ## Releasing
 

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/22-python-tools.sh
 #
-# Install the opinionated helix LSP / linter / formatter stack and the
-# user space PCI helpers (DPDK/SPDK and xNVMe/uPCIe ergonomics) with
-# pipx, system-wide:
+# Install the opinionated helix LSP / linter / formatter stack, the
+# user space PCI helpers (DPDK/SPDK and xNVMe/uPCIe ergonomics), and the
+# cijoe orchestration tool with pipx, system-wide:
 #
 #   ruff      -- linter + formatter, includes built-in `ruff server` LSP
 #   pyright   -- type-checking LSP (`pyright-langserver`)
 #   devbind   -- sysfs PCI driver-binding manager (github.com/xnvme/devbind)
 #   hugepages -- Linux hugepages inspection + reservation (github.com/xnvme/hugepages)
 #   iommu     -- manage the Linux IOMMU substrate via the kernel cmdline (github.com/safl/iommu)
+#   cijoe     -- task/workflow orchestration (github.com/refenv/cijoe); the
+#                tool nosi + bty are built with, baked into every shape so a
+#                nosi system can drive qemu-guest / test workflows out of the
+#                box. The docker shape (OCI bootstrap host) leans on it most,
+#                but it's a base tool, not a docker-only one.
 #
 # pipx is the right tool for this (per-tool isolated venvs + managed
 # shims) and `pipx install --global` is its first-class system-wide
@@ -39,7 +44,7 @@ nosi_require_root
 command -v uvx >/dev/null 2>&1 || nosi_die "uvx not on PATH (step 20 installs uv + uvx)"
 py="$(command -v python3)" || nosi_die "python3 not on PATH"
 
-for pkg in ruff pyright devbind hugepages iommu; do
+for pkg in ruff pyright devbind hugepages iommu cijoe; do
     if uvx pipx list --global --short 2>/dev/null | awk '{print $1}' | grep -qx "$pkg"; then
         uvx pipx upgrade --global "$pkg"
     else

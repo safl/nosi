@@ -94,8 +94,8 @@ winget install -e --id ORASProject.ORAS
 too if you prefer those.
 
 ```powershell
-oras pull "ghcr.io/safl/nosi/ubuntu-2604-wsl-wsl:latest"
-wsl --import nosi-wsl "$env:USERPROFILE\WSL\nosi-wsl" nosi-ubuntu-2604-wsl-wsl.tar.gz
+oras pull "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"
+wsl --import nosi-wsl "$env:USERPROFILE\WSL\nosi-wsl" nosi-ubuntu-2604-wsl.tar.gz
 wsl -d nosi-wsl
 ```
 

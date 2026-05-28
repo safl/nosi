@@ -5,13 +5,13 @@ VARIANT ?= debian-13-headless
 .PHONY: help deps build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
 
 help:
-	@echo "nosi: automated builds of Niche Operating System Images (C / Python dev fit)"
+	@echo "nosi: automated builds of Niche Operating System Images (C / C++ / Python / Rust / Zig dev fit)"
 	@echo
 	@echo "Image targets:"
 	@echo "  deps              Install cijoe via pipx"
-	@echo "  build             Build one variant (override VARIANT=...)"
-	@echo "  all               Build every variant"
-	@echo "  clean             Remove cijoe artefacts"
+	@echo "  build             Build one base (override VARIANT=...); derived shapes ride along"
+	@echo "  all               Build every base"
+	@echo "  clean             Remove cijoe artifacts"
 	@echo
 	@echo "Docs targets:"
 	@echo "  docs-deps         pipx install ./docs/tooling"
@@ -20,41 +20,45 @@ help:
 	@echo "  docs-serve        Live-rebuild on http://localhost:8000"
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
-	@echo "Variants (<distro>-<version>-<shape>):"
+	@echo "Bakeable bases (VARIANT=...); each base also produces its derived shapes:"
 	@echo "  debian-13-headless    Debian 13 trixie"
-	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble"
-	@echo "                        (HW vendor stacks; cudadev/rocmdev workflows pin here)"
-	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute"
-	@echo "  ubuntu-2604-wsl       Ubuntu 26.04 resolute + meld/gitk/git-gui"
-	@echo "                        (WSL2 rootfs; renders GUI tools via WSLg)"
-	@echo "  fedora-44-headless    Fedora 44"
-	@echo "  fedora-44-desktop     Fedora 44 + Sway desktop (personal laptop)"
+	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble (HW vendor stacks; cudadev/rocmdev pin here)"
+	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute -> derives ubuntu-2604-wsl + ubuntu-2604-docker"
+	@echo "  fedora-44-headless    Fedora 44 -> derives fedora-44-desktop"
 	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
 	@echo "  freebsd-15-headless   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
 	@echo
+	@echo "Derived shapes (built by their base, not a standalone 'make build VARIANT='):"
+	@echo "  ubuntu-2604-wsl       WSL2 rootfs .tar.gz (meld/gitk/git-gui via WSLg)"
+	@echo "  ubuntu-2604-docker    OCI image (CI bootstrap host; docker pull / GHA container:)"
+	@echo "  fedora-44-desktop     Sway desktop .img.gz (personal laptop)"
+	@echo
 	@echo "Current VARIANT=$(VARIANT)"
-	@echo "Output:"
+	@echo "Output (base):"
 	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.qcow2"
 	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-x86_64.img.gz (+ .sha256)"
-	@echo "  ~/system_imaging/disk/nosi-$(VARIANT)-wsl.tar.gz    (wsl variants only, + .sha256)"
+	@echo "Derived shapes (ubuntu-2604 / fedora-44 bases) land alongside as"
+	@echo "  nosi-<variant>.tar.gz (wsl) / nosi-<variant>-x86_64.img.gz (desktop) / a local OCI image (docker)"
 
 deps:
 	pipx install cijoe
 	pipx ensurepath
 
-# Build a variant. The cijoe pipeline downloads the upstream cloud image,
-# resizes it, runs cloud-init in a QEMU VM, snapshots, and gzip-publishes.
-# Needs qemu-system-x86_64 + KVM accessible.
+# Build a base. The cijoe pipeline downloads the upstream cloud image,
+# resizes it, runs cloud-init in a QEMU VM, snapshots, gzip-publishes,
+# and (for bases with a [[...derive]] list) derives their shapes from
+# the baked rootfs. Needs qemu-system-x86_64 + KVM; deriving needs sudo
+# for qemu-nbd + chroot (and docker for the docker shape).
 build:
 	cd cijoe && cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
 
+# Only the bases. ubuntu-2604-wsl / ubuntu-2604-docker / fedora-44-desktop
+# are produced by their base's build, not invoked here.
 all:
 	$(MAKE) build VARIANT=debian-13-headless
 	$(MAKE) build VARIANT=ubuntu-2404-headless
 	$(MAKE) build VARIANT=ubuntu-2604-headless
-	$(MAKE) build VARIANT=ubuntu-2604-wsl
 	$(MAKE) build VARIANT=fedora-44-headless
-	$(MAKE) build VARIANT=fedora-44-desktop
 	$(MAKE) build VARIANT=freebsd-14-headless
 	$(MAKE) build VARIANT=freebsd-15-headless
 

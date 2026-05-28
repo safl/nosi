@@ -7,7 +7,7 @@
 ```
 
 Automated builds of operating-system images, pre-loaded with an opinionated
-toolset for bare-metal systems-development work in C, C++, Python, and Rust.
+toolset for bare-metal systems-development work in C, C++, Python, Rust, and Zig.
 
 Flash the resulting `.img.gz` with `dd`, Balena Etcher, or any tool that
 handles gzip-compressed disk images, and you have a ready-to-SSH dev box.

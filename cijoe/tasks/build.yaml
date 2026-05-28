@@ -14,11 +14,14 @@ doc: |
   5. Compact and checksum the baked qcow2.
   6. ``img_gz_publish`` converts qcow2 -> raw -> gzip-compressed .img.gz
      with a sha256 sidecar, for direct ``dd`` flashing.
-  7. ``wsl_rootfs_publish`` (gated on a [publish_wsl] block in the
-     variant's config; today only ubuntu-2604-wsl declares one)
-     derives a WSL2 rootfs tarball from the same bake by stripping
-     kernel/grub/firmware/cloud-init and tar-ing the result. No-op
-     for variants without [publish_wsl].
+  7. ``derive_publish`` builds the derived-shape artifacts from the
+     baked headless rootfs (no re-bake). For each ``[[...derive]]``
+     entry in the base image's config it copies the base qcow2, chroots
+     in, runs ``apply.sh <derived-variant> --shape-only`` (installs the
+     shape's packages + config, re-stamps identity), optionally strips
+     kernel/boot/cloud-init, and repackages: bootable .img.gz (desktop),
+     rootfs .tar.gz (wsl), or an OCI image via ``docker import``
+     (docker). No-op for a base with no ``derive`` list.
   8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write
      overlay, SSHes in as odus via a per-run key seeded by cloud-init,
      and asserts: /etc/nosi-release populated, motd rendered, the
@@ -36,8 +39,8 @@ steps:
 - name: img_gz_publish
   uses: img_gz_publish
 
-- name: wsl_rootfs_publish
-  uses: wsl_rootfs_publish
+- name: derive_publish
+  uses: derive_publish
 
 - name: image_smoketest
   uses: image_smoketest

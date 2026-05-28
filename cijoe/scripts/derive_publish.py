@@ -1,0 +1,432 @@
+"""
+Derive the shape artifacts from a baked headless rootfs
+=======================================================
+
+Layered build model: the headless base bakes once (``diskimage_build``).
+The derived shapes (desktop / wsl / docker) are NOT re-baked. This step
+takes a *copy* of the base qcow2, chroots in, runs
+``apply.sh <derived-variant> --shape-only`` (which re-stamps identity and
+installs the shape's packages + config via its shape step, skipping the
+base infrastructure that already ran), optionally strips
+kernel/boot/cloud-init, and repackages by output mode:
+
+  output = "img"   bootable .img.gz   (desktop; no strip, kernel kept)
+  output = "tar"   rootfs .tar.gz     (wsl; strip)
+  output = "oci"   OCI image via `docker import` (docker; strip)
+
+Driven by the base image's ``derive`` list in the cijoe config:
+
+  [[system-imaging.images.<base-image>.derive]]
+  variant = "ubuntu-2604-wsl"
+  output  = "tar"
+  strip   = true
+
+When the base image has no ``derive`` list the step no-ops, so the same
+``build.yaml`` drives every base (headless / freebsd) unchanged.
+
+Mechanism (qemu-nbd + chroot): libguestfs is avoided because its
+appliance networking (passt) reliably fails on hosted GitHub-Actions
+runners. qemu-nbd needs only ``qemu-utils`` (already present for the
+bake) and the loadable ``nbd`` module (shipped on the runners;
+``sudo modprobe nbd`` locally). The chroot shares the host's
+network namespace, and we bind the host's /etc/resolv.conf in, so the
+shape step's apt/dnf/curl/uvx fetches resolve.
+
+Artifact naming (also consumed by .github/workflows/build.yml):
+  img : <disk_dir>/nosi-<variant>-x86_64.img.gz (+ .sha256)
+  tar : <disk_dir>/nosi-<variant>.tar.gz        (+ .sha256)
+  oci : local docker image tagged nosi-<variant>:latest (build.yml
+        retags to ghcr.io/<repo>/<variant> and pushes)
+
+Retargetable: False
+"""
+
+from __future__ import annotations
+
+import errno
+import logging as log
+import os
+from argparse import ArgumentParser
+from pathlib import Path
+
+# Packages purged for stripped shapes (wsl / docker): kernel + bootloader
+# + firmware are meaningless without our own kernel; cloud-init + netplan
+# + NetworkManager because WSL and containers own their own first-boot +
+# networking. qemu + podman/buildah/skopeo stay (nested virt + containers
+# are the point of the docker shape, and useful under WSL too).
+STRIP_PURGE_GLOBS = [
+    "linux-image-*",
+    "linux-headers-*",
+    "linux-modules-*",
+    "linux-modules-extra-*",
+    "linux-generic*",
+    "grub-*",
+    "shim-signed",
+    "shim-helpers-*",
+    "efibootmgr",
+    "firmware-*",
+    "linux-firmware",
+    "cloud-init",
+    "cloud-guest-utils",
+    "cloud-initramfs-copymods",
+    "cloud-initramfs-dyn-netconf",
+    "netplan.io",
+    "network-manager",
+    "dkms",
+]
+
+STRIP_SCRIPT_TEMPLATE = """\
+#!/bin/sh
+set -u
+export DEBIAN_FRONTEND=noninteractive
+to_purge=""
+for glob in {globs}; do
+    matches=$(dpkg-query -W -f='${{Package}}\\n' "$glob" 2>/dev/null || true)
+    [ -z "$matches" ] && continue
+    to_purge="$to_purge $matches"
+done
+if [ -n "$to_purge" ]; then
+    apt-get -y --allow-remove-essential purge $to_purge || true
+fi
+apt-get -y autoremove --purge || true
+apt-get clean || true
+rm -rf \\
+    /boot/* \\
+    /var/cache/apt/archives/* \\
+    /var/lib/apt/lists/* \\
+    /etc/netplan/* \\
+    /var/lib/cloud \\
+    /etc/cloud \\
+    /lib/modules/* \\
+    /usr/lib/modules/* \\
+    /lib/firmware \\
+    /usr/lib/firmware \\
+    /etc/grub.d \\
+    /etc/default/grub \\
+    /var/log/installer \\
+    /var/lib/dkms \\
+    /usr/src/r8125-*
+rm -f /etc/ssh/ssh_host_*
+"""
+
+NBD_DEV = "/dev/nbd0"
+
+# OCI image config for the docker shape. PATH includes /usr/local/bin so
+# the uv / cargo / pipx-shim tools resolve; CMD is an interactive shell
+# since GHA job-containers override the entrypoint and run steps directly.
+OCI_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
+def add_args(parser: ArgumentParser):
+    parser.add_argument(
+        "--image_name",
+        type=str,
+        default=None,
+        help="Override the base system-imaging image to derive from. "
+        "Defaults to nosi-<variant>-x86_64 (variant from [nosi]).",
+    )
+
+
+def main(args, cijoe):
+    image_name = args.image_name or _default_image_name(cijoe)
+    images = cijoe.getconf("system-imaging.images", {})
+    image = images.get(image_name)
+    if not image:
+        log.error(f"Image '{image_name}' not found in config")
+        return errno.EINVAL
+
+    derives = image.get("derive")
+    if not derives:
+        log.info(
+            f"Image '{image_name}' has no [[...derive]] entries; skipping "
+            "(expected for a base that has no derived shapes)."
+        )
+        return 0
+
+    qcow2_path = Path(image["disk"]["path"])
+    if not qcow2_path.exists():
+        log.error(f"Baked base qcow2 not found: {qcow2_path}")
+        return errno.ENOENT
+    disk_dir = qcow2_path.parent
+
+    # nbd module + a clean nbd0 once for the whole run.
+    cijoe.run_local("sudo modprobe nbd max_part=8")
+
+    for entry in derives:
+        rc = _derive_one(cijoe, qcow2_path, disk_dir, entry)
+        if rc:
+            return rc
+    return 0
+
+
+def _derive_one(cijoe, base_qcow2: Path, disk_dir: Path, entry: dict) -> int:
+    variant = entry["variant"]
+    output = entry["output"]
+    strip = bool(entry.get("strip", False))
+    if output not in ("img", "tar", "oci"):
+        log.error(f"derive '{variant}': unknown output {output!r} (img|tar|oci)")
+        return errno.EINVAL
+
+    log.info(f"derive '{variant}': output={output} strip={strip}")
+    work = disk_dir / f"nosi-{variant}.work.qcow2"
+    err, _ = cijoe.run_local(f"cp -f {base_qcow2} {work}")
+    if err:
+        log.error("failed to copy base qcow2")
+        return err
+
+    mnt = Path(f"/mnt/nosi-derive-{variant}-{os.getpid()}")
+    try:
+        rc = _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir)
+    finally:
+        work.unlink(missing_ok=True)
+    return rc
+
+
+def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -> int:
+    cijoe.run_local(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
+    err, _ = cijoe.run_local(f"sudo qemu-nbd --connect={NBD_DEV} {work}")
+    if err:
+        log.error("qemu-nbd connect failed")
+        return err
+
+    bind_cleanup: list[str] = []
+    post_cleanup = [f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true"]
+    try:
+        cijoe.run_local(f"sudo partprobe {NBD_DEV} >/dev/null 2>&1 || true")
+        rootfs = _find_rootfs_partition(cijoe, work)
+        if not rootfs:
+            log.error(f"no ext4 rootfs partition found on {NBD_DEV}")
+            return errno.ENODEV
+
+        cijoe.run_local(f"sudo mkdir -p {mnt}")
+        err, _ = cijoe.run_local(f"sudo mount {rootfs} {mnt}")
+        if err:
+            log.error(f"mount {rootfs} failed")
+            return err
+        post_cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
+        post_cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
+
+        # Kernel API filesystems + DNS for the chroot's package installs.
+        for sub in ("dev", "proc", "sys", "run"):
+            err, _ = cijoe.run_local(f"sudo mount --bind /{sub} {mnt}/{sub}")
+            if err:
+                log.error(f"bind-mount {sub} failed")
+                return err
+            bind_cleanup.append(f"sudo umount {mnt}/{sub} 2>/dev/null || true")
+        # Bind the host's resolv.conf so apt/dnf/curl/uvx resolve. Bind
+        # (not copy) leaves the image's own resolv config intact underneath.
+        err, _ = cijoe.run_local(f"sudo mount --bind /etc/resolv.conf {mnt}/etc/resolv.conf")
+        if err:
+            log.error("bind-mount /etc/resolv.conf failed")
+            return err
+        bind_cleanup.append(f"sudo umount {mnt}/etc/resolv.conf 2>/dev/null || true")
+
+        rc = _chroot_provision(cijoe, mnt, variant, strip)
+        if rc:
+            return rc
+
+        # Export the derived variant's own metadata (98-metadata wrote it in
+        # the chroot, reflecting the derived shape/variant + installed
+        # inventory, and it survives the strip). build.yml reads this for
+        # the derived artifact's ORAS annotations rather than the base's.
+        meta_dst = disk_dir / f"nosi-{variant}.metadata.json"
+        cijoe.run_local(
+            f"sudo cp {mnt}/etc/nosi-metadata.json {meta_dst} && "
+            f"sudo chown $(id -u):$(id -g) {meta_dst}"
+        )
+
+        # tar/oci read the live mount; drop binds first so the rootfs view
+        # is static (volatile /sys etc. trip tar's "file changed" check).
+        if output in ("tar", "oci"):
+            for cmd in reversed(bind_cleanup):
+                cijoe.run_local(cmd)
+            bind_cleanup.clear()
+            return _package_rootfs(cijoe, mnt, variant, output, disk_dir)
+
+        # img: unmount everything + disconnect, then convert the qcow2.
+        for cmd in reversed(bind_cleanup):
+            cijoe.run_local(cmd)
+        bind_cleanup.clear()
+        for cmd in reversed(post_cleanup):
+            cijoe.run_local(cmd)
+        post_cleanup.clear()
+        return _package_img(cijoe, work, variant, disk_dir)
+    finally:
+        for cmd in reversed(bind_cleanup):
+            cijoe.run_local(cmd)
+        for cmd in reversed(post_cleanup):
+            cijoe.run_local(cmd)
+
+
+def _chroot_provision(cijoe, mnt, variant, strip) -> int:
+    """Refresh package metadata, run the shape step, optionally strip."""
+    osr = _read_os_release_id(mnt)
+    if osr in ("debian", "ubuntu"):
+        refresh = "apt-get update"
+        clean = "apt-get clean && rm -rf /var/lib/apt/lists/*"
+    elif osr == "fedora":
+        refresh = "dnf -y makecache"
+        clean = "dnf clean all && rm -rf /var/cache/dnf/*"
+    else:
+        log.error(f"derive '{variant}': unsupported distro id {osr!r} in rootfs")
+        return errno.EINVAL
+
+    # The base bake cleared package metadata in its final cleanup, so the
+    # shape step's installs need a fresh index first.
+    err, _ = cijoe.run_local(f"sudo chroot {mnt} /bin/sh -c {_q(refresh)}")
+    if err:
+        log.error("chroot package-metadata refresh failed")
+        return err
+
+    apply_cmd = f"/opt/nosi/provision/apply.sh {variant} --shape-only"
+    err, _ = cijoe.run_local(f"sudo chroot {mnt} /bin/sh -c {_q(apply_cmd)}")
+    if err:
+        log.error(f"chroot apply.sh {variant} --shape-only failed")
+        return err
+
+    if strip:
+        script = mnt / "tmp" / "nosi-strip.sh"
+        body = STRIP_SCRIPT_TEMPLATE.format(globs=" ".join(STRIP_PURGE_GLOBS))
+        cijoe.run_local(f"sudo mkdir -p {mnt}/tmp")
+        # Write via tee so the heredoc lands inside the (root-owned) rootfs.
+        _write_root_file(cijoe, script, body, mode="0755")
+        err, _ = cijoe.run_local(f"sudo chroot {mnt} /bin/sh /tmp/nosi-strip.sh")
+        if err:
+            log.error("chroot strip script failed")
+            return err
+        cijoe.run_local(f"sudo rm -f {script}")
+
+    cijoe.run_local(f"sudo chroot {mnt} /bin/sh -c {_q(clean)}")
+    return 0
+
+
+def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
+    """Tar the mounted rootfs; gzip it (wsl) or docker-import it (docker)."""
+    if output == "tar":
+        tar_path = disk_dir / f"nosi-{variant}.tar"
+        gz_path = disk_dir / f"nosi-{variant}.tar.gz"
+        err, _ = cijoe.run_local(
+            f"sudo tar --xattrs --acls --numeric-owner "
+            f"--exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' "
+            f"--exclude='./run/*' --exclude='./tmp/*' --exclude='./lost+found' "
+            f"-cf {tar_path} -C {mnt} ."
+        )
+        if err:
+            log.error("tar of rootfs failed")
+            return err
+        cijoe.run_local(f"sudo chown $(id -u):$(id -g) {tar_path}")
+        err, _ = cijoe.run_local(f"gzip -9 -c {tar_path} > {gz_path}")
+        if err:
+            return err
+        cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+        tar_path.unlink(missing_ok=True)
+        log.info(f"derive '{variant}': wrote {gz_path}")
+        return 0
+
+    # output == "oci": stream the rootfs tar straight into docker import.
+    tag = f"nosi-{variant}:latest"
+    changes = (
+        f"--change 'ENV PATH={OCI_PATH}' "
+        f"--change 'WORKDIR /root' "
+        f"--change 'CMD [\"/bin/bash\"]' "
+        f"--change 'LABEL org.opencontainers.image.title=nosi-{variant}'"
+    )
+    err, _ = cijoe.run_local(
+        f"sudo tar --xattrs --acls --numeric-owner "
+        f"--exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' "
+        f"--exclude='./run/*' --exclude='./tmp/*' --exclude='./lost+found' "
+        f"-cf - -C {mnt} . | docker import {changes} - {tag}"
+    )
+    if err:
+        log.error("docker import of rootfs failed")
+        return err
+
+    # Container smoketest: the OCI image must actually run and carry the
+    # bootstrap tooling (cijoe + qemu). Gates publish the same way the
+    # qcow2 smoketest does -- a broken container fails the build rather
+    # than shipping a bootstrap image that can't launch a guest.
+    smoke = "cijoe --version && qemu-system-x86_64 --version"
+    err, _ = cijoe.run_local(f"docker run --rm {tag} /bin/bash -lc {_q(smoke)}")
+    if err:
+        log.error(f"container smoketest failed for {tag} (cijoe/qemu missing?)")
+        return err
+    log.info(f"derive '{variant}': imported + smoketested OCI image {tag}")
+    return 0
+
+
+def _package_img(cijoe, work, variant, disk_dir) -> int:
+    """Convert the modified qcow2 to a gzip-compressed raw .img.gz."""
+    raw_path = disk_dir / f"nosi-{variant}-x86_64.img"
+    gz_path = disk_dir / f"nosi-{variant}-x86_64.img.gz"
+    err, _ = cijoe.run_local(f"qemu-img convert -O raw {work} {raw_path}")
+    if err:
+        log.error("qemu-img convert qcow2 -> raw failed")
+        return err
+    err, _ = cijoe.run_local(f"gzip -9 -c {raw_path} > {gz_path}")
+    if err:
+        return err
+    cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+    raw_path.unlink(missing_ok=True)
+    log.info(f"derive '{variant}': wrote {gz_path}")
+    return 0
+
+
+def _find_rootfs_partition(cijoe, work, attempts=10):
+    """Largest ext4 partition on NBD_DEV (the rootfs; /boot is smaller)."""
+    import json
+
+    out_file = work.with_suffix(".lsblk.json")
+    try:
+        for _ in range(attempts):
+            err, _ = cijoe.run_local(
+                f"sudo lsblk -J -b -o NAME,FSTYPE,SIZE,TYPE {NBD_DEV} > {out_file}"
+            )
+            if err == 0 and out_file.exists():
+                try:
+                    data = json.loads(out_file.read_text())
+                except (json.JSONDecodeError, OSError):
+                    data = {}
+                candidates = []
+                for dev in data.get("blockdevices", []):
+                    for part in dev.get("children") or []:
+                        if part.get("type") == "part" and part.get("fstype") == "ext4":
+                            size = part.get("size")
+                            if size is not None:
+                                candidates.append((int(size), part["name"]))
+                if candidates:
+                    candidates.sort(reverse=True)
+                    return f"/dev/{candidates[0][1]}"
+            cijoe.run_local("sleep 1")
+        return None
+    finally:
+        out_file.unlink(missing_ok=True)
+
+
+def _read_os_release_id(mnt: Path) -> str | None:
+    try:
+        for raw in (mnt / "etc" / "os-release").read_text().splitlines():
+            if raw.startswith("ID="):
+                return raw.partition("=")[2].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return None
+
+
+def _write_root_file(cijoe, path: Path, body: str, mode: str = "0644"):
+    """Write `body` to a root-owned path inside the rootfs via tee."""
+    host_tmp = Path(f"/tmp/nosi-derive-{os.getpid()}.tmp")
+    host_tmp.write_text(body)
+    cijoe.run_local(f"sudo cp {host_tmp} {path}")
+    cijoe.run_local(f"sudo chmod {mode} {path}")
+    host_tmp.unlink(missing_ok=True)
+
+
+def _q(s: str) -> str:
+    """Single-quote a string for `sh -c`."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _default_image_name(cijoe) -> str:
+    nosi = cijoe.getconf("nosi", {})
+    variant = nosi.get("variant", "ubuntu-2604-headless")
+    return f"nosi-{variant}-x86_64"

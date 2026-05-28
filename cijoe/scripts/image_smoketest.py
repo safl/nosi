@@ -2,9 +2,10 @@
 Smoke-test the baked qcow2 by booting it and asserting via SSH
 ==============================================================
 
-Runs after ``img_gz_publish`` (and ``wsl_rootfs_publish`` for wsl shape). Boots
-the just-baked image inside qemu on a copy-on-write overlay (the published
-artefact stays untouched and first-boot characteristics are preserved),
+Runs after ``img_gz_publish`` and ``derive_publish``. Boots
+the just-baked headless base image inside qemu on a copy-on-write overlay
+(the published artifact stays untouched and first-boot characteristics are
+preserved),
 SSHes into it as ``odus``, and runs a battery of assertions:
 
   * /etc/nosi-release exists, has NOSI_VERSION (non-unknown) and
@@ -12,8 +13,8 @@ SSHes into it as ``odus``, and runs a battery of assertions:
   * /usr/local/bin/nosi-motd exists, executable, prints a banner whose
     first non-blank line starts with ``nosi``
   * /etc/motd is non-empty and contains ``nosi`` (the boot oneshot ran)
-  * the "awesome tools" iommu, devbind, hugepages, ruff, pyright are all
-    on PATH at /usr/local/bin
+  * the "awesome tools" iommu, devbind, hugepages, ruff, pyright, cijoe
+    are all on PATH at /usr/local/bin
   * sshd is enabled for next boot (proven by ssh-in-itself, but recorded
     explicitly for the log)
   * ModemManager is NOT active (daemon-prune actually took)
@@ -27,7 +28,7 @@ inspection answers "did the apply step write file X?" but cannot answer
 "will the next operator's first boot of this image actually work?".
 
 To get ``odus`` past step 29's chage-expired password without burdening
-the published artefact with CI-only credentials, the boot is fed a tiny
+the published artifact with CI-only credentials, the boot is fed a tiny
 NoCloud seed.iso that authorises a per-run SSH key and unexpires odus.
 The seed is built fresh in /tmp every run; the key never leaves the
 runner.
@@ -93,7 +94,7 @@ def main(args, cijoe):
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
     log.info(f"smoketest workdir: {workdir}")
 
-    # Belt-and-suspenders so the smoketest can NEVER taint the artefact
+    # Belt-and-suspenders so the smoketest can NEVER taint the artifact
     # that ships to GHCR (the .img.gz was already produced before us, but
     # the .qcow2 still goes out as a transient GHA upload-artifact, and a
     # future change to the order of cijoe steps must not silently break
@@ -143,7 +144,7 @@ def main(args, cijoe):
         with contextlib.suppress(Exception):
             os.chmod(qcow2, qcow2_orig_mode)
         # Verify the baked qcow2 still matches its bake-time sha256. If
-        # not, somehow the smoketest tainted the artefact and we MUST
+        # not, somehow the smoketest tainted the artifact and we MUST
         # fail loudly -- this is the load-bearing don't-publish-the-test-
         # image guarantee.
         if expected_sha256:
@@ -152,7 +153,7 @@ def main(args, cijoe):
                 log.error(
                     f"FATAL: baked qcow2 sha256 changed during smoketest! "
                     f"expected {expected_sha256}, got {actual}. "
-                    f"DO NOT PUBLISH this artefact."
+                    f"DO NOT PUBLISH this artifact."
                 )
                 rc = errno.EIO
         # Preserve the workdir on failure so the serial console and ssh key
@@ -278,7 +279,7 @@ def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
     Called when /etc/nosi-metadata.json is missing (so apply.sh aborted
     somewhere). Pulls whatever exists from the running smoketest VM into
     nosi-<variant>-x86_64.<name> files in the same dir as the qcow2, so the
-    GHA workflow's artefact-upload step carries them off the ephemeral
+    GHA workflow's artifact-upload step carries them off the ephemeral
     runner.
 
     Uses `ssh ... sudo cat` rather than plain scp because cloud-init's
@@ -315,7 +316,7 @@ def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
         else:
             # Empty file on success usually means the source didn't exist;
             # remove the empty stub so the GHA upload doesn't ship a
-            # misleading zero-byte artefact.
+            # misleading zero-byte artifact.
             try:
                 if local.stat().st_size == 0:
                     local.unlink()
@@ -329,11 +330,11 @@ def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
 
 
 def _extract_metadata(key: Path, qcow2: Path) -> None:
-    """scp /etc/nosi-metadata.json out and render a sibling .md.
+    """scp /etc/nosi-metadata.json out next to the baked qcow2.
 
     The destination is the same directory as the baked qcow2 so the GHA
-    workflow's oras push step can attach both files as image-provenance
-    layers without juggling paths.
+    workflow's oras push step can attach it as an image-provenance layer
+    without juggling paths.
 
     Hard failure on every error path. The image is supposed to ship a
     metadata.json; if scp can't fetch it or the file isn't parseable,
@@ -343,7 +344,6 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     out_dir = qcow2.parent
     base = qcow2.stem  # nosi-<variant>-x86_64
     json_local = out_dir / f"{base}.metadata.json"
-    md_local = out_dir / f"{base}.metadata.md"
 
     scp_cmd = [
         "scp", "-i", str(key), *SSH_OPTS,
@@ -355,7 +355,7 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     if res.returncode != 0:
         # /etc/nosi-metadata.json missing usually means apply.sh died before
         # reaching step 98-metadata. Best-effort: scp the cloud-init logs +
-        # /etc/nosi-release out so the GHA artefact upload carries them and
+        # /etc/nosi-release out so the GHA artifact upload carries them and
         # the failing step is diagnosable without dropping into the runner.
         _capture_failure_logs(key, out_dir, base)
         raise RuntimeError(
@@ -365,89 +365,11 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
 
     import json as _json
     try:
-        meta = _json.loads(json_local.read_text())
+        _json.loads(json_local.read_text())  # validate it parses before publish
     except (OSError, ValueError) as exc:
         raise RuntimeError(f"extracted metadata.json did not parse: {exc}") from exc
 
-    md_local.write_text(_render_metadata_markdown(meta))
-    log.info(f"metadata written: {json_local.name}, {md_local.name}")
-
-
-def _render_metadata_markdown(meta: dict) -> str:
-    """Render the metadata JSON as a human-readable Markdown summary."""
-    n = meta.get("nosi", {})
-    d = meta.get("distro", {})
-    k = meta.get("kernel", {})
-    op = meta.get("operator", {})
-    tools = meta.get("tools", {})
-    pkgs = meta.get("packages", {})
-
-    def kv_section(title, kv):
-        lines = [f"## {title}", "", "| | |", "|---|---|"]
-        for key, val in kv.items():
-            if val is None:
-                val = "_(missing)_"
-            lines.append(f"| `{key}` | {val} |")
-        return "\n".join(lines)
-
-    def tool_section(title, tdict):
-        if not tdict:
-            return ""
-        lines = [f"## {title}", "", "| tool | version |", "|---|---|"]
-        for name, ver in sorted(tdict.items()):
-            ver = ver if ver is not None else "_(missing)_"
-            lines.append(f"| `{name}` | {ver} |")
-        return "\n".join(lines)
-
-    sections = [
-        f"# `{n.get('variant', '?')}` ({n.get('version', '?')})",
-        "",
-        d.get("pretty_name") or "_(distro unknown)_",
-        f"on Linux {k.get('release', '?')} ({meta.get('architecture', '?')}),"
-        f" built {n.get('built', '?')}",
-        "",
-        kv_section("Identity", n),
-        "",
-        kv_section("Distro", d),
-        "",
-        kv_section("Kernel", k),
-        "",
-        kv_section("Operator", {
-            "username": op.get("username"),
-            "uid": op.get("uid"),
-            "default_password": f"`{op.get('default_password')}` "
-                                f"({op.get('default_password_state')})",
-            "root_locked": op.get("root_locked"),
-        }),
-    ]
-
-    for label, key in (
-        ("Upstream-release tools (step 20)", "upstream_releases"),
-        ("Python CLIs via pipx --global (step 22)", "pipx_global"),
-    ):
-        section = tool_section(label, tools.get(key) or {})
-        if section:
-            sections.append("")
-            sections.append(section)
-
-    manual = pkgs.get("manually_installed") or []
-    if manual:
-        sections.append("")
-        sections.append(
-            f"## Manually-installed packages ({pkgs.get('manager', '?')}, "
-            f"{pkgs.get('count', len(manual))} packages)"
-        )
-        sections.append("")
-        # Three columns for compactness.
-        col = 3
-        rows = [manual[i:i + col] for i in range(0, len(manual), col)]
-        sections.append("| | | |")
-        sections.append("|---|---|---|")
-        for r in rows:
-            r = (r + ["", "", ""])[:col]
-            sections.append("| " + " | ".join(f"`{x}`" if x else "" for x in r) + " |")
-
-    return "\n".join(sections) + "\n"
+    log.info(f"metadata written: {json_local.name}")
 
 
 def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
@@ -525,7 +447,7 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
     # ORAS push step trusts the smoketest's verdict to know whether the
     # file is publishable. Gate here, before any distro-specific branch,
     # so a missing or malformed file fails the smoketest -- never silently
-    # drops the metadata layer from the published artefact.
+    # drops the metadata layer from the published artifact.
     check(
         "/etc/nosi-metadata.json present and parses as JSON",
         "python3 -c 'import json; json.load(open(\"/etc/nosi-metadata.json\"))' && echo ok",
@@ -673,7 +595,7 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
     # entry point -- this assertion is the tripwire if pipx ever changes
     # that default.
     for tool in ("iommu", "devbind", "hugepages", "ruff",
-                 "pyright", "pyright-langserver"):
+                 "pyright", "pyright-langserver", "cijoe"):
         check(
             f"/usr/local/bin/{tool} exists (step 22)",
             f"test -x /usr/local/bin/{tool} && echo ok",

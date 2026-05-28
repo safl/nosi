@@ -41,6 +41,41 @@ fi
 
 nosi_require_root
 
+# ---- desktop packages -----------------------------------------------
+# The Sway Wayland stack + greeter + browser + GUI git tools (meld /
+# gitk / git-gui) + audio / bluetooth / power / printing. Installed
+# HERE rather than in cloud-init so
+# `apply.sh <distro>-desktop` fully defines the desktop shape: a
+# vanilla-VM operator reaches the same result as the baked image, and
+# the derive-from-headless build only has to run this one step on the
+# baked headless rootfs. Fedora is the only desktop distro today, so
+# the names are dnf/Fedora; an apt desktop variant would add a branch.
+if [ "${NOSI_PKGMGR:-}" != "dnf" ]; then
+    nosi_die "desktop shape currently supports Fedora (dnf) only; got pkgmgr=${NOSI_PKGMGR:-?}"
+fi
+nosi_pkg_install \
+    sway swaylock swayidle swaybg \
+    xdg-desktop-portal-wlr lxpolkit \
+    foot waybar fuzzel mako wl-clipboard cliphist grim slurp \
+    greetd tuigreet \
+    firefox \
+    meld gitk git-gui \
+    pipewire pipewire-pulseaudio wireplumber pavucontrol \
+    brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
+    network-manager-applet \
+    cups cups-filters cups-pdf avahi avahi-tools system-config-printer \
+    google-noto-sans-fonts google-noto-color-emoji-fonts \
+    xdg-utils xdg-desktop-portal
+
+# ---- desktop seat access --------------------------------------------
+# The headless base puts odus in wheel + kvm only. The desktop shape
+# needs `video` (DRM render nodes) and `input` (evdev: lid / keyboard /
+# touchpad) for a Wayland seat. Additive + idempotent; guarded so it's
+# a no-op on a system without the odus operator account.
+if id odus >/dev/null 2>&1; then
+    usermod -aG video,input odus || true
+fi
+
 # ---- JetBrainsMono Nerd Font ----------------------------------------
 # waybar / foot / fuzzel / mako all use the Nerd Font glyphs (battery
 # / audio / wifi icons). Not packaged on Fedora 44 mainline (and the

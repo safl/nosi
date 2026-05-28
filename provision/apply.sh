@@ -1,28 +1,44 @@
 #!/usr/bin/env bash
-# nosi/provision/apply.sh <variant>
+# nosi/provision/apply.sh <variant> [--shape-only]
 #
-# Run every provision step for <variant> in order. The variant is
+# Run the provision steps for <variant>. The variant is
 # `<distro>-<version>-<shape>`, e.g.:
 #
 #   debian-13-headless    headless on Debian 13 (apt)
 #   ubuntu-2604-headless  headless on Ubuntu 26.04 (apt)
-#   fedora-44-headless    headless on Fedora 44 (dnf)
+#   ubuntu-2604-wsl       WSL2 rootfs on Ubuntu 26.04
+#   ubuntu-2604-docker    OCI/container bootstrap on Ubuntu 26.04
 #   fedora-44-desktop     desktop on Fedora 44 (dnf; Sway tiling stack)
 #
-# Shape is parsed from the suffix (-headless / -desktop); the rest is
-# informational (lib/common.sh detects the live distro/pkgmgr from
-# /etc/os-release, so version-in-name doesn't gate any step). Optional
-# post-flash tooling (agentic CLIs, GPU vendor stacks, ...) lives in
-# /opt/nosi/addons/ and is operator-launched via nosi-addon -- not part
-# of the baked apply chain.
+# Steps come in three groups:
 #
-# Each step is independently idempotent, so apply.sh is also idempotent:
-# re-running on the same system does nothing the second time. Steps that
+#   BASE_STEPS   distro/HW infrastructure every shape shares (release
+#                stamp, tool installs, ssh, daemon-prune, ...). Identical
+#                logic across shapes -- the part that would be pure
+#                replication if every shape baked from scratch.
+#   SHAPE_STEPS  the per-shape delta (Sway desktop, WSL GUI tools, docker
+#                tooling). Each self-gates on NOSI_SHAPE, so the set is
+#                safe to run wholesale: only the matching one does work.
+#                These steps OWN their package installs (via
+#                nosi_pkg_install), so the shape is fully defined here
+#                rather than half here / half in cloud-init.
+#   FINAL_STEPS  metadata capture + motd, run last so they reflect the
+#                final installed inventory.
+#
+# Layered build model: the headless base bakes once (full run: BASE +
+# SHAPE + FINAL; for headless no SHAPE step does anything). desktop /
+# wsl / docker are DERIVED from that baked rootfs -- cijoe's
+# derive_publish copies the base qcow2, chroots in, and runs
+# `apply.sh <derived-variant> --shape-only`, which skips BASE_STEPS
+# (already done in the base, and several aren't chroot-safe to re-run:
+# the clock step would set the host clock, dkms/uname see the host
+# kernel) and runs only SHAPE + FINAL. An operator on a vanilla VM runs
+# the full `apply.sh <variant>` (no flag) and gets the complete result,
+# so the "apply.sh reproduces the image" invariant holds in both
+# contexts.
+#
+# Each step is independently idempotent, so apply.sh is too. Steps that
 # touch kernel cmdline / initramfs may require a reboot to take effect.
-#
-# This script is invoked from cloud-init at bake time and from the
-# operator's shell on a vanilla Hetzner VM (or similar). Same code path
-# in both cases.
 
 set -euo pipefail
 
@@ -33,43 +49,56 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # Fail-fast on first step error: a step abort means /etc/nosi/apply-ok
 # is never written, the smoketest's sentinel-presence assertion fails,
 # and the image is refused for publish regardless of which step died.
-# Without strict mode, a tool-install failure could leave a qcow2 that
-# looks valid (/etc/nosi-release written, motd rendered, sshd enabled)
-# but is silently missing whichever tools the failed step was supposed
-# to install -- a smoketest only catches what it asserts.
 
-VARIANT="${1:-}"
-[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant>   (e.g. debian-13-headless | ubuntu-2604-wsl | fedora-44-desktop)"
+VARIANT=""
+SHAPE_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+    --shape-only) SHAPE_ONLY=1 ;;
+    -*) nosi_die "unknown flag: $arg" ;;
+    *)
+        if [ -z "$VARIANT" ]; then
+            VARIANT="$arg"
+        else
+            nosi_die "unexpected extra argument: $arg"
+        fi
+        ;;
+    esac
+done
+[ -n "$VARIANT" ] || nosi_die "usage: $0 <variant> [--shape-only]   (e.g. ubuntu-2604-headless | ubuntu-2604-docker | fedora-44-desktop)"
 
-# Shape is the trailing -headless / -desktop / -wsl segment. Distro +
-# version are carried in the variant name but not enforced here:
-# lib/common.sh derives the live NOSI_DISTRO / NOSI_PKGMGR from
-# /etc/os-release, so an operator-side `apply.sh ubuntu-2604-headless` on
-# a different-version Ubuntu box still works -- the variant string is
-# identity / catalog metadata, not a runtime selector.
+# Shape is the trailing segment. Distro + version are carried in the
+# variant name but not enforced here: lib/common.sh derives the live
+# NOSI_DISTRO / NOSI_PKGMGR from /etc/os-release, so an operator-side
+# `apply.sh ubuntu-2604-headless` on a different-version Ubuntu box still
+# works -- the variant string is identity / catalog metadata, not a
+# runtime selector.
 case "$VARIANT" in
 *-headless) export NOSI_SHAPE=headless ;;
 *-desktop)  export NOSI_SHAPE=desktop  ;;
 *-wsl)      export NOSI_SHAPE=wsl      ;;
-*)          nosi_die "variant must end in -headless, -desktop, or -wsl: $VARIANT" ;;
+*-docker)   export NOSI_SHAPE=docker   ;;
+*)          nosi_die "variant must end in -headless, -desktop, -wsl, or -docker: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
 export NOSI_VARIANT="$VARIANT"
 
-# Steps the shape wants, in order. As more steps are extracted from
-# the inline cloud-init blocks they get appended here. Each entry is a
-# basename under provision/steps/ minus the .sh extension.
-STEPS=(
-    # 05-nosi-release runs FIRST so /etc/nosi-release captures the build
-    # identity even if a later step explodes -- forensics need the version
-    # tag before anything else can break.
+# Runs FIRST in BOTH modes. /etc/nosi-release captures the build
+# identity (version from /opt/nosi/.nosi-version, shape/variant from the
+# env apply.sh exports), so the derive re-stamps the DERIVED variant's
+# identity onto the headless-baked rootfs with the same build version.
+# Cheap, chroot-safe (reads a file, writes a file).
+ALWAYS_FIRST=(
     05-nosi-release
-    # 06-package-presence runs RIGHT AFTER the identity-log step so any
-    # cloud-init package-install failure (e.g. dnf transaction aborted by
-    # one bad name) fails the bake here with a list of missing baseline
-    # tools, instead of silently cascading into step 22 dying on a
-    # missing pipx.
+)
+
+# Infrastructure shared by every shape. 06-package-presence runs right
+# after the identity stamp so a cloud-init package-install failure fails
+# the bake here with the missing-tool list instead of cascading into a
+# later step. Not re-run in the derive (already done in the base bake;
+# several aren't chroot-safe to re-run).
+BASE_STEPS=(
     06-package-presence
     10-r8125-dkms
     12-gdb-dashboard
@@ -87,22 +116,37 @@ STEPS=(
     30-clock-from-http
     32-firstboot-inventory
     45-nosi-addons
+)
+
+# Per-shape delta. Each self-gates on NOSI_SHAPE and no-ops for the
+# others, so running the whole list applies exactly one shape's work.
+# The docker shape has no step here: its tools (cijoe + qemu) are in
+# the base, so "docker" is purely a packaging derivation (strip +
+# OCI import) handled by cijoe/scripts/derive_publish.py.
+SHAPE_STEPS=(
     50-desktop-stack
-    # 98-metadata captures the actual installed inventory (kernel, tool
-    # versions, manually-installed packages) into /etc/nosi-metadata.json
-    # AFTER every tool-install step has finished. Smoketest scp's it out so
-    # it ships as an ORAS layer next to the .img.gz.
+    55-wsl-tools
+)
+
+# Always last: metadata reflects the final inventory, motd's presence is
+# the at-a-glance "the whole chain ran" signal.
+FINAL_STEPS=(
     98-metadata
-    # 99-motd runs LAST so the login banner's presence is the at-a-glance
-    # signal that the whole apply chain succeeded: see the nosi banner ->
-    # everything before it ran; no banner -> something broke before the end,
-    # and /etc/nosi-release (written first) tells you exactly which build.
     99-motd
 )
 
-nosi_info "apply start: variant=$NOSI_VARIANT shape=$NOSI_SHAPE distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR"
+if [ "$SHAPE_ONLY" -eq 1 ]; then
+    # Derive context (chroot on a baked headless rootfs): base already
+    # ran in the base bake; re-stamp identity, run only the shape delta,
+    # refresh metadata + motd.
+    RUN_STEPS=( "${ALWAYS_FIRST[@]}" "${SHAPE_STEPS[@]}" "${FINAL_STEPS[@]}" )
+else
+    RUN_STEPS=( "${ALWAYS_FIRST[@]}" "${BASE_STEPS[@]}" "${SHAPE_STEPS[@]}" "${FINAL_STEPS[@]}" )
+fi
 
-for s in "${STEPS[@]}"; do
+nosi_info "apply start: variant=$NOSI_VARIANT shape=$NOSI_SHAPE distro=$NOSI_DISTRO pkgmgr=$NOSI_PKGMGR shape_only=$SHAPE_ONLY"
+
+for s in "${RUN_STEPS[@]}"; do
     script="$HERE/steps/${s}.sh"
     [ -x "$script" ] || nosi_die "missing step: $script"
     nosi_info "--- step $s ---"
@@ -111,8 +155,7 @@ done
 
 # All steps completed. Write the success sentinel. The smoketest's only
 # whole-chain assertion checks for this file; absence => apply.sh aborted
-# somewhere => image is refused for publish. The timestamp inside the
-# file is useful for forensics (Hetzner-VM re-runs overwrite it).
+# somewhere => image is refused for publish.
 install -d -m 0755 /etc/nosi
 date -u +%Y-%m-%dT%H:%M:%SZ > /etc/nosi/apply-ok
-nosi_info "apply complete: $VARIANT (sentinel: /etc/nosi/apply-ok)"
+nosi_info "apply complete: $VARIANT (shape_only=$SHAPE_ONLY; sentinel: /etc/nosi/apply-ok)"

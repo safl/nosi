@@ -13,7 +13,7 @@
 # push step's --describe lookup loudly (no generic placeholder).
 #
 # Fields:
-#   shape        headless | desktop | wsl -- the artefact's form factor.
+#   shape        headless | desktop | wsl -- the artifact's form factor.
 #   flashable    true if the published .img.gz is a flashable disk image
 #                that belongs in bty's catalog; false for the wsl rootfs
 #                (imported via `wsl --import`, not flashed to a block dev).
@@ -57,6 +57,18 @@ variants:
       Ubuntu 26.04 LTS (resolute) WSL2 rootfs (kernel/grub/firmware/cloud-init
       stripped post-bake). Headless baseline + meld / gitk / git-gui
       rendered through WSLg. Import via wsl --import.
+
+  ubuntu-2604-docker:
+    shape: docker
+    flashable: false
+    description: >-
+      Ubuntu 26.04 LTS (resolute) OCI/container image: the headless
+      baseline (qemu + cijoe included) CI-tuned (no systemd as PID1;
+      kernel / boot / cloud-init stripped). A bootstrap host that
+      launches qemu guests via cijoe (nested KVM on GHA with
+      --privileged, or device passthrough on bare metal), and a general
+      dev base for a project's `make docker`. Pull with docker; use as
+      a GHA job container.
 
   fedora-44-headless:
     shape: headless
