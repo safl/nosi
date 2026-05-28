@@ -33,4 +33,7 @@ html_theme = "furo"
 # the long-form name on the landing page.
 html_title = ""
 html_logo = "_static/nosi.png"
+# Browser-tab icon: a 180px square crop of the floppy-disk logo. Pointing
+# this at nosi.png directly would make every page pull the ~2 MB original.
+html_favicon = "_static/favicon.png"
 html_static_path = ["_static"]
