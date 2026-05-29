@@ -33,9 +33,10 @@ from: **`headless`** (C / C++ / Python / Rust / Zig systems work on
 bare metal / VM / cloud), **`desktop`** (headless plus a Sway tiling
 Wayland stack for personal laptop / workstation use), **`wsl`**
 (headless plus GUI dev tools rendered through WSLg, published as a
-`.tar.gz` for `wsl --import`), and **`docker`** (headless plus cijoe,
-stripped and packaged as an OCI image -- a CI bootstrap host that
-launches qemu guests via cijoe, or a `make docker` dev base). desktop
+`.tar.gz` for `wsl --import`), and **`docker`** (the headless base
+stripped and packaged as an OCI image, no extra tools since cijoe is
+already in the base; a CI bootstrap host that launches qemu guests via
+cijoe, or a dev base for a project's `make docker`). desktop
 / wsl / docker are built by deriving from the baked headless rootfs
 rather than re-baking. Optional tooling (agentic AI CLIs, GPU vendor
 stacks, ...) is post-flash via `nosi-addon` or via cijoe workflows

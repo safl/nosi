@@ -78,8 +78,8 @@ tags for a variant. See [](release.md) for the rolling-release model.
 
 ## Import a WSL2 rootfs (`ubuntu-2604-wsl`)
 
-`ubuntu-2604-wsl` publishes a WSL2 rootfs tarball to a sibling GHCR
-repo (`<variant>-wsl`).
+`ubuntu-2604-wsl` publishes a WSL2 rootfs tarball to its own GHCR
+repo (`ubuntu-2604-wsl`).
 
 With [`oras`](https://oras.land) on Windows -- install via `winget`
 (Microsoft's official package manager, present on Windows 10/11 out of

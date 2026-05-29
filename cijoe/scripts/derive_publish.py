@@ -208,7 +208,8 @@ def _derive_one(cijoe, base_qcow2: Path, disk_dir: Path, entry: dict) -> int:
         log.error(f"derive '{variant}': unknown output {output!r} (img|tar|oci)")
         return errno.EINVAL
 
-    log.info(f"derive '{variant}': output={output} strip={strip}")
+    # The per-derive banner (_group_open) already announces variant/output/
+    # strip to the log; no separate log.info needed here.
     work = disk_dir / f"nosi-{variant}.work.qcow2"
     err, _ = cijoe.run_local(f"cp -f {base_qcow2} {work}")
     if err:
