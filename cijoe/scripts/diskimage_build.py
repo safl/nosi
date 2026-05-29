@@ -30,9 +30,12 @@ from userdata_render import render as render_userdata
 
 # Bake-time disk size for the build VM. The cloud image grows to fill, we
 # install the nosi package set (~1 GB), then trim caches. 12 GiB gives plenty
-# of transient headroom for apt/dnf working space. cloud-init's growpart
-# expands the rootfs to the operator's actual disk on first boot of the
-# flashed instance.
+# of transient headroom for apt/dnf working space. The rootfs is expanded
+# to the operator's actual disk on first boot by nosi-growroot.service
+# (provision/steps/09-growroot.sh) -- NOT by cloud-init's growpart, which
+# never runs on a flashed bare-metal box (no datasource => cloud-init
+# disabled); cloud-init's growpart covers only this build VM and
+# datasource-backed cloud VMs.
 DISK_SIZE = "12G"
 
 

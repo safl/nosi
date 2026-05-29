@@ -101,6 +101,7 @@ ALWAYS_FIRST=(
 BASE_STEPS=(
     06-package-presence
     08-network-dhcp
+    09-growroot
     10-r8125-dkms
     12-gdb-dashboard
     15-nouveau-blacklist
