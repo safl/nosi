@@ -56,20 +56,28 @@ from pathlib import Path
 SSH_HOST_PORT = 4242
 SSH_USER = "odus"
 SSH_OPTS = [
-    "-o", "StrictHostKeyChecking=no",
-    "-o", "UserKnownHostsFile=/dev/null",
-    "-o", "LogLevel=ERROR",
-    "-o", "ConnectTimeout=5",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ConnectTimeout=5",
 ]
 
 
 def add_args(parser: ArgumentParser):
     parser.add_argument(
-        "--image_name", type=str, default=None,
+        "--image_name",
+        type=str,
+        default=None,
         help="Override system-imaging image name (default: from [nosi] variant).",
     )
     parser.add_argument(
-        "--boot_timeout", type=int, default=180,
+        "--boot_timeout",
+        type=int,
+        default=180,
         help="Seconds to wait for sshd on the smoketest VM (default 180).",
     )
 
@@ -183,6 +191,7 @@ def _read_sidecar_sha256(path: Path) -> str:
 
 def _file_sha256(path: Path) -> str:
     import hashlib
+
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -227,9 +236,16 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     seed = workdir / "smoketest-seed.iso"
     subprocess.run(
         [
-            "mkisofs", "-quiet", "-output", str(seed), "-volid", "cidata",
-            "-joliet", "-rock",
-            str(workdir / "user-data"), str(workdir / "meta-data"),
+            "mkisofs",
+            "-quiet",
+            "-output",
+            str(seed),
+            "-volid",
+            "cidata",
+            "-joliet",
+            "-rock",
+            str(workdir / "user-data"),
+            str(workdir / "meta-data"),
         ],
         check=True,
     )
@@ -240,15 +256,25 @@ def _make_overlay(workdir: Path, backing: Path) -> Path:
     overlay = workdir / "overlay.qcow2"
     subprocess.run(
         [
-            "qemu-img", "create", "-q", "-f", "qcow2",
-            "-F", "qcow2", "-b", str(backing), str(overlay),
+            "qemu-img",
+            "create",
+            "-q",
+            "-f",
+            "qcow2",
+            "-F",
+            "qcow2",
+            "-b",
+            str(backing),
+            str(overlay),
         ],
         check=True,
     )
     return overlay
 
 
-def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path) -> None:
+def _boot_overlay(
+    cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path
+) -> None:
     # KVM-accelerated to keep the test under a minute on hosted runners
     # that already enable /dev/kvm for the bake. virtio-net + user-mode
     # networking + hostfwd is the minimum for SSH-from-host.
@@ -291,21 +317,27 @@ def _capture_failure_logs(key: Path, out_dir: Path, base: str) -> None:
     """
     targets = [
         ("/var/log/cloud-init-output.log", "cloud-init-output.log"),
-        ("/var/log/cloud-init.log",        "cloud-init.log"),
-        ("/etc/nosi-release",              "nosi-release"),
+        ("/var/log/cloud-init.log", "cloud-init.log"),
+        ("/etc/nosi-release", "nosi-release"),
     ]
     for remote, suffix in targets:
         local = out_dir / f"{base}.{suffix}"
         ssh_cmd = [
-            "ssh", "-i", str(key), *SSH_OPTS,
-            "-p", str(SSH_HOST_PORT),
+            "ssh",
+            "-i",
+            str(key),
+            *SSH_OPTS,
+            "-p",
+            str(SSH_HOST_PORT),
             f"{SSH_USER}@127.0.0.1",
             f"sudo cat {remote}",
         ]
         try:
             with open(local, "wb") as out_fh:
                 res = subprocess.run(
-                    ssh_cmd, stdout=out_fh, stderr=subprocess.PIPE,
+                    ssh_cmd,
+                    stdout=out_fh,
+                    stderr=subprocess.PIPE,
                     timeout=60,
                 )
         except OSError as exc:
@@ -346,8 +378,12 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     json_local = out_dir / f"{base}.metadata.json"
 
     scp_cmd = [
-        "scp", "-i", str(key), *SSH_OPTS,
-        "-P", str(SSH_HOST_PORT),
+        "scp",
+        "-i",
+        str(key),
+        *SSH_OPTS,
+        "-P",
+        str(SSH_HOST_PORT),
         f"{SSH_USER}@127.0.0.1:/etc/nosi-metadata.json",
         str(json_local),
     ]
@@ -364,6 +400,7 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
         )
 
     import json as _json
+
     try:
         _json.loads(json_local.read_text())  # validate it parses before publish
     except (OSError, ValueError) as exc:
@@ -397,16 +434,28 @@ def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
         if tcp_open:
             res = subprocess.run(
                 [
-                    "ssh", "-i", str(key), *SSH_OPTS,
-                    "-o", "BatchMode=yes",
-                    "-p", str(port),
-                    f"{SSH_USER}@127.0.0.1", "true",
+                    "ssh",
+                    "-i",
+                    str(key),
+                    *SSH_OPTS,
+                    "-o",
+                    "BatchMode=yes",
+                    "-p",
+                    str(port),
+                    f"{SSH_USER}@127.0.0.1",
+                    "true",
                 ],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if res.returncode == 0:
                 return True
-            last_err = (res.stderr or res.stdout).strip().splitlines()[-1] if (res.stderr or res.stdout) else f"exit {res.returncode}"
+            last_err = (
+                (res.stderr or res.stdout).strip().splitlines()[-1]
+                if (res.stderr or res.stdout)
+                else f"exit {res.returncode}"
+            )
         time.sleep(3)
     log.error(f"_wait_for_ssh_ready last error: {last_err}")
     return False
@@ -415,15 +464,22 @@ def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
 def _ssh(key: Path, cmd: str) -> tuple[int, str]:
     """Run a single shell command on the smoketest VM, capture stdout+stderr."""
     full = [
-        "ssh", "-i", str(key), *SSH_OPTS,
-        "-p", str(SSH_HOST_PORT),
-        f"{SSH_USER}@127.0.0.1", cmd,
+        "ssh",
+        "-i",
+        str(key),
+        *SSH_OPTS,
+        "-p",
+        str(SSH_HOST_PORT),
+        f"{SSH_USER}@127.0.0.1",
+        cmd,
     ]
     res = subprocess.run(full, capture_output=True, text=True, timeout=30)
     return res.returncode, (res.stdout + res.stderr).strip()
 
 
-def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tuple[bool, str, str]]:
+def _run_assertions(
+    key: Path, variant: str, shape: str, distro: str
+) -> list[tuple[bool, str, str]]:
     """Return [(ok, name, detail)] for every assertion."""
 
     # Wait until cloud-init has finished applying the smoketest seed --
@@ -456,8 +512,8 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
     check(
         "/etc/nosi-metadata.json carries the right NOSI_VARIANT",
         "python3 -c 'import json,sys; "
-        "d=json.load(open(\"/etc/nosi-metadata.json\")); "
-        "sys.exit(0 if d.get(\"nosi\",{}).get(\"variant\")==\"" + variant + "\" else 1)' "
+        'd=json.load(open("/etc/nosi-metadata.json")); '
+        'sys.exit(0 if d.get("nosi",{}).get("variant")=="' + variant + "\" else 1)' "
         "&& echo ok",
         lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
@@ -502,7 +558,7 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
         check(
             "baseline tools (git, hx, zellij, btop, meson, ninja, rg) on PATH",
             "for t in git hx zellij btop meson ninja rg jq fzf direnv; do "
-            "command -v \"$t\" >/dev/null || { echo \"missing $t\"; exit 1; }; "
+            'command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; '
             "done && echo ok",
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
         )
@@ -566,8 +622,18 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
     # fixing rather than just "the bake aborted somewhere in step 20".
     # (rustc is the rustup install marker; rustup itself drops binaries
     # under /usr/local/cargo/bin/, not /usr/local/bin.)
-    for tool in ("uv", "uvx", "hx", "zellij", "lazygit",
-                 "yazi", "ya", "taplo", "marksman", "oras"):
+    for tool in (
+        "uv",
+        "uvx",
+        "hx",
+        "zellij",
+        "lazygit",
+        "yazi",
+        "ya",
+        "taplo",
+        "marksman",
+        "oras",
+    ):
         check(
             f"/usr/local/bin/{tool} exists (step 20)",
             f"test -x /usr/local/bin/{tool} && echo ok",
@@ -594,8 +660,15 @@ def _run_assertions(key: Path, variant: str, shape: str, distro: str) -> list[tu
     # explicitly even though pipx is supposed to auto-symlink every
     # entry point -- this assertion is the tripwire if pipx ever changes
     # that default.
-    for tool in ("iommu", "devbind", "hugepages", "ruff",
-                 "pyright", "pyright-langserver", "cijoe"):
+    for tool in (
+        "iommu",
+        "devbind",
+        "hugepages",
+        "ruff",
+        "pyright",
+        "pyright-langserver",
+        "cijoe",
+    ):
         check(
             f"/usr/local/bin/{tool} exists (step 22)",
             f"test -x /usr/local/bin/{tool} && echo ok",

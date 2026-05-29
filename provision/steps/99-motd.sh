@@ -40,6 +40,11 @@ nosi_write_if_changed "$NOSI_DEFAULT_HOSTNAME" /etc/nosi/default-hostname 0644
 
 # ---- nosi-motd renderer ---------------------------------------------------
 
+# The renderer below is one single-quoted string argument; its embedded awk
+# programs use the '"'"' literal-single-quote idiom. shellcheck mis-tracks
+# the quote state across that idiom and false-positives SC1078/SC1079 here,
+# but `bash -n` confirms the quoting is balanced. Disable for this call.
+# shellcheck disable=SC1078,SC1079
 nosi_write_if_changed \
 '#!/bin/sh
 # Managed by nosi/provision/steps/99-motd.sh

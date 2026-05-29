@@ -57,6 +57,7 @@ def _gzip_cmd() -> str:
     runner pigz is the difference between one busy core and four."""
     return "pigz" if shutil.which("pigz") else "gzip"
 
+
 # Packages purged for stripped shapes (wsl / docker): kernel + bootloader
 # + firmware are meaningless without our own kernel; cloud-init + netplan
 # + NetworkManager because WSL and containers own their own first-boot +
@@ -163,8 +164,10 @@ def main(args, cijoe):
     total = len(derives)
     log.info(f"{image_name}: building {total} derived shape(s) from the base")
     for idx, entry in enumerate(derives, start=1):
-        title = (f"derive {idx}/{total}: {entry['variant']} "
-                 f"(output={entry['output']}, strip={bool(entry.get('strip'))})")
+        title = (
+            f"derive {idx}/{total}: {entry['variant']} "
+            f"(output={entry['output']}, strip={bool(entry.get('strip'))})"
+        )
         _group_open(cijoe, title)
         rc = _derive_one(cijoe, qcow2_path, disk_dir, entry)
         _group_close(cijoe, title, rc)
@@ -184,8 +187,8 @@ def _group_open(cijoe, title: str) -> None:
     """
     bar = "=" * 64
     cijoe.run_local(
-        f"sh -c 'printf \"::group::%s\\n%s\\n[derive] start $(date -u +%H:%M:%S)  %s\\n%s\\n\" "
-        f"\"{title}\" \"{bar}\" \"{title}\" \"{bar}\"'"
+        f'sh -c \'printf "::group::%s\\n%s\\n[derive] start $(date -u +%H:%M:%S)  %s\\n%s\\n" '
+        f'"{title}" "{bar}" "{title}" "{bar}"\''
     )
 
 
@@ -195,8 +198,8 @@ def _group_close(cijoe, title: str, rc: int) -> None:
     folded under it."""
     status = "OK" if rc == 0 else f"FAILED (rc={rc})"
     cijoe.run_local(
-        f"sh -c 'printf \"[derive] end   $(date -u +%H:%M:%S)  %s -> %s\\n::endgroup::\\n\" "
-        f"\"{title}\" \"{status}\"'"
+        f'sh -c \'printf "[derive] end   $(date -u +%H:%M:%S)  %s -> %s\\n::endgroup::\\n" '
+        f'"{title}" "{status}"\''
     )
 
 
@@ -267,7 +270,9 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
             bind_cleanup.append(f"sudo umount {rootfs}/{sub} 2>/dev/null || true")
         # Bind the host's resolv.conf so apt/dnf/curl/uvx resolve. Bind
         # (not copy) leaves the image's own resolv config intact underneath.
-        err, _ = cijoe.run_local(f"sudo mount --bind /etc/resolv.conf {rootfs}/etc/resolv.conf")
+        err, _ = cijoe.run_local(
+            f"sudo mount --bind /etc/resolv.conf {rootfs}/etc/resolv.conf"
+        )
         if err:
             log.error("bind-mount /etc/resolv.conf failed")
             return err
@@ -445,7 +450,10 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
                 candidates = []
                 for dev in data.get("blockdevices", []):
                     for part in dev.get("children") or []:
-                        if part.get("type") == "part" and part.get("fstype") in rootfs_fstypes:
+                        if (
+                            part.get("type") == "part"
+                            and part.get("fstype") in rootfs_fstypes
+                        ):
                             size = part.get("size")
                             if size is not None:
                                 candidates.append((int(size), part["name"]))

@@ -69,6 +69,14 @@ def serve() -> None:
     src = root / "src"
     out = root / "_build" / "html"
     subprocess.run(
-        [sys.executable, "-m", "sphinx_autobuild", "--port", "8000", str(src), str(out)],
+        [
+            sys.executable,
+            "-m",
+            "sphinx_autobuild",
+            "--port",
+            "8000",
+            str(src),
+            str(out),
+        ],
         check=True,
     )

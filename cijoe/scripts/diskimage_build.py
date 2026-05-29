@@ -26,9 +26,7 @@ from pathlib import Path
 
 from cijoe.core.misc import download
 from cijoe.qemu.wrapper import Guest
-
 from userdata_render import render as render_userdata
-
 
 # Bake-time disk size for the build VM. The cloud image grows to fill, we
 # install the nosi package set (~1 GB), then trim caches. 12 GiB gives plenty
@@ -162,7 +160,9 @@ def main(args, cijoe):
     disk_path = Path(disk["path"])
     disk_path.parent.mkdir(parents=True, exist_ok=True)
     log.info("Compacting image (qemu-img convert -c)")
-    err, _ = cijoe.run_local(f"qemu-img convert -O qcow2 -c {guest.boot_img} {disk_path}")
+    err, _ = cijoe.run_local(
+        f"qemu-img convert -O qcow2 -c {guest.boot_img} {disk_path}"
+    )
     if err:
         log.error(f"Failed compacting image to {disk_path}")
         return err

@@ -2,13 +2,15 @@ VARIANT ?= debian-13-headless
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
+.PHONY: help deps hooks lint build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
 
 help:
 	@echo "nosi: headless/desktop system images for bare-metal and VMs (qemu, WSL2), and container images"
 	@echo
 	@echo "Image targets:"
 	@echo "  deps              Install cijoe via pipx"
+	@echo "  hooks             Install the pre-commit git hooks (ruff + shellcheck + hygiene)"
+	@echo "  lint              Run all pre-commit hooks over the whole tree"
 	@echo "  build             Build one base (override VARIANT=...); derived shapes ride along"
 	@echo "  all               Build every base"
 	@echo "  clean             Remove cijoe artifacts"
@@ -43,6 +45,17 @@ help:
 deps:
 	pipx install cijoe
 	pipx ensurepath
+
+# Install the git hooks. pre-commit itself: `pipx install pre-commit`.
+# After this, every `git commit` runs ruff (lint+format), shellcheck, and
+# the hygiene hooks on the staged files. See .pre-commit-config.yaml.
+hooks:
+	pre-commit install
+
+# Run the whole hook set over every file (what CI does). Handy before a
+# push, or once after `make hooks` to normalise the tree.
+lint:
+	pre-commit run --all-files
 
 # Build a base. The cijoe pipeline downloads the upstream cloud image,
 # resizes it, runs cloud-init in a QEMU VM, snapshots, gzip-publishes,

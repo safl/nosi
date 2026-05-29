@@ -1,0 +1,18 @@
+# Shared style for nosi's Python: the cijoe scripts under cijoe/scripts/,
+# the docs tooling in docs/tooling/, and the helpers in tools/. Enforced
+# via .pre-commit-config.yaml (ruff check --fix + ruff format). A root
+# ruff.toml (rather than a root pyproject.toml) keeps this a plain repo of
+# scripts, not a packaged project; docs/tooling/ keeps its own pyproject.
+target-version = "py311"
+line-length = 88
+
+[lint]
+# Defaults (E, F) plus import sorting (I), pyupgrade (UP), and pycodestyle
+# warnings (W). These are autofixable, so the pre-commit hook applies them
+# with --fix and never blocks on a nit a human has to hand-edit.
+select = ["E", "F", "I", "UP", "W"]
+# Line length is owned by `ruff format`, which reflows code to line-length
+# but deliberately won't split long string literals, URLs, or comments.
+# Linting E501 on top would just nag about those un-splittable lines, so
+# defer to the formatter and silence the rule (the standard ruff pairing).
+ignore = ["E501"]

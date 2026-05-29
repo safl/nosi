@@ -25,9 +25,9 @@ import json
 import logging
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 log = logging.getLogger(__name__)
 
@@ -41,14 +41,14 @@ log = logging.getLogger(__name__)
 # Keep in sync with .github/workflows/build.yml + the [[...derive]]
 # entries in cijoe/configs/.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
-    ("debian-13-headless",   "ghcr.io/safl/nosi/debian-13-headless:latest"),
+    ("debian-13-headless", "ghcr.io/safl/nosi/debian-13-headless:latest"),
     ("ubuntu-2404-headless", "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
     ("ubuntu-2604-headless", "ghcr.io/safl/nosi/ubuntu-2604-headless:latest"),
-    ("ubuntu-2604-wsl",      "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"),
-    ("fedora-44-headless",   "ghcr.io/safl/nosi/fedora-44-headless:latest"),
-    ("fedora-44-desktop",    "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
-    ("freebsd-14-headless",  "ghcr.io/safl/nosi/freebsd-14-headless:latest"),
-    ("freebsd-15-headless",  "ghcr.io/safl/nosi/freebsd-15-headless:latest"),
+    ("ubuntu-2604-wsl", "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"),
+    ("fedora-44-headless", "ghcr.io/safl/nosi/fedora-44-headless:latest"),
+    ("fedora-44-desktop", "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
+    ("freebsd-14-headless", "ghcr.io/safl/nosi/freebsd-14-headless:latest"),
+    ("freebsd-15-headless", "ghcr.io/safl/nosi/freebsd-15-headless:latest"),
 )
 
 
@@ -75,8 +75,12 @@ def fetch_and_render(docs_root: Path) -> Path:
     rendered = _render(snapshots)
     out.write_text(rendered)
     ok = sum(1 for s in snapshots if s.metadata is not None)
-    log.info("nosi catalog: %d / %d variants rendered from GHCR -> %s",
-             ok, len(snapshots), out)
+    log.info(
+        "nosi catalog: %d / %d variants rendered from GHCR -> %s",
+        ok,
+        len(snapshots),
+        out,
+    )
     return out
 
 
@@ -99,16 +103,18 @@ def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
         # 1. Manifest fetch -- gives us the layer index + media types.
         mres = subprocess.run(
             ["oras", "manifest", "fetch", ref],
-            check=True, capture_output=True, text=True, timeout=60,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         manifest = json.loads(mres.stdout)
         # Per-variant use-case prose lives in the manifest's
         # org.opencontainers.image.description annotation (set by
         # .github/workflows/build.yml at push time). Surfaced in the
         # catalog so docs and ORAS consumers see the same string.
-        snap.description = (
-            manifest.get("annotations", {})
-            .get("org.opencontainers.image.description")
+        snap.description = manifest.get("annotations", {}).get(
+            "org.opencontainers.image.description"
         )
         digest = None
         for layer in manifest.get("layers", []):
@@ -124,7 +130,10 @@ def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
         repo = ref.rsplit(":", 1)[0] if ":" in ref.rsplit("/", 1)[-1] else ref
         bres = subprocess.run(
             ["oras", "blob", "fetch", "--output", "-", f"{repo}@{digest}"],
-            check=True, capture_output=True, text=True, timeout=60,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         snap.metadata = json.loads(bres.stdout)
     except subprocess.CalledProcessError as exc:
@@ -153,9 +162,7 @@ def _render(snapshots: Iterable[VariantSnapshot]) -> str:
     ]
     for s in snaps:
         if s.metadata is None:
-            lines.append(
-                f"| `{s.name}` | _(not yet published)_ | | | | |"
-            )
+            lines.append(f"| `{s.name}` | _(not yet published)_ | | | | |")
             continue
         m = s.metadata
         n = m.get("nosi", {}) or {}
@@ -198,31 +205,35 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         # First paragraph of the variant section so "what is this for?"
         # precedes "what's inside?".
         parts.extend([s.description, ""])
-    parts.extend([
-        f"**Distro:** {d.get('pretty_name') or '?'}  ",
-        f"**Shape:** `{n.get('shape') or '?'}`  ",
-        f"**Kernel:** `{k.get('release') or '?'}`  ",
-        f"**Architecture:** `{arch}`  ",
-        f"**Version:** `{n.get('version') or '?'}`  ",
-        f"**Built:** {n.get('built') or '?'}",
-        "",
-        "### Pull and flash",
-        "",
-        "```",
-        f"oras pull {s.ref}",
-        f"gunzip -dc nosi-{s.name}-x86_64.img.gz \\",
-        "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress",
-        "```",
-        "",
-        "### Default credentials",
-        "",
-        f"- **Username:** `{op.get('username') or 'odus'}` (uid {op.get('uid') or 1000})",
-        f"- **Password:** `{op.get('default_password') or 'odus.321'}`",
-    ])
+    parts.extend(
+        [
+            f"**Distro:** {d.get('pretty_name') or '?'}  ",
+            f"**Shape:** `{n.get('shape') or '?'}`  ",
+            f"**Kernel:** `{k.get('release') or '?'}`  ",
+            f"**Architecture:** `{arch}`  ",
+            f"**Version:** `{n.get('version') or '?'}`  ",
+            f"**Built:** {n.get('built') or '?'}",
+            "",
+            "### Pull and flash",
+            "",
+            "```",
+            f"oras pull {s.ref}",
+            f"gunzip -dc nosi-{s.name}-x86_64.img.gz \\",
+            "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress",
+            "```",
+            "",
+            "### Default credentials",
+            "",
+            f"- **Username:** `{op.get('username') or 'odus'}` (uid {op.get('uid') or 1000})",
+            f"- **Password:** `{op.get('default_password') or 'odus.321'}`",
+        ]
+    )
     state = op.get("default_password_state")
     if state:
         parts.append(f"- **Default-password state:** {state}")
-    parts.append(f"- **Root login:** {'locked' if op.get('root_locked') else 'unlocked'}")
+    parts.append(
+        f"- **Root login:** {'locked' if op.get('root_locked') else 'unlocked'}"
+    )
     ssh = op.get("ssh") or {}
     if ssh:
         parts.append(
@@ -243,7 +254,9 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         parts.append("| Tool | Version |")
         parts.append("|---|---|")
         for tname, tver in sorted(tdict.items()):
-            parts.append(f"| `{tname}` | `{tver}` |" if tver else f"| `{tname}` | _(missing)_ |")
+            parts.append(
+                f"| `{tname}` | `{tver}` |" if tver else f"| `{tname}` | _(missing)_ |"
+            )
         parts.append("")
 
     manual = pkgs.get("manually_installed") or []
@@ -265,6 +278,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
 def cli() -> None:
     """Console-script entry point: `nosi-docs-fetch-catalog`."""
     import sys
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cwd = Path.cwd()
     for candidate in (cwd, cwd.parent):

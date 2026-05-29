@@ -114,7 +114,9 @@ def _render_catalog(variants: dict[str, dict]) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--describe", metavar="VARIANT", help="print the variant's description")
+    group.add_argument(
+        "--describe", metavar="VARIANT", help="print the variant's description"
+    )
     group.add_argument(
         "--describe-wsl", metavar="VARIANT", help="print the variant's wsl_description"
     )

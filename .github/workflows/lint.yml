@@ -1,0 +1,30 @@
+name: lint
+
+# Enforce the same gate developers get locally via `make hooks`: ruff
+# (lint + format), shellcheck, and the hygiene hooks in
+# .pre-commit-config.yaml. Cheap (no qemu/KVM), so it runs on every push
+# and PR independently of the image build matrix.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Runs every hook over the full tree. The shellcheck hook uses Docker
+      # (preinstalled on hosted runners); ruff/hygiene hooks are pip-based.
+      - uses: pre-commit/action@v3.0.1

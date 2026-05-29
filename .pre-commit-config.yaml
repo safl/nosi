@@ -1,0 +1,40 @@
+# Code-quality gate for nosi. Install once with `make hooks` (runs
+# `pre-commit install`); thereafter every `git commit` runs these against
+# the staged files. CI runs the same set over the whole tree via
+# `pre-commit run --all-files` (.github/workflows/lint.yml). Bump pinned
+# revs with `pre-commit autoupdate`.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      # Lint (pyflakes, import order, pyupgrade) with autofix, then format.
+      # Rules + line length live in ./ruff.toml.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      # provision/ and cijoe shell. --external-sources lets sourced
+      # lib/common helpers resolve (SC1091); --severity=warning skips the
+      # purely-stylistic info nags so the baseline is adoptable without a
+      # mass rewrite. Cloud-init *.user files carry a #cloud-config header,
+      # not a shell shebang, so shellcheck correctly ignores them.
+      - id: shellcheck
+        args: [--severity=warning, --external-sources]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      # No check-toml: cijoe/configs/*.toml are Jinja-templated
+      # ({{ local.env.HOME }}), which a strict TOML parser rejects.
+      - id: check-added-large-files
+        args: [--maxkb=4096]   # allow the ~1.9 MB floppy-disk logo nosi.png
+      - id: check-shebang-scripts-are-executable

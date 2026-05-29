@@ -29,7 +29,7 @@ import logging as log
 import os
 import subprocess
 from argparse import ArgumentParser
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 MARKER = "__NOSI_PROVISION_FILES__"
@@ -55,9 +55,11 @@ def _resolve_version(repo_root: Path) -> str:
     try:
         sha = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "--short=7", "HEAD"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
-        date_tag = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+        date_tag = datetime.now(UTC).strftime("%Y.%m.%d")
         return f"{date_tag}-{sha}"
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
@@ -65,15 +67,21 @@ def _resolve_version(repo_root: Path) -> str:
 
 def add_args(parser: ArgumentParser):
     parser.add_argument(
-        "--src", type=Path, required=True,
+        "--src",
+        type=Path,
+        required=True,
         help="Path to the cloud-init template (e.g. nosi-media/auxiliary/cloudinit-headless-debian-13.user)",
     )
     parser.add_argument(
-        "--out", type=Path, default=None,
+        "--out",
+        type=Path,
+        default=None,
         help="Output path. Defaults to <src>.rendered.user next to the source.",
     )
     parser.add_argument(
-        "--provision-root", type=Path, default=None,
+        "--provision-root",
+        type=Path,
+        default=None,
         help="Path to the provision/ tree. Defaults to <repo-root>/provision.",
     )
 
@@ -113,7 +121,8 @@ def render(src: Path, provision_root: Path) -> str:
     indent = marker_line[: len(marker_line) - len(marker_line.lstrip())]
 
     files = sorted(
-        p for p in provision_root.rglob("*")
+        p
+        for p in provision_root.rglob("*")
         if p.is_file() and (p.suffix == ".sh" or p.name == "apply.sh")
     )
     if not files:
@@ -131,8 +140,10 @@ def render(src: Path, provision_root: Path) -> str:
         # Drop the trailing newline (the `|` preserves trailing newlines
         # only if the body ends with one and we re-add it below); strip
         # any line-final whitespace to keep YAML happy.
-        body_lines = "\n".join(body_indent + line if line else body_indent.rstrip()
-                               for line in body.splitlines())
+        body_lines = "\n".join(
+            body_indent + line if line else body_indent.rstrip()
+            for line in body.splitlines()
+        )
         blocks.append(
             f"{indent}- path: {target}\n"
             f"{indent}  permissions: '0755'\n"
@@ -164,7 +175,8 @@ def main(args, cijoe):
         return 2
 
     provision_root: Path = (
-        args.provision_root.resolve() if args.provision_root
+        args.provision_root.resolve()
+        if args.provision_root
         else (src.parents[2] / "provision").resolve()
     )
     if not provision_root.is_dir():
