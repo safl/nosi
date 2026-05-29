@@ -23,8 +23,7 @@ def _docs_root() -> Path:
         if (candidate / "src" / "conf.py").exists():
             return candidate
     sys.exit(
-        "nosi-docs: could not find src/conf.py -- "
-        "run from the docs directory (e.g. nosi/docs)"
+        "nosi-docs: could not find src/conf.py -- run from the docs directory (e.g. nosi/docs)"
     )
 
 

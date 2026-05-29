@@ -231,9 +231,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
     state = op.get("default_password_state")
     if state:
         parts.append(f"- **Default-password state:** {state}")
-    parts.append(
-        f"- **Root login:** {'locked' if op.get('root_locked') else 'unlocked'}"
-    )
+    parts.append(f"- **Root login:** {'locked' if op.get('root_locked') else 'unlocked'}")
     ssh = op.get("ssh") or {}
     if ssh:
         parts.append(
@@ -254,9 +252,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         parts.append("| Tool | Version |")
         parts.append("|---|---|")
         for tname, tver in sorted(tdict.items()):
-            parts.append(
-                f"| `{tname}` | `{tver}` |" if tver else f"| `{tname}` | _(missing)_ |"
-            )
+            parts.append(f"| `{tname}` | `{tver}` |" if tver else f"| `{tname}` | _(missing)_ |")
         parts.append("")
 
     manual = pkgs.get("manually_installed") or []

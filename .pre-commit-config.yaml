@@ -5,7 +5,7 @@
 # revs with `pre-commit autoupdate`.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+    rev: v0.15.15   # keep in lockstep with bty's pinned ruff
     hooks:
       # Lint (pyflakes, import order, pyupgrade) with autofix, then format.
       # Rules + line length live in ./ruff.toml.
@@ -14,7 +14,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.10.0
+    rev: v0.11.0
     hooks:
       # provision/ and cijoe shell. --external-sources lets sourced
       # lib/common helpers resolve (SC1091); --severity=warning skips the
@@ -25,7 +25,7 @@ repos:
         args: [--severity=warning, --external-sources]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer

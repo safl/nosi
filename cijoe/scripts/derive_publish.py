@@ -270,9 +270,7 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
             bind_cleanup.append(f"sudo umount {rootfs}/{sub} 2>/dev/null || true")
         # Bind the host's resolv.conf so apt/dnf/curl/uvx resolve. Bind
         # (not copy) leaves the image's own resolv config intact underneath.
-        err, _ = cijoe.run_local(
-            f"sudo mount --bind /etc/resolv.conf {rootfs}/etc/resolv.conf"
-        )
+        err, _ = cijoe.run_local(f"sudo mount --bind /etc/resolv.conf {rootfs}/etc/resolv.conf")
         if err:
             log.error("bind-mount /etc/resolv.conf failed")
             return err
@@ -450,10 +448,7 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
                 candidates = []
                 for dev in data.get("blockdevices", []):
                     for part in dev.get("children") or []:
-                        if (
-                            part.get("type") == "part"
-                            and part.get("fstype") in rootfs_fstypes
-                        ):
+                        if part.get("type") == "part" and part.get("fstype") in rootfs_fstypes:
                             size = part.get("size")
                             if size is not None:
                                 candidates.append((int(size), part["name"]))

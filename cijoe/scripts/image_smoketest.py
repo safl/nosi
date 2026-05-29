@@ -218,20 +218,14 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     # Per-run identity so cloud-init treats this boot as a fresh instance
     # (the baked image was cloud-init clean'd, so no stale state to fight).
     iid = f"nosi-smoketest-{os.getpid()}"
-    (workdir / "meta-data").write_text(
-        f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n"
-    )
+    (workdir / "meta-data").write_text(f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n")
     # Authorise the per-run key on odus. Step 29 doesn't force a
     # password rotation (it only marks the system as on the default and
     # offers an interactive prompt on WSL), so PAM doesn't block key
     # auth on a non-TTY session and no chage workaround is needed.
     # No power_state -- the VM stays up for the assertion run.
     (workdir / "user-data").write_text(
-        "#cloud-config\n"
-        "users:\n"
-        "  - name: odus\n"
-        "    ssh_authorized_keys:\n"
-        f"      - {pubkey}\n"
+        f"#cloud-config\nusers:\n  - name: odus\n    ssh_authorized_keys:\n      - {pubkey}\n"
     )
     seed = workdir / "smoketest-seed.iso"
     subprocess.run(
@@ -272,9 +266,7 @@ def _make_overlay(workdir: Path, backing: Path) -> Path:
     return overlay
 
 
-def _boot_overlay(
-    cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path
-) -> None:
+def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path) -> None:
     # KVM-accelerated to keep the test under a minute on hosted runners
     # that already enable /dev/kvm for the bake. virtio-net + user-mode
     # networking + hostfwd is the minimum for SSH-from-host.
@@ -698,7 +690,8 @@ def _run_assertions(
     else:
         check(
             "ssh.service or ssh.socket is-enabled",
-            "systemctl is-enabled ssh.service ssh.socket 2>/dev/null | grep -q '^enabled$' && echo ok",
+            "systemctl is-enabled ssh.service ssh.socket 2>/dev/null "
+            "| grep -q '^enabled$' && echo ok",
             lambda rc, out: (out == "ok", out or "neither enabled"),
         )
 

@@ -1,18 +1,19 @@
 # Shared style for nosi's Python: the cijoe scripts under cijoe/scripts/,
 # the docs tooling in docs/tooling/, and the helpers in tools/. Enforced
-# via .pre-commit-config.yaml (ruff check --fix + ruff format). A root
-# ruff.toml (rather than a root pyproject.toml) keeps this a plain repo of
-# scripts, not a packaged project; docs/tooling/ keeps its own pyproject.
+# via .pre-commit-config.yaml (ruff check --fix + ruff format).
+#
+# Kept in lockstep with safl/bty's [tool.ruff] (line-length, target, rule
+# selection, ignores) so the two repos lint identically; bty carries the
+# canonical config in its pyproject.toml. A root ruff.toml (rather than a
+# root pyproject.toml) keeps nosi a plain repo of scripts, not a packaged
+# project; docs/tooling/ keeps its own pyproject.
+line-length = 100
 target-version = "py311"
-line-length = 88
+src = ["docs/tooling/src"]
 
 [lint]
-# Defaults (E, F) plus import sorting (I), pyupgrade (UP), and pycodestyle
-# warnings (W). These are autofixable, so the pre-commit hook applies them
-# with --fix and never blocks on a nit a human has to hand-edit.
-select = ["E", "F", "I", "UP", "W"]
-# Line length is owned by `ruff format`, which reflows code to line-length
-# but deliberately won't split long string literals, URLs, or comments.
-# Linting E501 on top would just nag about those un-splittable lines, so
-# defer to the formatter and silence the rule (the standard ruff pairing).
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "B", "UP", "RUF", "SIM", "PERF", "RET", "PIE", "C4"]
+# RET504 / RET505: too noisy for "explicit-is-better-than-implicit"
+# control flow we already prefer (e.g. ``if cond: return X``
+# followed by ``return Y`` rather than collapsing into a ternary).
+ignore = ["RET504", "RET505"]

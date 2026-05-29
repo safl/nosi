@@ -70,7 +70,10 @@ def add_args(parser: ArgumentParser):
         "--src",
         type=Path,
         required=True,
-        help="Path to the cloud-init template (e.g. nosi-media/auxiliary/cloudinit-headless-debian-13.user)",
+        help=(
+            "Path to the cloud-init template "
+            "(e.g. nosi-media/auxiliary/cloudinit-headless-debian-13.user)"
+        ),
     )
     parser.add_argument(
         "--out",
@@ -141,8 +144,7 @@ def render(src: Path, provision_root: Path) -> str:
         # only if the body ends with one and we re-add it below); strip
         # any line-final whitespace to keep YAML happy.
         body_lines = "\n".join(
-            body_indent + line if line else body_indent.rstrip()
-            for line in body.splitlines()
+            body_indent + line if line else body_indent.rstrip() for line in body.splitlines()
         )
         blocks.append(
             f"{indent}- path: {target}\n"

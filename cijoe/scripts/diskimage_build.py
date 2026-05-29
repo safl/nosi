@@ -86,9 +86,7 @@ def main(args, cijoe):
             if err:
                 log.error(f"Failed to xz-decompress {cloud_image_path}")
                 return err
-            err, _ = cijoe.run_local(
-                f"qemu-img convert -O qcow2 {tmp_raw} {cached_qcow2}"
-            )
+            err, _ = cijoe.run_local(f"qemu-img convert -O qcow2 {tmp_raw} {cached_qcow2}")
             tmp_raw.unlink(missing_ok=True)
             if err:
                 log.error(f"Failed to convert {tmp_raw} -> {cached_qcow2}")
@@ -128,7 +126,7 @@ def main(args, cijoe):
     provision_root = repo_root / "provision"
     try:
         rendered = render_userdata(userdata_path, provision_root)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.error(f"Failed rendering userdata {userdata_path}: {exc}")
         return errno.EIO
     guest_userdata.write_text(rendered)
@@ -160,9 +158,7 @@ def main(args, cijoe):
     disk_path = Path(disk["path"])
     disk_path.parent.mkdir(parents=True, exist_ok=True)
     log.info("Compacting image (qemu-img convert -c)")
-    err, _ = cijoe.run_local(
-        f"qemu-img convert -O qcow2 -c {guest.boot_img} {disk_path}"
-    )
+    err, _ = cijoe.run_local(f"qemu-img convert -O qcow2 -c {guest.boot_img} {disk_path}")
     if err:
         log.error(f"Failed compacting image to {disk_path}")
         return err
