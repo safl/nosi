@@ -5,7 +5,7 @@ VARIANT ?= debian-13-headless
 .PHONY: help deps build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
 
 help:
-	@echo "nosi: automated builds of Niche Operating System Images (C / C++ / Python / Rust / Zig dev fit)"
+	@echo "nosi: headless/desktop system images for bare-metal and VMs (qemu, WSL2), and container images"
 	@echo
 	@echo "Image targets:"
 	@echo "  deps              Install cijoe via pipx"

@@ -12,13 +12,17 @@
 **nosi** = **N**iche **O**perating **S**ystem **I**mages.
 *(Pronounced "nosy" -- a nosy person can't help poking their nose in everywhere, and I can't help putting these images on every machine I touch.)*
 
-Automated builds of opinionated operating-system images for niches the
-stock cloud images don't quite hit. The output is a `.img.gz` (flashable
-to bare metal with `dd` / Balena Etcher / any tool that handles
-gzip-compressed disk images), for the `wsl` shape a `.tar.gz` consumable
-by `wsl --import`, and for the `docker` shape an OCI image pullable with
-docker. The companion project [bty](https://github.com/safl/bty) is one
-convenient flasher; it is not required.
+Automated builds of headless and desktop system images for bare metal and
+virtual machines (qemu, WSL2), plus container images, pre-loaded with an
+opinionated toolset for systems-development work in C, C++, Python, Rust,
+and Zig.
+
+The output is a `.img.gz` (flashable to bare metal with `dd` / Balena
+Etcher / any tool that handles gzip-compressed disk images), for the `wsl`
+shape a `.tar.gz` consumable by `wsl --import`, and for the `docker` shape
+an OCI image pullable with docker. The companion project
+[bty](https://github.com/safl/bty) is one convenient flasher; it is not
+required.
 
 **Documentation: <https://safl.github.io/nosi/>** (sources in `docs/src/`)
 

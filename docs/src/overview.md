@@ -1,8 +1,10 @@
 # Overview
 
-`nosi` builds disk images for bringing up bare-metal systems for development
-work. The output is a vanilla `.img.gz` flashable with any standard tool;
-nothing about the image format ties it to a specific deployment workflow.
+`nosi` builds headless and desktop system images for bare metal and virtual
+machines (qemu, WSL2), plus container images, pre-loaded with an opinionated
+toolset for development work. The disk-image shapes ship as a vanilla
+`.img.gz` flashable with any standard tool; nothing about the format ties an
+image to a specific deployment workflow.
 
 ## Shapes
 
