@@ -100,6 +100,7 @@ ALWAYS_FIRST=(
 # several aren't chroot-safe to re-run).
 BASE_STEPS=(
     06-package-presence
+    08-network-dhcp
     10-r8125-dkms
     12-gdb-dashboard
     15-nouveau-blacklist
