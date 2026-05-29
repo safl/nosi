@@ -40,6 +40,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Reclaim runner disk space on /
+        # Artifacts under ~/system_imaging land on the roomy /mnt disk, but
+        # everything else the build writes stays on the cramped / (~14 GiB
+        # free on hosted ubuntu-24.04): cijoe/cijoe-output/ captures the
+        # bake's full serial console (package_upgrade + ~150-package install)
+        # plus the smoketest VM console, and the docker shape's `docker
+        # import` lands image layers in /var/lib/docker. Together they
+        # overrun /, surfacing as a cijoe log-flush ENOSPC mid-build. Drop
+        # the preinstalled toolchains we never use (.NET, GHC/Haskell,
+        # Android SDK, CodeQL); the Android SDK alone is the bulk, and the
+        # df brackets below report the actual reclaim per runner image
+        # (it drifts with every runner-images release).
+        run: |
+          df -h / | tail -1
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/lib/android \
+            /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
