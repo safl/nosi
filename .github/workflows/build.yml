@@ -70,6 +70,7 @@ jobs:
             qemu-system-x86 \
             qemu-utils \
             genisoimage \
+            pigz \
             pipx \
             cpu-checker \
             xz-utils \

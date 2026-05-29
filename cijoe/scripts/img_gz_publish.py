@@ -27,8 +27,16 @@ from __future__ import annotations
 
 import errno
 import logging as log
+import shutil
 from argparse import ArgumentParser
 from pathlib import Path
+
+
+def _gzip_cmd() -> str:
+    """pigz (parallel, all cores) when present, else stock gzip. Both emit
+    the same .gz format, so consumers are unaffected; pigz just saturates
+    the runner's cores instead of leaving three idle on a -9 pass."""
+    return "pigz" if shutil.which("pigz") else "gzip"
 
 
 def add_args(parser: ArgumentParser):
@@ -73,8 +81,9 @@ def main(args, cijoe):
         log.error("Failed converting qcow2 to raw")
         return err
 
-    log.info(f"Compressing {raw_path} -> {gz_path} (gzip -{level})")
-    err, _ = cijoe.run_local(f"gzip -{level} -c {raw_path} > {gz_path}")
+    gz = _gzip_cmd()
+    log.info(f"Compressing {raw_path} -> {gz_path} ({gz} -{level})")
+    err, _ = cijoe.run_local(f"{gz} -{level} -c {raw_path} > {gz_path}")
     if err:
         log.error("Failed gzip-compressing raw image")
         return err

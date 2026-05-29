@@ -46,8 +46,16 @@ from __future__ import annotations
 import errno
 import logging as log
 import os
+import shutil
 from argparse import ArgumentParser
 from pathlib import Path
+
+
+def _gzip_cmd() -> str:
+    """pigz (parallel, all cores) when present, else stock gzip; same .gz
+    format either way. The derive's tar/img passes are -9, so on a 4-core
+    runner pigz is the difference between one busy core and four."""
+    return "pigz" if shutil.which("pigz") else "gzip"
 
 # Packages purged for stripped shapes (wsl / docker): kernel + bootloader
 # + firmware are meaningless without our own kernel; cloud-init + netplan
@@ -152,11 +160,44 @@ def main(args, cijoe):
     # nbd module + a clean nbd0 once for the whole run.
     cijoe.run_local("sudo modprobe nbd max_part=8")
 
-    for entry in derives:
+    total = len(derives)
+    log.info(f"{image_name}: building {total} derived shape(s) from the base")
+    for idx, entry in enumerate(derives, start=1):
+        title = (f"derive {idx}/{total}: {entry['variant']} "
+                 f"(output={entry['output']}, strip={bool(entry.get('strip'))})")
+        _group_open(cijoe, title)
         rc = _derive_one(cijoe, qcow2_path, disk_dir, entry)
+        _group_close(cijoe, title, rc)
         if rc:
             return rc
     return 0
+
+
+def _group_open(cijoe, title: str) -> None:
+    """Announce the start of a derive. The whole build is one `make build`
+    step, so without an explicit marker the start of the desktop/wsl/docker
+    derives is buried in the bake's output. `::group::<title>` folds the
+    derive into a named, collapsible, individually-timed section on GitHub
+    Actions; elsewhere it's just a visible banner line. Emitted via
+    run_local so --monitor streams it to the step's stdout, where the
+    Actions log processor sees the workflow command at line start.
+    """
+    bar = "=" * 64
+    cijoe.run_local(
+        f"sh -c 'printf \"::group::%s\\n%s\\n[derive] start $(date -u +%H:%M:%S)  %s\\n%s\\n\" "
+        f"\"{title}\" \"{bar}\" \"{title}\" \"{bar}\"'"
+    )
+
+
+def _group_close(cijoe, title: str, rc: int) -> None:
+    """Close the derive's log group with a result + timestamp. Always runs
+    (even on failure) so the `::group::` is balanced and later output isn't
+    folded under it."""
+    status = "OK" if rc == 0 else f"FAILED (rc={rc})"
+    cijoe.run_local(
+        f"sh -c 'printf \"[derive] end   $(date -u +%H:%M:%S)  %s -> %s\\n::endgroup::\\n\" "
+        f"\"{title}\" \"{status}\"'"
+    )
 
 
 def _derive_one(cijoe, base_qcow2: Path, disk_dir: Path, entry: dict) -> int:
@@ -325,7 +366,7 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
             log.error("tar of rootfs failed")
             return err
         cijoe.run_local(f"sudo chown $(id -u):$(id -g) {tar_path}")
-        err, _ = cijoe.run_local(f"gzip -9 -c {tar_path} > {gz_path}")
+        err, _ = cijoe.run_local(f"{_gzip_cmd()} -9 -c {tar_path} > {gz_path}")
         if err:
             return err
         cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
@@ -372,7 +413,7 @@ def _package_img(cijoe, work, variant, disk_dir) -> int:
     if err:
         log.error("qemu-img convert qcow2 -> raw failed")
         return err
-    err, _ = cijoe.run_local(f"gzip -9 -c {raw_path} > {gz_path}")
+    err, _ = cijoe.run_local(f"{_gzip_cmd()} -9 -c {raw_path} > {gz_path}")
     if err:
         return err
     cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
