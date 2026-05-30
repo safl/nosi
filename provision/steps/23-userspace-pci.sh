@@ -55,8 +55,14 @@ SUBSYSTEM=="vfio", OWNER="root", GROUP="kvm", MODE="0660"
 
 nosi_write_if_changed \
 '# Managed by nosi/provision/steps/23-userspace-pci.sh
-*  soft  memlock  unlimited
-*  hard  memlock  unlimited
+# Debian/Ubuntu stock pam_limits.so applies the `*` domain to non-root
+# sessions only, so root keeps the ~64 KiB default. DPDK mlock()s its
+# hugepage region as root and SPDK then bails (xnvme_dev_open errno -6);
+# the explicit `root` lines lift the cap for root sessions too.
+*    soft  memlock  unlimited
+*    hard  memlock  unlimited
+root soft  memlock  unlimited
+root hard  memlock  unlimited
 ' /etc/security/limits.d/nosi-memlock.conf 0644
 
 nosi_info "step 23-userspace-pci done"
