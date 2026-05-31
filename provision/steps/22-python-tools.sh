@@ -41,19 +41,29 @@
 nosi_info "step 22-python-tools"
 nosi_require_root
 
-# ---- FreeBSD: ruff via pkg; the rest are Python-packaging casualties ------
+# ---- FreeBSD: ruff (pkg) + cijoe (venv reusing pkg-prebuilt deps) ---------
 # ruff ships a FreeBSD-native binary in ports (a PyPI install would
-# source-build the Rust), so use pkg -- that is the one tool that lands
-# cleanly. The others are deferred on FreeBSD:
-#   * cijoe: uvx/pipx install fails ("Fatal error from uv") because its
-#     deps have no FreeBSD wheels and source-build, and it is not in ports;
-#   * pyright: Node-based, excluded by the no-node policy (agentic-cli
-#     add-on), and FreeBSD has no upstream node for its nodeenv fetch;
-#   * devbind/hugepages/iommu: Linux sysfs/vfio/kernel-cmdline tools with
-#     no FreeBSD analogue.
-# An operator who needs cijoe can install it into a venv by hand.
+# source-build the Rust), so use pkg. cijoe is pure-Python and light, but it
+# pulls paramiko -> cryptography (Rust) and pyyaml/psutil (C); on FreeBSD
+# there are no PyPI wheels, so a plain pipx/uv install source-builds those
+# and fails (cryptography needs Rust, which we deliberately do not bake).
+# Fix: install the deps that NEED a native toolchain -- paramiko (-> the
+# Rust-built cryptography) and psutil (C) -- from pkg (prebuilt by the ports
+# cluster, small, no llvm/Rust at runtime), then create a venv with
+# --system-site-packages so it reuses them and pip only adds the rest. pyyaml
+# is left to pip: it has a pure-Python fallback when libyaml/Cython are
+# absent, so no pkg (and no FreeBSD-named yaml port) is needed. pkg names are
+# python-version-flavored, so derive the prefix. pyright is excluded (Node,
+# no-node policy); devbind/hugepages/iommu are Linux sysfs/vfio tools.
 if [ "$NOSI_DISTRO" = "freebsd" ]; then
     nosi_pkg_install ruff
+    pyver="$(python3 -c 'import sys; print(f"py{sys.version_info.major}{sys.version_info.minor}")')"
+    nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil"
+    [ -x /opt/nosi/cijoe-venv/bin/python ] \
+        || python3 -m venv --system-site-packages /opt/nosi/cijoe-venv
+    /opt/nosi/cijoe-venv/bin/pip install --upgrade --quiet cijoe
+    ln -sf /opt/nosi/cijoe-venv/bin/cijoe /usr/local/bin/cijoe
+    cijoe --version
     nosi_info "step 22-python-tools done (freebsd)"
     exit 0
 fi
