@@ -92,7 +92,8 @@ if [ -r /etc/nosi-release ]; then
     fi
 fi
 
-install -D -m 0644 /dev/null /etc/nosi-release
+# /etc is always present; create+chmod portably (BSD install has no -D).
 printf '%s' "$content" > /etc/nosi-release
+chmod 0644 /etc/nosi-release
 
 nosi_info "step 05-nosi-release done (${variant}, ${version}, built ${built})"

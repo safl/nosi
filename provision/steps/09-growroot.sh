@@ -37,6 +37,23 @@ fi
 
 nosi_require_root
 
+# ---- FreeBSD: grow root via base rc.d/growfs ------------------------------
+# FreeBSD ships /etc/rc.d/growfs which, when growfs_enable=YES, runs
+# `gpart recover` + `gpart resize` on the root partition and then grows
+# the filesystem (growfs for UFS, `zpool online -e` for ZFS) on boot --
+# precisely the "disk is physically larger than the baked image" case,
+# so no nosi-owned helper is needed. growfs_swap_size=0 stops it carving
+# a swap partition out of the freed space, so root fills the whole disk
+# (matches the Linux growroot intent). Fail loud if the base mechanism is
+# missing rather than ship a silent-degrade stub.
+if [ "$NOSI_PKGMGR" = "pkg" ]; then
+    [ -r /etc/rc.d/growfs ] || nosi_die "/etc/rc.d/growfs absent; cannot grow root on first boot"
+    sysrc growfs_enable="YES" >/dev/null
+    sysrc growfs_swap_size="0" >/dev/null
+    nosi_info "step 09-growroot done (freebsd: growfs_enable=YES via /etc/rc.d/growfs)"
+    exit 0
+fi
+
 # ---- 1. ensure growpart is present ---------------------------------------
 # growpart ships in cloud-guest-utils (apt) / cloud-utils-growpart (dnf).
 # cloud-init usually pulls it in, but install explicitly so the unit never

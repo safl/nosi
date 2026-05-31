@@ -490,8 +490,8 @@ def _run_assertions(
         results.append((ok, name, detail))
 
     # ---- universal: metadata file exists, parses, has the right variant ---
-    # Every variant must emit /etc/nosi-metadata.json (Linux variants via
-    # step 98-metadata; FreeBSD via inline jq in cloud-init runcmd). The
+    # Every variant must emit /etc/nosi-metadata.json (all variants now via
+    # step 98-metadata -- Linux through python, FreeBSD through jq). The
     # ORAS push step trusts the smoketest's verdict to know whether the
     # file is publishable. Gate here, before any distro-specific branch,
     # so a missing or malformed file fails the smoketest -- never silently
@@ -510,14 +510,14 @@ def _run_assertions(
         lambda rc, out: (out == "ok", out or f"exit {rc}"),
     )
 
-    # ---- FreeBSD (Phase 1 scaffold) --------------------------------------
-    # FreeBSD doesn't run apply.sh yet (the provision/steps/*.sh chain is
-    # entirely Linux-shaped: systemd / DKMS / apt / dnf / grub / /proc).
-    # Until Phase 2 audits each step and adds FreeBSD twins, the smoke
-    # test verifies the minimum: we got in, the OS fingerprints right.
-    # That alone proves the new .raw.xz -> qcow2 conversion path in
-    # diskimage_build worked and cloud-init successfully wrote odus +
-    # the rest of the seed config.
+    # ---- FreeBSD (Phase 2a critical-path parity) -------------------------
+    # FreeBSD now runs the shared apply.sh chain (delivered as a base64
+    # tarball, since nuageinit has no write_files), so the smoketest
+    # asserts the same parity surface as Linux below: the apply-ok
+    # sentinel, the motd banner, and the build-identity file -- on top of
+    # the FreeBSD-specific fingerprints (uname, os-release, odus, baseline
+    # tools, /usr/src). The universal metadata assertions above already
+    # validate the step-98 JSON and its NOSI_VARIANT.
     if distro == "freebsd":
         check(
             "uname -s reports FreeBSD",
@@ -558,6 +558,31 @@ def _run_assertions(
             "/usr/src kernel source tree present (headless essential)",
             "test -f /usr/src/sys/conf/kern.pre.mk && test -d /usr/src/sys/dev && echo ok",
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
+        )
+        # ---- apply.sh parity surface (Phase 2a) --------------------------
+        # apply-ok is the whole-chain sentinel (last line of apply.sh, only
+        # reached if every step succeeded under set -e); its absence means
+        # apply.sh aborted and the image is refused for publish.
+        check(
+            "/etc/nosi/apply-ok sentinel present (apply.sh completed cleanly)",
+            "test -r /etc/nosi/apply-ok && cat /etc/nosi/apply-ok",
+            lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
+        )
+        check(
+            "/etc/motd carries the nosi banner",
+            "cat /etc/motd",
+            lambda rc, out: (
+                rc == 0 and "nosi" in out,
+                (out.splitlines()[0] if out.strip() else "(empty /etc/motd)"),
+            ),
+        )
+        check(
+            "/etc/nosi-release has NOSI_VARIANT",
+            "cat /etc/nosi-release",
+            lambda rc, out: (
+                rc == 0 and f"NOSI_VARIANT={variant}" in out,
+                out if rc != 0 or f"NOSI_VARIANT={variant}" not in out else "ok",
+            ),
         )
         return results
 

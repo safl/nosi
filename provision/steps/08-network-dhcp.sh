@@ -60,6 +60,37 @@ fi
 
 nosi_require_root
 
+# ---- FreeBSD: NIC-name-agnostic DHCP via rc.conf --------------------------
+# FreeBSD has no netplan / cloud.cfg; networking is /etc/rc.conf. The
+# ifconfig_DEFAULT pseudo-interface applies to whichever single ethernet
+# NIC the box has (vtnet0 in the build VM, em0/igb0/re0/... on bare
+# metal), so it is the FreeBSD analog of the Linux en*/eth* glob and just
+# as portable across hardware. async DHCP (not SYNCDHCP) mirrors the
+# Linux netplan `optional: true` posture: boot does not block on a NIC
+# with no carrier. IPv6 via router-advertised SLAAC. sysrc edits rc.conf
+# idempotently (replaces, never duplicates), so no nosi_write_if_changed.
+# Config-only, no `service netif restart`: the build VM keeps its live
+# nuageinit-brought-up link for the rest of the bake; the next boot (the
+# operator's first boot, and the smoketest's fresh boot) applies it.
+if [ "$NOSI_PKGMGR" = "pkg" ]; then
+    sysrc ifconfig_DEFAULT="DHCP inet6 accept_rtadv" >/dev/null
+    sysrc ipv6_activate_all_interfaces="YES" >/dev/null
+    sysrc rtsold_enable="YES" >/dev/null
+
+    # Drop any per-NIC pin the base image / nuageinit may have baked
+    # (e.g. ifconfig_vtnet0=...), which would shadow ifconfig_DEFAULT on
+    # hardware whose NIC has a different name. Keep only the DEFAULT vars.
+    for v in $(sysrc -a 2>/dev/null | awk -F: '/^ifconfig_/{print $1}'); do
+        case "$v" in
+        ifconfig_DEFAULT | ifconfig_DEFAULT_ipv6) : ;;
+        ifconfig_*) sysrc -x "$v" >/dev/null 2>&1 || true ;;
+        esac
+    done
+
+    nosi_info "step 08-network-dhcp done (freebsd: ifconfig_DEFAULT=DHCP+accept_rtadv)"
+    exit 0
+fi
+
 # ---- 1. cloud-init drop-in: glob DHCP for hosts where cloud-init runs -----
 # Applies on every distro. Renders a NIC-agnostic netplan (or NM keyfiles
 # on Fedora) on VMs/cloud; harmless on HW where cloud-init is disabled.

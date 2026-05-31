@@ -33,6 +33,40 @@ NOSI_DEFAULT_HOSTNAME="${NOSI_DEFAULT_HOSTNAME:-nosi-${NOSI_DISTRO}}"
 nosi_info "step 99-motd (shape=$NOSI_SHAPE, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
 nosi_require_root
 
+# ---- FreeBSD: static banner via /etc/motd.template ------------------------
+# FreeBSD's /etc/rc.d/motd composes /etc/motd from the live uname banner +
+# /etc/motd.template on each boot (update_motd=YES by default), so the
+# banner goes in the TEMPLATE -- writing /etc/motd directly would be
+# clobbered on the next boot. A fresh boot (the operator's, and the
+# smoketest's) regenerates /etc/motd from this; composing it now is
+# best-effort. The Linux dynamic renderer (IPs / IOMMU / hugepages via
+# /proc + a systemd oneshot) is Linux-only; a static identity banner is
+# the Phase-2a minimum.
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    pretty="$( . /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-FreeBSD}")"
+    nosi_version="(unset)"
+    nosi_variant="(unset)"
+    if [ -r /etc/nosi-release ]; then
+        # shellcheck disable=SC1091
+        . /etc/nosi-release
+        nosi_version="${NOSI_VERSION:-(unset)}"
+        nosi_variant="${NOSI_VARIANT:-(unset)}"
+    fi
+    nosi_write_if_changed "
+  nosi ${NOSI_SHAPE} (${nosi_variant}, ${nosi_version})   ${pretty}   $(uname -s) $(uname -r)   $(uname -m)
+
+  Default operator: odus / odus.321  (root locked, SSH password auth on)
+  Reconfigure:
+    sudo passwd odus                                operator password
+    sudo sysrc hostname=NAME && sudo hostname NAME  hostname (default: ${NOSI_DEFAULT_HOSTNAME})
+" /etc/motd.template 0644
+    # Compose /etc/motd now; the authoritative path is rc.d/motd on the
+    # next fresh boot, so this is best-effort.
+    service motd onestart >/dev/null 2>&1 || true
+    nosi_info "step 99-motd done (freebsd: /etc/motd.template)"
+    exit 0
+fi
+
 install -d -m 0755 /etc/nosi
 
 nosi_write_if_changed "$NOSI_SHAPE"           /etc/nosi/shape            0644

@@ -137,7 +137,26 @@ FINAL_STEPS=(
     99-motd
 )
 
-if [ "$SHAPE_ONLY" -eq 1 ]; then
+# FreeBSD critical-path slice (Phase 2a). Only the steps that have a
+# FreeBSD branch today; everything else in BASE_STEPS is Linux-only
+# (DKMS / netplan / grub / podman / snapd / systemd-specific) and stays
+# deferred. Same group semantics as Linux: 05 first (ALWAYS_FIRST), 06
+# presence early, 98/99 last (FINAL_STEPS). FreeBSD has only the headless
+# shape and no derives, so there is no FreeBSD SHAPE_STEPS set.
+FREEBSD_BASE_STEPS=(
+    06-package-presence
+    08-network-dhcp
+    09-growroot
+    28-ssh-config
+)
+
+is_freebsd=0
+[ "$NOSI_DISTRO" = "freebsd" ] && is_freebsd=1
+
+if [ "$is_freebsd" -eq 1 ]; then
+    # FreeBSD: curated list regardless of --shape-only (no shapes/derives).
+    RUN_STEPS=( "${ALWAYS_FIRST[@]}" "${FREEBSD_BASE_STEPS[@]}" "${FINAL_STEPS[@]}" )
+elif [ "$SHAPE_ONLY" -eq 1 ]; then
     # Derive context (chroot on a baked headless rootfs): base already
     # ran in the base bake; re-stamp identity, run only the shape delta,
     # refresh metadata + motd.

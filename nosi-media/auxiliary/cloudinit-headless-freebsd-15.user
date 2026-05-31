@@ -4,12 +4,12 @@
 # Per-instance SSH identity: host keys stripped at end of init,
 # regenerated on first boot.
 #
-# Phase 1 scaffold. No apply.sh provision chain on FreeBSD yet: the
-# Linux provision/steps/*.sh chain assumes apt/dnf, systemd, DKMS,
-# grub, vfio, /proc/cmdline, ... -- FreeBSD's equivalents (pkg, rc.d,
-# kld, loader.conf, vmm, kenv) need a separate audit and port. This
-# template gives a working FreeBSD .img.gz with the right identity
-# story; provision steps land incrementally.
+# Phase 2a: runs the shared provision/apply.sh chain (delivered as a
+# base64 tarball in runcmd, see below) with the FreeBSD critical-path
+# steps -- identity stamp, NIC-agnostic DHCP via rc.conf, rootfs grow via
+# growfs, sshd, metadata + motd. The remaining Linux steps (DKMS, grub
+# IOMMU, podman, snapd, upstream-release tools, pipx CLIs, ...) are not
+# yet ported and stay Linux-only.
 #
 # Important: FreeBSD's BASIC-CLOUDINIT image runs *nuageinit*, the
 # FreeBSD-native cloud-init-compatible re-implementation, not the
@@ -80,12 +80,12 @@ packages:
   - jq
   - ripgrep
 
-# nuageinit doesn't honour cloud-init's write_files: directive in the
-# shape our renderer emits (used by the Linux variants to drop the
-# provision tree + /opt/nosi/.nosi-version). FreeBSD instead relies on
-# the renderer's inline __NOSI_VERSION__ substitution -- the marker
-# below in runcmd gets replaced with the actual rolling tag at bake
-# time, no write_files needed.
+# nuageinit doesn't honour cloud-init's write_files: directive (which the
+# Linux variants use to drop the provision tree), so the provision/ tree
+# is delivered instead as a base64 gzip tarball spliced in at the
+# __NOSI_PROVISION_TARBALL__ marker in runcmd below and extracted to
+# /opt/nosi at first boot. The tarball carries /opt/nosi/.nosi-version, so
+# the build identity travels with it (no separate __NOSI_VERSION__ needed).
 
 runcmd:
   # Reclaim uid 1000 for odus. nuageinit's users module runs before
@@ -127,39 +127,22 @@ runcmd:
   # Light cleanup; pkg cache is the main thing worth dropping.
   - pkg clean -aqy
 
-  # Emit /etc/nosi-metadata.json so the smoketest scp's it out for the
-  # ORAS catalog layer, same shape as step 98-metadata produces on the
-  # Linux variants. apply.sh doesn't run on FreeBSD Phase 1, hence
-  # inline. Pulls the rolling-tag from /opt/nosi/.nosi-version which
-  # the cijoe renderer writes at bake time. Absolute path to jq because
-  # nuageinit's runcmd PATH does not include /usr/local/bin. No stub /
-  # graceful-degrade fallback -- if jq isn't there or fails, the bake
-  # fails. The smoketest's metadata-parse assertion catches any silent
-  # truncation too.
-  - |
-    set -e
-    /usr/local/bin/jq -n \
-        --arg version "__NOSI_VERSION__" \
-        --arg shape headless \
-        --arg variant freebsd-15-headless \
-        --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg pretty "FreeBSD 15.0-RELEASE" \
-        --arg krel "$(uname -r)" \
-        --arg kver "$(uname -v)" \
-        --arg arch "$(uname -m)" \
-        '{
-            nosi: {version: $version, shape: $shape, variant: $variant, built: $built},
-            distro: {id: "freebsd", version_id: "15.0", pretty_name: $pretty},
-            kernel: {release: $krel, version: $kver},
-            architecture: $arch,
-            operator: {
-                username: "odus", uid: 1000,
-                default_password: "odus.321",
-                default_password_state: "active (no force-rotate)",
-                root_locked: true
-            }
-        }' > /etc/nosi-metadata.json
-    chmod 0644 /etc/nosi-metadata.json
+  # Deliver + run the shared provision chain. nuageinit does not honour
+  # cloud-init's write_files:, so the cijoe renderer inlines the whole
+  # provision/ tree (+ /opt/nosi/.nosi-version) as a one-line base64 gzip
+  # tarball at the '__NOSI_PROVISION_TARBALL__' token below. Decode with
+  # base-system openssl + tar (nuageinit's runcmd PATH has no
+  # /usr/local/bin), extract into /opt/nosi, then run apply.sh with the
+  # absolute bash (pkg's bin prefix is not on the runcmd PATH). apply.sh
+  # owns networking (rc.conf DHCP), rootfs grow (growfs), sshd config,
+  # /etc/nosi-metadata.json (step 98) and /etc/motd (step 99), and writes
+  # /etc/nosi/apply-ok -- the sentinel the smoketest gates publish on.
+  # Separate single-line runcmd items (no heredoc / block scalar) because
+  # nuageinit does not reliably deliver multi-line runcmd content.
+  - mkdir -p /opt/nosi
+  - echo '__NOSI_PROVISION_TARBALL__' | openssl base64 -d -A | tar -C /opt/nosi -xpf -
+  - ls -la /opt/nosi /opt/nosi/provision 2>&1 | head -40
+  - /usr/local/bin/bash /opt/nosi/provision/apply.sh freebsd-15-headless
 
   # Wipe nuageinit's state cache before we power off. nuageinit caches
   # the compiled runcmd script at /var/cache/nuageinit/runcmds and will

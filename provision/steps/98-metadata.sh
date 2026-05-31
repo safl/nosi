@@ -18,6 +18,51 @@
 nosi_info "step 98-metadata"
 nosi_require_root
 
+# ---- FreeBSD: emit the same JSON shape via jq -----------------------------
+# The Linux path below leans on apt-mark / dnf repoquery / /lib/modules and
+# a big python helper. On FreeBSD identity is single-sourced from
+# /etc/nosi-release (step 05 <- /opt/nosi/.nosi-version <- renderer) and the
+# JSON is assembled with jq, keeping the top-level shape aligned with Linux
+# (nosi / distro / kernel / architecture / operator / packages) so the
+# smoketest's nosi.variant assertion and the catalog layer are satisfied.
+# FreeBSD does not force-rotate the operator password (step 29 is Linux-only
+# and deferred), so default_password_state reflects that.
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    JQ=/usr/local/bin/jq
+    [ -x "$JQ" ] || JQ=jq
+    command -v "$JQ" >/dev/null 2>&1 || nosi_die "jq missing; required to emit /etc/nosi-metadata.json"
+    # shellcheck disable=SC1091
+    . /etc/nosi-release
+    pretty="$( . /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-FreeBSD}")"
+    "$JQ" -n \
+        --arg version "${NOSI_VERSION:-unknown}" \
+        --arg shape   "${NOSI_SHAPE:-headless}" \
+        --arg variant "${NOSI_VARIANT:-unknown}" \
+        --arg built   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg pretty  "$pretty" \
+        --arg vid     "${NOSI_DISTRO_VERSION:-unknown}" \
+        --arg krel    "$(uname -r)" \
+        --arg kver    "$(uname -v)" \
+        --arg arch    "$(uname -m)" \
+        '{
+            nosi: {version: $version, shape: $shape, variant: $variant, built: $built},
+            distro: {id: "freebsd", version_id: $vid, version_codename: null, pretty_name: $pretty},
+            kernel: {release: $krel, version: $kver},
+            architecture: $arch,
+            operator: {
+                username: "odus", uid: 1000,
+                default_password: "odus.321",
+                default_password_state: "active (no force-rotate)",
+                root_locked: true,
+                ssh: {password_auth: true, permit_root_login: false}
+            },
+            packages: {manager: "pkg"}
+        }' > /etc/nosi-metadata.json
+    chmod 0644 /etc/nosi-metadata.json
+    nosi_info "step 98-metadata done (freebsd, $(wc -c < /etc/nosi-metadata.json) bytes -> /etc/nosi-metadata.json)"
+    exit 0
+fi
+
 command -v python3 >/dev/null 2>&1 || nosi_die "python3 missing; required to emit /etc/nosi-metadata.json"
 
 python3 - <<'PY' > /etc/nosi-metadata.json

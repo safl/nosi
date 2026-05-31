@@ -44,6 +44,36 @@
 nosi_info "step 28-ssh-config"
 nosi_require_root
 
+# ---- FreeBSD: base OpenSSH + rc.conf, host keys via rc.d/sshd -------------
+# Same intent as the Linux drop-in (password auth on for the baked
+# odus:odus.321 creds, no root login), expressed for base OpenSSH:
+#   * a /etc/ssh/sshd_config.d/00-nosi.conf drop-in;
+#   * base FreeBSD sshd_config ships NO `Include` line, so PREPEND one
+#     (sshd uses the FIRST value for each keyword, so prepending makes
+#     the drop-in authoritative even if a later base config sets these);
+#   * sshd_enable=YES in rc.conf;
+#   * NO keygen oneshot: the .user strips /etc/ssh/ssh_host_*, and
+#     /etc/rc.d/sshd runs `ssh-keygen -A` on boot when keys are absent,
+#     so first boot regenerates per-instance host keys (the Debian-Trixie
+#     restart-loop problem does not exist on FreeBSD).
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    mkdir -p /etc/ssh/sshd_config.d
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/28-ssh-config.sh
+PasswordAuthentication yes
+PermitRootLogin no
+' /etc/ssh/sshd_config.d/00-nosi.conf 0644
+
+    if ! grep -q '^Include /etc/ssh/sshd_config.d/\*\.conf' /etc/ssh/sshd_config 2>/dev/null; then
+        { printf 'Include /etc/ssh/sshd_config.d/*.conf\n\n'; cat /etc/ssh/sshd_config; } \
+            > /etc/ssh/sshd_config.nosi && mv /etc/ssh/sshd_config.nosi /etc/ssh/sshd_config
+    fi
+
+    sysrc sshd_enable="YES" >/dev/null
+    nosi_info "step 28-ssh-config done (freebsd)"
+    exit 0
+fi
+
 install -d -m 0755 /etc/ssh/sshd_config.d
 nosi_write_if_changed \
 '# Managed by nosi/provision/steps/28-ssh-config.sh

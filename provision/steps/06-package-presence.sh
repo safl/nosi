@@ -23,20 +23,37 @@ nosi_info "step 06-package-presence"
 # shape / variant. Each maps to a package name in every userdata
 # packages: list. Keeping the list small so the check is fast and so
 # legitimate per-shape additions aren't a maintenance burden.
-must_have=(
-    git
-    curl
-    jq
-    python3
-    pipx
-    make
-    gcc
-    pkg-config
-)
-
+#
 # Fedora ships `pkg-config` from `pkgconf-pkg-config`; apt distros from
 # the `pkg-config` package. Both expose `pkg-config` on PATH, so the
-# command-based check above works.
+# command-based check works.
+#
+# FreeBSD installs its baseline via nuageinit's packages: list (the
+# .user), not pipx/gcc/bsdmake -- clang is base, `make` is bsdmake (we
+# install gmake), and there is no pipx in the Phase-2a slice. Check the
+# binary names that list actually provides (ripgrep->rg, helix->hx,
+# git-delta->delta), same as the smoketest's FreeBSD tool assertion.
+case "$NOSI_PKGMGR" in
+pkg)
+    must_have=(
+        git curl wget jq python3
+        bash gmake cmake ninja meson pkgconf
+        hx zellij btop rg fd fzf direnv gh delta
+    )
+    ;;
+*)
+    must_have=(
+        git
+        curl
+        jq
+        python3
+        pipx
+        make
+        gcc
+        pkg-config
+    )
+    ;;
+esac
 
 missing=()
 for cmd in "${must_have[@]}"; do

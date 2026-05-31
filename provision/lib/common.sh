@@ -16,8 +16,8 @@
 set -euo pipefail
 
 # ---- distro detection ------------------------------------------------------
-# NOSI_DISTRO is one of: debian, ubuntu, fedora.
-# NOSI_PKGMGR is one of: apt, dnf.
+# NOSI_DISTRO is one of: debian, ubuntu, fedora, freebsd.
+# NOSI_PKGMGR is one of: apt, dnf, pkg.
 # Steps that need finer granularity (e.g. trixie vs noble) can read /etc/os-release directly.
 
 nosi_detect_distro() {
@@ -31,10 +31,19 @@ nosi_detect_distro() {
         NOSI_DISTRO_VERSION="unknown"
     fi
 
+    # FreeBSD's /etc/os-release is a symlink to /var/run/os-release, which
+    # rc.d/os-release regenerates at boot; if apply.sh runs before that is
+    # populated, uname is authoritative so detection never dies on FreeBSD.
+    if [ "$NOSI_DISTRO" = "unknown" ] && [ "$(uname -s)" = "FreeBSD" ]; then
+        NOSI_DISTRO="freebsd"
+        NOSI_DISTRO_VERSION="$(uname -r | sed 's/-.*//')"   # 14.4-RELEASE -> 14.4
+    fi
+
     case "$NOSI_DISTRO" in
         debian|ubuntu) NOSI_PKGMGR=apt ;;
         fedora)        NOSI_PKGMGR=dnf ;;
-        *) nosi_die "unsupported distro: $NOSI_DISTRO (need debian, ubuntu, or fedora)" ;;
+        freebsd)       NOSI_PKGMGR=pkg ;;
+        *) nosi_die "unsupported distro: $NOSI_DISTRO (need debian, ubuntu, fedora, or freebsd)" ;;
     esac
 
     export NOSI_DISTRO NOSI_DISTRO_VERSION NOSI_PKGMGR
@@ -53,8 +62,10 @@ nosi_require_root() {
 }
 
 # WSL has no real kernel headers and DKMS is meaningless. Steps that build
-# kernel modules should bail early on WSL.
+# kernel modules should bail early on WSL. Guard the /proc read so the grep
+# never trips `set -e` on a kernel without procfs (e.g. FreeBSD).
 nosi_is_wsl() {
+    [ -r /proc/version ] || return 1
     grep -qi microsoft /proc/version 2>/dev/null
 }
 
@@ -67,6 +78,7 @@ nosi_pkg_install() {
     case "$NOSI_PKGMGR" in
         apt) DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" ;;
         dnf) dnf install -y "$@" ;;
+        pkg) ASSUME_ALWAYS_YES=yes pkg install -y "$@" ;;
         *)   nosi_die "no package manager wired for $NOSI_PKGMGR" ;;
     esac
 }
@@ -76,6 +88,7 @@ nosi_pkg_installed() {
     case "$NOSI_PKGMGR" in
         apt) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed" ;;
         dnf) rpm -q "$1" >/dev/null 2>&1 ;;
+        pkg) pkg info -e "$1" >/dev/null 2>&1 ;;
         *)   return 1 ;;
     esac
 }
@@ -89,8 +102,11 @@ nosi_write_if_changed() {
     if [ -f "$path" ] && [ "$(cat "$path")" = "$content" ]; then
         return 0
     fi
-    install -D -m "$mode" /dev/null "$path"
+    # `install -D` (auto-create parent dirs) is GNU-only; FreeBSD's install
+    # lacks it. mkdir -p + chmod is equivalent and portable.
+    mkdir -p "$(dirname "$path")"
     printf '%s' "$content" > "$path"
+    chmod "$mode" "$path"
 }
 
 # Auto-detect on source. Callers can re-run if they need to refresh.
