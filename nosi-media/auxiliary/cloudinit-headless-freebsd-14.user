@@ -132,17 +132,19 @@ runcmd:
   # provision/ tree (+ /opt/nosi/.nosi-version) as a one-line base64 gzip
   # tarball at the '__NOSI_PROVISION_TARBALL__' token below. Decode with
   # base-system openssl + tar (nuageinit's runcmd PATH has no
-  # /usr/local/bin), extract into /opt/nosi, then run apply.sh with the
-  # absolute bash (pkg's bin prefix is not on the runcmd PATH). apply.sh
-  # owns networking (rc.conf DHCP), rootfs grow (growfs), sshd config,
-  # /etc/nosi-metadata.json (step 98) and /etc/motd (step 99), and writes
-  # /etc/nosi/apply-ok -- the sentinel the smoketest gates publish on.
-  # Separate single-line runcmd items (no heredoc / block scalar) because
-  # nuageinit does not reliably deliver multi-line runcmd content.
+  # /usr/local/bin), extract into /opt/nosi, then run apply.sh. We must
+  # set a full PATH (nuageinit's runcmd PATH omits /usr/local/{s}bin):
+  # apply.sh invokes each step via its `#!/usr/bin/env bash` shebang, and
+  # the steps reach pkg tools (jq, hx, sysrc, ...) by name, so both bash
+  # and those tools must be resolvable for the inherited child PATH.
+  # apply.sh owns networking (rc.conf DHCP), rootfs grow (growfs), sshd
+  # config, /etc/nosi-metadata.json (step 98) and /etc/motd (step 99), and
+  # writes /etc/nosi/apply-ok -- the sentinel the smoketest gates publish
+  # on. Separate single-line runcmd items (no heredoc / block scalar)
+  # because nuageinit does not reliably deliver multi-line runcmd content.
   - mkdir -p /opt/nosi
   - echo '__NOSI_PROVISION_TARBALL__' | openssl base64 -d -A | tar -C /opt/nosi -xpf -
-  - ls -la /opt/nosi /opt/nosi/provision 2>&1 | head -40
-  - /usr/local/bin/bash /opt/nosi/provision/apply.sh freebsd-14-headless
+  - PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /usr/local/bin/bash /opt/nosi/provision/apply.sh freebsd-14-headless
 
   # Wipe nuageinit's state cache before we power off. nuageinit caches
   # the compiled runcmd script at /var/cache/nuageinit/runcmds and will
