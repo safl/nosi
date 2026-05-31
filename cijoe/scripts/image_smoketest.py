@@ -66,6 +66,12 @@ SSH_OPTS = [
     "ConnectTimeout=5",
 ]
 
+# The baked default password for odus. The image advertises this via
+# /etc/nosi-metadata.json; the smoketest assertions below verify the
+# advertisement is true. Tests run on overlay only -- never on a target the
+# operator has rotated.
+DEFAULT_PASSWORD = "odus.321"
+
 
 def add_args(parser: ArgumentParser):
     parser.add_argument(
@@ -469,6 +475,40 @@ def _ssh(key: Path, cmd: str) -> tuple[int, str]:
     return res.returncode, (res.stdout + res.stderr).strip()
 
 
+def _ssh_password(user: str, password: str, cmd: str) -> tuple[int, str]:
+    """Run a command via SSH password auth only (no key, no agent, no kbd-int).
+
+    Uses sshpass to feed the password non-interactively, and explicitly
+    forbids pubkey/agent so the test stays honest -- we are verifying the
+    BAKED PASSWORD works, not that any key happens to be in the runner's
+    agent. Used to assert (a) odus password auth works and (b) root SSH
+    is blocked.
+    """
+    if not shutil.which("sshpass"):
+        return 127, "sshpass not installed (apt install sshpass)"
+    full = [
+        "sshpass",
+        "-p",
+        password,
+        "ssh",
+        *SSH_OPTS,
+        "-o",
+        "PreferredAuthentications=password",
+        "-o",
+        "PubkeyAuthentication=no",
+        "-o",
+        "KbdInteractiveAuthentication=no",
+        "-o",
+        "NumberOfPasswordPrompts=1",
+        "-p",
+        str(SSH_HOST_PORT),
+        f"{user}@127.0.0.1",
+        cmd,
+    ]
+    res = subprocess.run(full, capture_output=True, text=True, timeout=30)
+    return res.returncode, (res.stdout + res.stderr).strip()
+
+
 def _run_assertions(
     key: Path, variant: str, shape: str, distro: str
 ) -> list[tuple[bool, str, str]]:
@@ -508,6 +548,51 @@ def _run_assertions(
         'sys.exit(0 if d.get("nosi",{}).get("variant")=="' + variant + "\" else 1)' "
         "&& echo ok",
         lambda rc, out: (out == "ok", out or f"exit {rc}"),
+    )
+
+    # ---- login + ssh-env: the advertised auth paths actually work --------
+    # Everything above transits our per-run SSH key seeded by NoCloud, which
+    # only proves "the image accepts a key we just injected". A downstream
+    # operator booting the published artifact has NO seed, NO key -- their
+    # entry channel is the BAKED `odus:odus.321` password and the SSH config
+    # the bake left behind. These assertions exercise exactly that path so
+    # a regression (PasswordAuthentication off, odus missing, sudoers entry
+    # not honored, ...) fails the bake instead of every downstream consumer.
+
+    # Password-auth assertions use _ssh_password (sshpass, no pubkey) and so
+    # call directly into results rather than through check(): the helper is
+    # 'cmd over the existing key' which is not what we want here.
+    rc_pw, out_pw = _ssh_password(SSH_USER, DEFAULT_PASSWORD, "true")
+    results.append(
+        (
+            rc_pw == 0,
+            f"odus password auth ({DEFAULT_PASSWORD}) succeeds via SSH",
+            out_pw or f"exit {rc_pw}",
+        )
+    )
+
+    rc_root, out_root = _ssh_password("root", "root", "true")
+    results.append(
+        (
+            rc_root != 0,
+            "root SSH login is blocked (PermitRootLogin no + root locked)",
+            "rejected" if rc_root != 0 else f"SECURITY REGRESSION: root accepted ({out_root})",
+        )
+    )
+
+    check(
+        "odus has passwordless sudo (sudo -n true)",
+        "sudo -n true && echo ok",
+        lambda rc, out: (rc == 0 and out == "ok", out or f"exit {rc}"),
+    )
+
+    check(
+        "odus SSH env: USER=odus, HOME=/home/odus, PATH carries /usr/local/bin",
+        'printf "USER=%s\\nHOME=%s\\nPATH=%s\\n" "$USER" "$HOME" "$PATH"',
+        lambda rc, out: (
+            rc == 0 and "USER=odus" in out and "HOME=/home/odus" in out and "/usr/local/bin" in out,
+            out or f"exit {rc}",
+        ),
     )
 
     # ---- FreeBSD (Phase 2a critical-path parity) -------------------------
