@@ -40,9 +40,10 @@ cijoe, or a dev base for a project's `make docker`). desktop
 / wsl / docker are built by deriving from the baked headless rootfs
 rather than re-baking. Optional tooling (agentic AI CLIs, GPU vendor
 stacks, ...) is post-flash via `nosi-addon` or via cijoe workflows
-under `cijoe/workflows/`. A **`freebsd-<N>-headless`** scaffold landed
-in 2026-05 (Phase 1: bake + identity + baseline packages + kernel
-source, no provision chain yet).
+under `cijoe/workflows/`. **`freebsd-<N>-headless`** variants run the
+same shared provision chain (delivered to FreeBSD's nuageinit as a
+base64 tarball since it has no `write_files`); they are C/C++/Python
+focused, with Rust/Zig opt-in via `pkg install` to keep llvm out.
 
 For the up-to-date list of variants, baked tool versions, default
 credentials, pull/flash recipes, and full package inventories see the

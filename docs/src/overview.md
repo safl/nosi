@@ -118,9 +118,12 @@ is a real OCI image (`docker pull` it or use it as a GHA `container:`).
 Keeping each shape in its own repo keeps bty's flashable catalog
 scoped to the real disk images (headless `.img.gz`, desktop `.img.gz`).
 
-Windows is on the roadmap; FreeBSD landed in 2026-05 as a Phase-1
-scaffold (bake + identity + baseline packages + kernel source, no
-provision chain yet).
+Windows is on the roadmap; FreeBSD (`freebsd-14/15-headless`) runs the
+same shared provision chain as the Linux variants, delivered to nuageinit
+as a base64 tarball (it has no `write_files`). It is a C/C++/Python base
+(base clang/lldb + cmake/meson/ninja/python, plus gdb/ruff/uv/lazygit/
+cijoe) with kernel source in `/usr/src`; Rust/Zig are opt-in via `pkg
+install` to keep llvm out of the image.
 
 Per-variant use cases live in the `org.opencontainers.image.description`
 ORAS annotation on each published artifact and are surfaced on the

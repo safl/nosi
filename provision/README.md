@@ -87,8 +87,8 @@ that an asserted-too-narrow smoketest would miss otherwise.
 | `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |
 | `fedora-44-headless`   | Fedora 44            | -- |
 | `fedora-44-desktop`    | Fedora 44            | Sway + tuigreet + Firefox + audio/bluetooth/power-management |
-| `freebsd-14-headless`  | FreeBSD 14.4-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
-| `freebsd-15-headless`  | FreeBSD 15.0-RELEASE | -- (Phase 1: cloud-init only, no apply.sh yet) |
+| `freebsd-14-headless`  | FreeBSD 14.4-RELEASE | -- (C/C++/Python; apply.sh runs via nuageinit + a base64 tarball; Rust/Zig opt-in) |
+| `freebsd-15-headless`  | FreeBSD 15.0-RELEASE | -- (C/C++/Python; apply.sh runs via nuageinit + a base64 tarball; Rust/Zig opt-in) |
 
 ## Use from a flashed nosi image
 
