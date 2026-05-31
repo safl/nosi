@@ -1,16 +1,17 @@
 # nosi provision
 
 System tweaks and toolchain installs that turn a fresh Debian / Ubuntu /
-Fedora cloud-init bake (or a fresh Hetzner VM, or a WSL2 import) into a
-nosi-parity machine.
+Fedora / FreeBSD cloud-init bake (or a fresh Hetzner VM, or a WSL2 import)
+into a nosi-parity machine.
 
 Each script under `steps/` is standalone, idempotent, and cross-distro
 where the work is genuinely the same (DKMS, modprobe.d, systemd units,
 profile.d snippets); per-distro otherwise. `apply.sh <variant>` runs the
 whole chain in order. `lib/common.sh` provides distro detection
-(`NOSI_DISTRO`, `NOSI_PKGMGR`), package-manager wrappers, logging, and
-an idempotency helper that skips writing files whose content has not
-changed.
+(`NOSI_DISTRO` one of debian/ubuntu/fedora/freebsd, `NOSI_PKGMGR` one of
+apt/dnf/pkg), package-manager wrappers, logging, and an idempotency helper
+that skips writing files whose content has not changed. See **FreeBSD**
+below for how the chain runs there.
 
 ```
 provision/
@@ -18,6 +19,9 @@ provision/
 ├── lib/common.sh         # distro detect, logging, helpers
 └── steps/
     ├── 05-nosi-release.sh          # FIRST: /etc/nosi-release with build identity
+    ├── 06-package-presence.sh      # pre-flight: cloud-init's packages: actually landed
+    ├── 08-network-dhcp.sh          # NIC-agnostic DHCP (no datasource on bare metal)
+    ├── 09-growroot.sh              # grow rootfs to fill the disk on first boot
     ├── 10-r8125-dkms.sh
     ├── 12-gdb-dashboard.sh
     ├── 15-nouveau-blacklist.sh
@@ -76,6 +80,33 @@ asking the operator to reboot.
 whole-chain assertion checks for this sentinel; absence means the
 image is refused for publish. Strict mode catches the kind of failure
 that an asserted-too-narrow smoketest would miss otherwise.
+
+## FreeBSD
+
+`freebsd-14/15-headless` run the same `apply.sh` chain, with two
+differences from the Linux variants:
+
+* **Delivery.** FreeBSD's bake uses *nuageinit* (not Python cloud-init),
+  which has no `write_files:`. So `cijoe/scripts/userdata_render.py` ships
+  the whole `provision/` tree (+ `.nosi-version`) as a base64 gzip tarball
+  via the `__NOSI_PROVISION_TARBALL__` marker; a single `runcmd` line
+  decodes and extracts it to `/opt/nosi` before invoking apply.sh. (The
+  Linux variants keep using the `write_files:` `__NOSI_PROVISION_FILES__`
+  marker.)
+* **Step set.** `apply.sh` runs a curated FreeBSD subset
+  (`05 06 08 09 12 20 21 22 28 30 32 98 99`) whose steps carry FreeBSD
+  branches using native idioms (pkg, rc.conf/`sysrc`, rc.d, base ntpd,
+  growfs, pciconf/nvmecontrol) instead of apt-dnf / netplan / systemd /
+  grub. The Linux-only steps (r8125 DKMS, nouveau, grub IOMMU, podman,
+  snapd, userspace-PCI, rotate-password, nosi-addons) are skipped.
+
+It is a **C/C++/Python** base: base clang/lldb + the cloud-init package
+set (cmake, meson, ninja, gmake, python, helix, zellij, …) plus gdb, ruff,
+uv, lazygit, oras and cijoe. **Rust and Zig are opt-in** (`pkg install rust
+zig`) so llvm stays out of the baked image; yazi, pyright, taplo and
+marksman are likewise omitted (heavy/Node/unavailable on FreeBSD). cijoe's
+native deps (cryptography via paramiko, psutil) come from pkg as prebuilt
+binaries, with cijoe itself in a `--system-site-packages` venv.
 
 ## Variants
 
