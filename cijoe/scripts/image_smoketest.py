@@ -476,13 +476,18 @@ def _ssh(key: Path, cmd: str) -> tuple[int, str]:
 
 
 def _ssh_password(user: str, password: str, cmd: str) -> tuple[int, str]:
-    """Run a command via SSH password auth only (no key, no agent, no kbd-int).
+    """Run a command via SSH password auth (no pubkey from agent/keys).
 
-    Uses sshpass to feed the password non-interactively, and explicitly
-    forbids pubkey/agent so the test stays honest -- we are verifying the
-    BAKED PASSWORD works, not that any key happens to be in the runner's
-    agent. Used to assert (a) odus password auth works and (b) root SSH
-    is blocked.
+    Uses sshpass to feed the password non-interactively. We disable
+    PubkeyAuthentication and IdentitiesOnly to make sure the assertion
+    isn't accidentally satisfied by an agent-resident key on the runner
+    -- we are verifying the BAKED PASSWORD works. We do NOT disable
+    keyboard-interactive: modern sshd with UsePAM=yes routes 'password'
+    through PAM as kbd-interactive, so disabling it blocks the actual
+    auth path consumers use. sshpass handles both prompt shapes.
+
+    Returns (rc, output). rc 5 = auth failed; 255 = ssh/connect error;
+    127 = sshpass missing.
     """
     if not shutil.which("sshpass"):
         return 127, "sshpass not installed (apt install sshpass)"
@@ -493,13 +498,11 @@ def _ssh_password(user: str, password: str, cmd: str) -> tuple[int, str]:
         "ssh",
         *SSH_OPTS,
         "-o",
-        "PreferredAuthentications=password",
-        "-o",
         "PubkeyAuthentication=no",
         "-o",
-        "KbdInteractiveAuthentication=no",
+        "IdentitiesOnly=yes",
         "-o",
-        "NumberOfPasswordPrompts=1",
+        "IdentityAgent=none",
         "-p",
         str(SSH_HOST_PORT),
         f"{user}@127.0.0.1",
