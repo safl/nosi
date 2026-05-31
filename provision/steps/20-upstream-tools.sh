@@ -20,6 +20,44 @@
 nosi_info "step 20-upstream-tools (distro=$NOSI_DISTRO)"
 nosi_require_root
 
+# ---- FreeBSD: lean pkg set + one binary -----------------------------------
+# Every download below is a *-linux-* binary that cannot run on FreeBSD, and
+# the FreeBSD ports equivalents pull heavy dependency trees (the opposite of
+# the Linux path's zero-dependency static binaries), so this stays
+# deliberately lean for a headless image:
+#   * uv (Astral's Python package/venv manager) + lazygit, both small, from pkg;
+#   * oras from its FreeBSD release binary (not in ports);
+#   * helix (hx) + zellij already come from the .user packages:.
+# Dropped on FreeBSD to stay lean: rust + rust-analyzer (the lang/rust port
+# drags in llvm, ~3 GB, which overflowed the bake disk), zig + zls (also
+# pull llvm via the port), yazi (a ~175-package ffmpeg/mesa/poppler/
+# nerd-fonts tree), and taplo + marksman (no port and no FreeBSD upstream
+# binary). The C/C++/Python toolchain is intact (base clang + the .user's
+# cmake/meson/ninja/gmake/python); an operator who wants Rust/Zig can
+# `pkg install rust zig`. None of these are smoketest-gated.
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    nosi_pkg_install uv lazygit
+    uv --version
+
+    # oras (OCI registry CLI): upstream FreeBSD release binary.
+    case "$(uname -m)" in
+        amd64) or_arch=freebsd_amd64 ;;
+        arm64) or_arch=freebsd_arm64 ;;
+        *) nosi_die "unsupported arch $(uname -m) for oras (freebsd)" ;;
+    esac
+    or_ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/oras-project/oras/releases/latest \
+        | sed 's#.*/tag/##' | sed 's/^v//')
+    tmp=$(mktemp -d)
+    curl -fsSL "https://github.com/oras-project/oras/releases/download/v${or_ver}/oras_${or_ver}_${or_arch}.tar.gz" \
+        | tar -xz -C "$tmp"
+    install -m 0755 "$tmp/oras" /usr/local/bin/oras
+    rm -rf "$tmp"
+    oras version
+    nosi_info "step 20-upstream-tools done (freebsd)"
+    exit 0
+fi
+
 arch=$(uname -m)
 
 # ---- uv + uvx (Astral) ----------------------------------------------------

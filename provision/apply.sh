@@ -137,17 +137,26 @@ FINAL_STEPS=(
     99-motd
 )
 
-# FreeBSD critical-path slice (Phase 2a). Only the steps that have a
-# FreeBSD branch today; everything else in BASE_STEPS is Linux-only
-# (DKMS / netplan / grub / podman / snapd / systemd-specific) and stays
-# deferred. Same group semantics as Linux: 05 first (ALWAYS_FIRST), 06
-# presence early, 98/99 last (FINAL_STEPS). FreeBSD has only the headless
-# shape and no derives, so there is no FreeBSD SHAPE_STEPS set.
+# FreeBSD step set. Phase 2a landed the critical path (06/08/09/28);
+# Phase 2b adds the dev tooling + niceties (12/20/21/22) and the
+# clock/inventory steps (30/32), each with a FreeBSD branch. Still
+# Linux-only (no FreeBSD analogue): 10-r8125-dkms, 15-nouveau-blacklist,
+# 23-userspace-pci (vfio/sysfs), 24-podman-setup, 25-iommu-cmdline (grub),
+# 26-daemon-prune (systemd), 27-snapd-disable, 29-rotate-password,
+# 45-nosi-addons. Same group semantics as Linux: 05 first (ALWAYS_FIRST),
+# 06 presence early, 98/99 last (FINAL_STEPS). FreeBSD has only the
+# headless shape and no derives, so there is no FreeBSD SHAPE_STEPS set.
 FREEBSD_BASE_STEPS=(
     06-package-presence
     08-network-dhcp
     09-growroot
+    12-gdb-dashboard
+    20-upstream-tools
+    21-shell-tools
+    22-python-tools
     28-ssh-config
+    30-clock-from-http
+    32-firstboot-inventory
 )
 
 is_freebsd=0

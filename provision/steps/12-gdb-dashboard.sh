@@ -28,6 +28,24 @@
 nosi_info "step 12-gdb-dashboard"
 nosi_require_root
 
+# ---- FreeBSD: gdb is a pkg (base debugger is lldb) ------------------------
+# Install devel/gdb and drop the dashboard at the FreeBSD PREFIX
+# system-gdbinit path (/usr/local/etc/gdb/gdbinit). Same single-file
+# download + sanity grep as the Linux path; no /etc/gdbinit symlink (that
+# is a Fedora-ism).
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    nosi_pkg_install gdb
+    install -d -m 0755 /usr/local/etc/gdb
+    curl -fsSL \
+        https://raw.githubusercontent.com/cyrus-and/gdb-dashboard/master/.gdbinit \
+        -o /usr/local/etc/gdb/gdbinit
+    chmod 0644 /usr/local/etc/gdb/gdbinit
+    grep -q '^python Dashboard.start()' /usr/local/etc/gdb/gdbinit \
+        || nosi_die "downloaded gdb-dashboard does not look like gdb-dashboard"
+    nosi_info "step 12-gdb-dashboard done (freebsd)"
+    exit 0
+fi
+
 install -d -m 0755 /etc/gdb
 curl -fsSL \
     https://raw.githubusercontent.com/cyrus-and/gdb-dashboard/master/.gdbinit \

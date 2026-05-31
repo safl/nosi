@@ -41,6 +41,23 @@
 nosi_info "step 22-python-tools"
 nosi_require_root
 
+# ---- FreeBSD: ruff via pkg; the rest are Python-packaging casualties ------
+# ruff ships a FreeBSD-native binary in ports (a PyPI install would
+# source-build the Rust), so use pkg -- that is the one tool that lands
+# cleanly. The others are deferred on FreeBSD:
+#   * cijoe: uvx/pipx install fails ("Fatal error from uv") because its
+#     deps have no FreeBSD wheels and source-build, and it is not in ports;
+#   * pyright: Node-based, excluded by the no-node policy (agentic-cli
+#     add-on), and FreeBSD has no upstream node for its nodeenv fetch;
+#   * devbind/hugepages/iommu: Linux sysfs/vfio/kernel-cmdline tools with
+#     no FreeBSD analogue.
+# An operator who needs cijoe can install it into a venv by hand.
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    nosi_pkg_install ruff
+    nosi_info "step 22-python-tools done (freebsd)"
+    exit 0
+fi
+
 command -v uvx >/dev/null 2>&1 || nosi_die "uvx not on PATH (step 20 installs uv + uvx)"
 py="$(command -v python3)" || nosi_die "python3 not on PATH"
 

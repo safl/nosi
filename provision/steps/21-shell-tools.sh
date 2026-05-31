@@ -23,6 +23,30 @@
 nosi_info "step 21-shell-tools"
 nosi_require_root
 
+# ---- FreeBSD: system-wide delta pager at the PREFIX gitconfig path --------
+# FreeBSD git reads PREFIX/etc/gitconfig (/usr/local/etc/gitconfig) as its
+# system config, not /etc/gitconfig. fd's binary is already `fd` (no fdfind
+# alias to bridge). The localbin/direnv profile.d snippets are Linux-only:
+# base /etc/profile has no profile.d convention and odus' shell is /bin/sh
+# (direnv ships no POSIX-sh hook), so the portable, valuable piece here is
+# the system-wide delta pager.
+if [ "$NOSI_DISTRO" = "freebsd" ]; then
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/21-shell-tools.sh
+[core]
+    pager = delta
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true
+    line-numbers = true
+[merge]
+    conflictstyle = zdiff3
+' /usr/local/etc/gitconfig 0644
+    nosi_info "step 21-shell-tools done (freebsd)"
+    exit 0
+fi
+
 # ---- fd symlink (Debian/Ubuntu) -------------------------------------------
 
 if [ -x /usr/bin/fdfind ] && [ ! -e /usr/local/bin/fd ]; then

@@ -146,6 +146,11 @@ runcmd:
   - echo '__NOSI_PROVISION_TARBALL__' | openssl base64 -d -A | tar -C /opt/nosi -xpf -
   - PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /usr/local/bin/bash /opt/nosi/provision/apply.sh freebsd-14-headless
 
+  # Trim apply.sh's pkg downloads (gdb + deps, uv, lazygit, ruff) from
+  # /var/cache/pkg: the earlier `pkg clean` ran before apply.sh, so without
+  # this they would ride along in the published image.
+  - pkg clean -aqy
+
   # Wipe nuageinit's state cache before we power off. nuageinit caches
   # the compiled runcmd script at /var/cache/nuageinit/runcmds and will
   # replay it on EVERY subsequent boot if left in place -- the first
