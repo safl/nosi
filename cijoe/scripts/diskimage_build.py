@@ -163,10 +163,20 @@ def main(args, cijoe):
     log.info("Compacting image (qemu-img convert -c)")
     # `-p` (progress) so GHA logs see periodic percentage updates instead of
     # a silent multi-minute gap between the bake VM's poweroff and the
-    # qemu-img info dump that follows. This is the same fix as
-    # img_gz_publish.py applied here, where compaction of a 12 GiB qcow2
-    # down to ~3 GiB is the silent step the operator sees as a hang.
-    err, _ = cijoe.run_local(f"qemu-img convert -p -O qcow2 -c {guest.boot_img} {disk_path}")
+    # qemu-img info dump that follows. Same problem as img_gz_publish.py.
+    #
+    # qemu-img writes the progress bar with carriage returns (\r) to
+    # update in place; cijoe's --monitor / GHA's log capture both
+    # line-buffer, so CR-only updates never flush and the operator sees
+    # silence. Pipe through `tr` to convert each \r into \n so the buffer
+    # flushes per progress tick. `set -o pipefail` keeps qemu-img's
+    # non-zero exit visible despite the pipe; tr itself cannot fail on
+    # this input.
+    err, _ = cijoe.run_local(
+        "bash -o pipefail -c "
+        f'"qemu-img convert -p -O qcow2 -c {guest.boot_img} {disk_path} '
+        "| tr '\\r' '\\n'\""
+    )
     if err:
         log.error(f"Failed compacting image to {disk_path}")
         return err

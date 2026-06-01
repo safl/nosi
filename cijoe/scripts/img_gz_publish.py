@@ -76,10 +76,17 @@ def main(args, cijoe):
     gz_path.parent.mkdir(parents=True, exist_ok=True)
 
     log.info(f"Converting {qcow2_path} -> {raw_path} (raw)")
-    # `-p` (progress) so GHA logs see periodic percentage updates instead of
-    # 30+ silent seconds on the 12 GiB convert. qemu-img writes the bar to
-    # stderr which cijoe captures alongside stdout.
-    err, _ = cijoe.run_local(f"qemu-img convert -p -O raw {qcow2_path} {raw_path}")
+    # `-p` (progress) so GHA logs see periodic percentage updates instead
+    # of 30+ silent seconds on the 12 GiB convert. qemu-img writes the bar
+    # with carriage returns (\r) for in-place updates; cijoe's --monitor /
+    # GHA's log capture line-buffer, so CR-only updates never flush. Pipe
+    # through `tr` to convert \r -> \n per tick. `set -o pipefail` keeps
+    # qemu-img's non-zero exit visible despite the pipe.
+    err, _ = cijoe.run_local(
+        "bash -o pipefail -c "
+        f'"qemu-img convert -p -O raw {qcow2_path} {raw_path} '
+        "| tr '\\r' '\\n'\""
+    )
     if err:
         log.error("Failed converting qcow2 to raw")
         return err
