@@ -133,14 +133,25 @@ def main(args, cijoe):
     key = None
     try:
         key, _key_pub = _gen_ssh_keypair(workdir)
-        seed = _build_seed_iso(workdir, _key_pub.read_text().strip())
+        # NO cloud-init seed. The smoketest's job is to validate the BAKED
+        # image as a downstream consumer sees it -- a fresh boot, no seed
+        # attached. Re-applying any kind of user-data on top would just
+        # paper over bake-time bugs and we have been bitten by exactly that
+        # (cloud-init's users: re-application semantics for an existing
+        # account vary by impl and silently locked / cleared odus's
+        # password). Instead: boot the disk, use the baked odus:odus.321
+        # password to SSH in (= the entry channel a real consumer uses),
+        # then install our per-run pubkey via that password connection so
+        # the rest of the assertions can use key auth.
         overlay = _make_overlay(workdir, qcow2)
-        _boot_overlay(cijoe, overlay, seed, qemu_pidfile, workdir / "serial.log")
+        _boot_overlay(cijoe, overlay, qemu_pidfile, workdir / "serial.log")
 
-        if not _wait_for_ssh_ready(key, SSH_HOST_PORT, args.boot_timeout):
+        if not _wait_for_ssh_password_ready(DEFAULT_PASSWORD, SSH_HOST_PORT, args.boot_timeout):
             log.error("Smoketest VM did not become SSH-ready within the timeout")
             _dump_serial(workdir / "serial.log")
             return errno.ETIMEDOUT
+
+        _install_key_via_password(_key_pub.read_text().strip(), DEFAULT_PASSWORD)
 
         # Pull /etc/nosi-metadata.json (and render a .md alongside) out of
         # the running smoketest VM into the disk dir, so the ORAS push step
@@ -220,60 +231,74 @@ def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
     return key, pub
 
 
-def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
-    # Per-run identity so cloud-init treats this boot as a fresh instance
-    # (the baked image was cloud-init clean'd, so no stale state to fight).
-    iid = f"nosi-smoketest-{os.getpid()}"
-    (workdir / "meta-data").write_text(f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n")
-    # Authorise the per-run key on odus and pin odus's password to the
-    # same baked default. We need BOTH:
-    #
-    #  * `lock_passwd: false` so cloud-init does not lock the password
-    #    on re-application (its default for an existing user with only
-    #    `users:` is true).
-    #  * `hashed_passwd: <baked hash>` because cloud-init's `users:`
-    #    module on a re-applied seed with ONLY `lock_passwd: false`
-    #    behaves inconsistently across implementations: some call
-    #    `usermod --unlock` (preserves the existing hash); others run
-    #    a full update path that clears it. Setting the hash explicitly
-    #    re-asserts the exact value the bake wrote, so the assertion is
-    #    not dancing on cloud-init's undefined-behavior corners.
-    #
-    # The hash is the SHA-512 of "odus.321" with salt "nosiOpRator" --
-    # identical to what every variant's bake .user file already
-    # contains. Verified end-to-end with `openssl passwd -6 -salt
-    # nosiOpRator odus.321`.
-    odus_hash = (
-        '"$6$nosiOpRator'
-        "$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3"
-        'YnkgRpcvOLc2V7nOGpbp/tOyD5M81"'
-    )
-    (workdir / "user-data").write_text(
-        "#cloud-config\n"
-        "users:\n"
-        "  - name: odus\n"
-        "    lock_passwd: false\n"
-        f"    hashed_passwd: {odus_hash}\n"
-        "    ssh_authorized_keys:\n"
-        f"      - {pubkey}\n"
-    )
-    seed = workdir / "smoketest-seed.iso"
-    subprocess.run(
-        [
-            "mkisofs",
-            "-quiet",
-            "-output",
-            str(seed),
-            "-volid",
-            "cidata",
-            "-joliet",
-            "-rock",
-            str(workdir / "user-data"),
-            str(workdir / "meta-data"),
-        ],
-        check=True,
-    )
-    return seed
+def _wait_for_ssh_password_ready(password: str, port: int, timeout: int) -> bool:
+    """Wait until sshd accepts a real password handshake (not just TCP).
+
+    Mirrors the old key-based wait, but exercises the path a downstream
+    consumer hits: password auth as the operator account. A bare TCP probe
+    isn't enough -- the port opens before host keys exist on first boot
+    and `kex_exchange_identification: Connection reset by peer` follows.
+    Drive a no-op ssh in a loop until it actually succeeds.
+    """
+    deadline = time.monotonic() + timeout
+    last_err = "(none)"
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            try:
+                s.connect(("127.0.0.1", port))
+                tcp_open = True
+            except OSError as exc:
+                tcp_open = False
+                last_err = f"tcp: {exc}"
+        if tcp_open:
+            rc, out = _ssh_password(SSH_USER, password, "true")
+            if rc == 0:
+                return True
+            last_err = out or f"exit {rc}"
+        time.sleep(3)
+    log.error(f"_wait_for_ssh_password_ready last error: {last_err}")
+    return False
+
+
+def _install_key_via_password(pubkey: str, password: str) -> None:
+    """SSH in with the baked password and append the per-run pubkey.
+
+    After this returns, the existing key-based helpers (_ssh, scp via
+    SSH_OPTS + -i) work for the remaining assertions. Idempotent: the
+    smoketest VM starts with an empty ~/.ssh on every overlay boot, but
+    we use `mkdir -p` + a fresh write to be safe regardless.
+
+    The pubkey is delivered through the ssh command's stdin so there is
+    no shell quoting between the runner and the VM -- the key string can
+    contain whitespace and special characters without paranoia.
+    """
+    if not shutil.which("sshpass"):
+        raise RuntimeError("sshpass not installed (apt install sshpass)")
+    install_cmd = "mkdir -p ~/.ssh && umask 077 && cat > ~/.ssh/authorized_keys"
+    full = [
+        "sshpass",
+        "-p",
+        password,
+        "ssh",
+        *SSH_OPTS,
+        "-o",
+        "PubkeyAuthentication=no",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "IdentityAgent=none",
+        "-p",
+        str(SSH_HOST_PORT),
+        f"{SSH_USER}@127.0.0.1",
+        install_cmd,
+    ]
+    res = subprocess.run(full, input=pubkey + "\n", capture_output=True, text=True, timeout=30)
+    if res.returncode != 0:
+        raise RuntimeError(
+            f"failed to install per-run pubkey over password auth "
+            f"(exit {res.returncode}): {(res.stderr or res.stdout).strip()}"
+        )
 
 
 def _make_overlay(workdir: Path, backing: Path) -> Path:
@@ -296,7 +321,7 @@ def _make_overlay(workdir: Path, backing: Path) -> Path:
     return overlay
 
 
-def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path) -> None:
+def _boot_overlay(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
     # KVM-accelerated to keep the test under a minute on hosted runners
     # that already enable /dev/kvm for the bake. virtio-net + user-mode
     # networking + hostfwd is the minimum for SSH-from-host.
@@ -304,6 +329,13 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
     # rejects `-nographic` together with `-daemonize` ("cannot be used
     # with -daemonize"); display-none + serial-file gives the same "no
     # UI, log to disk" semantics while staying daemonize-compatible.
+    #
+    # No -cdrom seed.iso: the smoketest validates the BAKED image as a
+    # downstream consumer sees it -- fresh boot, no seed. cloud-init /
+    # nuageinit discovers no NoCloud datasource and exits cleanly; the
+    # baked operator account + sshd state stand. _install_key_via_password
+    # injects the per-run pubkey over the baked password channel after
+    # boot so the remaining assertions can use key auth.
     cmd = (
         "qemu-system-x86_64 "
         "-machine type=q35,accel=kvm "
@@ -311,7 +343,6 @@ def _boot_overlay(cijoe, overlay: Path, seed: Path, pidfile: Path, serial: Path)
         "-display none -monitor none "
         f"-serial file:{serial} "
         f"-drive file={overlay},if=virtio,format=qcow2 "
-        f"-cdrom {seed} "
         f"-netdev user,id=n1,hostfwd=tcp:127.0.0.1:{SSH_HOST_PORT}-:22 "
         "-device virtio-net-pci,netdev=n1 "
         f"-daemonize -pidfile {pidfile}"
@@ -429,58 +460,6 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
         raise RuntimeError(f"extracted metadata.json did not parse: {exc}") from exc
 
     log.info(f"metadata written: {json_local.name}")
-
-
-def _wait_for_ssh_ready(key: Path, port: int, timeout: int) -> bool:
-    """Wait until sshd accepts a real key-auth handshake (not just TCP).
-
-    On first boot the port opens before host keys exist (openssh-server's
-    ssh-keygen unit and cloud-init's cc_ssh race the network stack), so a
-    bare TCP probe would report "ready" while a real ssh would get hit
-    with "kex_exchange_identification: Connection reset by peer". Drive
-    a no-op ssh in a loop until it actually succeeds.
-    """
-    deadline = time.monotonic() + timeout
-    last_err = "(none)"
-    while time.monotonic() < deadline:
-        # TCP probe first; cheap, lets us skip ssh-handshake retries while
-        # qemu is still bringing the guest up.
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
-            try:
-                s.connect(("127.0.0.1", port))
-                tcp_open = True
-            except OSError as exc:
-                tcp_open = False
-                last_err = f"tcp: {exc}"
-        if tcp_open:
-            res = subprocess.run(
-                [
-                    "ssh",
-                    "-i",
-                    str(key),
-                    *SSH_OPTS,
-                    "-o",
-                    "BatchMode=yes",
-                    "-p",
-                    str(port),
-                    f"{SSH_USER}@127.0.0.1",
-                    "true",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if res.returncode == 0:
-                return True
-            last_err = (
-                (res.stderr or res.stdout).strip().splitlines()[-1]
-                if (res.stderr or res.stdout)
-                else f"exit {res.returncode}"
-            )
-        time.sleep(3)
-    log.error(f"_wait_for_ssh_ready last error: {last_err}")
-    return False
 
 
 def _ssh(key: Path, cmd: str) -> tuple[int, str]:
