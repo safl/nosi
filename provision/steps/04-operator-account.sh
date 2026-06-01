@@ -64,12 +64,22 @@ fi
 
 # ---- Linux ----------------------------------------------------------------
 
-# Canonical secondary groups. `sudo` for /etc/sudoers.d (Debian / Ubuntu)
-# or `wheel` (Fedora), but we keep `sudo` because nosi installs the sudo
-# package on every Linux variant. `kvm` so the operator can drive
+# Canonical secondary groups for the sudo-bearing class differ across
+# distros: Debian / Ubuntu use `sudo`, Fedora uses `wheel`. Pick the one
+# that actually exists rather than hardcoding -- usermod -aG against a
+# non-existent group fails the step. `kvm` so the operator can drive
 # /dev/kvm without sudo on bare-metal flashes (matches the headless
-# operator profile).
-groups="sudo"
+# operator profile); skipped on distros that don't have a kvm group.
+groups=""
+for g in sudo wheel; do
+    if getent group "$g" >/dev/null 2>&1; then
+        groups="$g"
+        break
+    fi
+done
+if [ -z "$groups" ]; then
+    nosi_die "no sudo/wheel group present on $NOSI_DISTRO"
+fi
 getent group kvm >/dev/null 2>&1 && groups="$groups,kvm"
 
 if ! getent passwd odus >/dev/null 2>&1; then
