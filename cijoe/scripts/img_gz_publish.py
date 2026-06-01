@@ -76,14 +76,20 @@ def main(args, cijoe):
     gz_path.parent.mkdir(parents=True, exist_ok=True)
 
     log.info(f"Converting {qcow2_path} -> {raw_path} (raw)")
-    err, _ = cijoe.run_local(f"qemu-img convert -O raw {qcow2_path} {raw_path}")
+    # `-p` (progress) so GHA logs see periodic percentage updates instead of
+    # 30+ silent seconds on the 12 GiB convert. qemu-img writes the bar to
+    # stderr which cijoe captures alongside stdout.
+    err, _ = cijoe.run_local(f"qemu-img convert -p -O raw {qcow2_path} {raw_path}")
     if err:
         log.error("Failed converting qcow2 to raw")
         return err
 
     gz = _gzip_cmd()
     log.info(f"Compressing {raw_path} -> {gz_path} ({gz} -{level})")
-    err, _ = cijoe.run_local(f"{gz} -{level} -c {raw_path} > {gz_path}")
+    # `-v` (verbose) on both pigz and stock gzip prints a per-file pacifier
+    # line at end. pigz with `--rsyncable` is sometimes used here but adds
+    # output size with no consumer-side benefit, so stick with plain -v.
+    err, _ = cijoe.run_local(f"{gz} -v -{level} -c {raw_path} > {gz_path}")
     if err:
         log.error("Failed gzip-compressing raw image")
         return err

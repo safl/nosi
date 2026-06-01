@@ -119,8 +119,32 @@ jobs:
           pipx install cijoe
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Build ${{ matrix.variant }}
-        run: make build VARIANT=${{ matrix.variant }}
+      # The build is four discrete cijoe phases; running them as separate
+      # GHA steps gives each its own duration in the run summary AND points
+      # a failure straight at the failing phase rather than at the
+      # 30+ minute aggregate. `cijoe ... <step-name>` invokes just the named
+      # task from cijoe/tasks/build.yaml; all four still emit into the same
+      # cijoe-output/ tree, which the upload step below picks up.
+
+      - name: Bake ${{ matrix.variant }} (cloud-init -> apply.sh -> poweroff)
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml diskimage_build
+
+      - name: Publish .img.gz (qcow2 -> raw -> gzip)
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml img_gz_publish
+
+      - name: Derive shapes (desktop / wsl / docker on supported bases)
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml derive_publish
+
+      - name: Smoketest (boot overlay + assert)
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml image_smoketest
 
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
