@@ -99,6 +99,7 @@ ALWAYS_FIRST=(
 # later step. Not re-run in the derive (already done in the base bake;
 # several aren't chroot-safe to re-run).
 BASE_STEPS=(
+    04-operator-account
     06-package-presence
     07-odus-sudoers
     08-network-dhcp
@@ -117,6 +118,7 @@ BASE_STEPS=(
     28-ssh-config
     29-rotate-password
     30-clock-from-http
+    31-root-lock
     32-firstboot-inventory
     45-nosi-addons
 )
@@ -148,6 +150,7 @@ FINAL_STEPS=(
 # 06 presence early, 98/99 last (FINAL_STEPS). FreeBSD has only the
 # headless shape and no derives, so there is no FreeBSD SHAPE_STEPS set.
 FREEBSD_BASE_STEPS=(
+    04-operator-account
     06-package-presence
     07-odus-sudoers
     08-network-dhcp
@@ -158,6 +161,7 @@ FREEBSD_BASE_STEPS=(
     22-python-tools
     28-ssh-config
     30-clock-from-http
+    31-root-lock
     32-firstboot-inventory
 )
 
