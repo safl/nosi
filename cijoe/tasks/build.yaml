@@ -3,31 +3,31 @@ doc: |
   nosi image build
   ================
 
-  1. Download the upstream cloud image for the variant.
-  2. Resize the boot disk so cloud-init has room to install packages.
-  3. Build a NoCloud seed.iso from the variant's
-     cloudinit-<shape>-<distro>-<version>.user in nosi-media/auxiliary/
-     + the shared meta-data.
-  4. Boot QEMU; cloud-init installs the package set, sets up the default
-     `odus` operator account, strips SSH host keys and machine-id, and
-     powers off.
-  5. Compact and checksum the baked qcow2.
-  6. ``img_gz_publish`` converts qcow2 -> raw -> gzip-compressed .img.gz
-     with a sha256 sidecar, for direct ``dd`` flashing.
-  7. ``derive_publish`` builds the derived-shape artifacts from the
-     baked headless rootfs (no re-bake). For each ``[[...derive]]``
-     entry in the base image's config it copies the base qcow2, chroots
-     in, runs ``apply.sh <derived-variant> --shape-only`` (installs the
-     shape's packages + config, re-stamps identity), optionally strips
+  1. ``diskimage_build``: download the upstream cloud image, resize boot
+     disk, build a NoCloud seed.iso from the variant's .user, boot QEMU
+     and let cloud-init run apply.sh. Compact + checksum the baked qcow2.
+  2. ``image_smoketest``: boot the baked qcow2 on a copy-on-write overlay
+     (no seed attached, so the boot mirrors what a downstream consumer
+     sees), SSH in as odus via the baked password, install a per-run key
+     over that channel, then assert the published contract -- metadata
+     JSON, motd rendered, tools on PATH, sudo works, root login blocked,
+     etc. Failure here fails the whole build so neither the .img.gz nor
+     any derives ever get packed.
+  3. ``img_gz_pack``: convert qcow2 -> raw -> gzip-compressed .img.gz with
+     a sha256 sidecar, for direct ``dd`` flashing.
+  4. ``derive_pack``: build the derived-shape artifacts from the baked
+     headless rootfs (no re-bake). For each ``[[...derive]]`` entry in
+     the base config it copies the base qcow2, chroots in, runs
+     ``apply.sh <derived-variant> --shape-only``, optionally strips
      kernel/boot/cloud-init, and repackages: bootable .img.gz (desktop),
      rootfs .tar.gz (wsl), or an OCI image via ``docker import``
      (docker). No-op for a base with no ``derive`` list.
-  8. ``image_smoketest`` boots the baked qcow2 on a copy-on-write
-     overlay, SSHes in as odus via a per-run key seeded by cloud-init,
-     and asserts: /etc/nosi-release populated, motd rendered, the
-     awesome tools on PATH, sshd enabled, ModemManager inactive,
-     snapd masked (ubuntu). Failure here fails the whole build so the
-     GHCR push is skipped.
+
+  Smoketest runs SECOND, not last, so a bad bake fails fast and we don't
+  waste minutes packing .img.gz + deriving shapes from a broken base.
+  Note "pack", not "publish": these steps produce local artifacts; the
+  push to GHCR is a separate GHA workflow step gated on this whole task
+  passing.
 
   Variant is selected via ``-c configs/<variant>.toml``; ``[nosi].variant``
   drives the image-name lookup and download URLs.
@@ -36,11 +36,11 @@ steps:
 - name: diskimage_build
   uses: diskimage_build
 
-- name: img_gz_publish
-  uses: img_gz_publish
-
-- name: derive_publish
-  uses: derive_publish
-
 - name: image_smoketest
   uses: image_smoketest
+
+- name: img_gz_pack
+  uses: img_gz_pack
+
+- name: derive_pack
+  uses: derive_pack

@@ -9,7 +9,7 @@
 # Installed HERE rather than in cloud-init so `apply.sh <distro>-wsl`
 # fully defines the wsl shape: the derive-from-headless build runs this
 # one step on the baked headless rootfs (then strips kernel/boot/
-# cloud-init in derive_publish), and a vanilla-VM operator reaches the
+# cloud-init in derive_pack), and a vanilla-VM operator reaches the
 # same result. Ubuntu (apt) is the only wsl distro today; names are apt.
 
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"

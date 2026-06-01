@@ -18,7 +18,7 @@ Reads the ``publish`` section of ``system-imaging.images.<image_name>``:
   publish.gz_path     final .img.gz path
   publish.gzip_level  compression level (1..9; 9 default)
 
-Adapted from github.com/safl/bty's cijoe/scripts/img_gz_publish.py.
+Adapted from github.com/safl/bty's cijoe/scripts/img_gz_pack.py.
 
 Retargetable: False
 """

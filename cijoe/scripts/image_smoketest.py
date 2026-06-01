@@ -2,7 +2,7 @@
 Smoke-test the baked qcow2 by booting it and asserting via SSH
 ==============================================================
 
-Runs after ``img_gz_publish`` and ``derive_publish``. Boots
+Runs after ``img_gz_pack`` and ``derive_pack``. Boots
 the just-baked headless base image inside qemu on a copy-on-write overlay
 (the published artifact stays untouched and first-boot characteristics are
 preserved),

@@ -163,7 +163,7 @@ def main(args, cijoe):
     log.info("Compacting image (qemu-img convert -c)")
     # `-p` (progress) so GHA logs see periodic percentage updates instead of
     # a silent multi-minute gap between the bake VM's poweroff and the
-    # qemu-img info dump that follows. Same problem as img_gz_publish.py.
+    # qemu-img info dump that follows. Same problem as img_gz_pack.py.
     #
     # qemu-img writes the progress bar with carriage returns (\r) to
     # update in place; cijoe's --monitor / GHA's log capture both

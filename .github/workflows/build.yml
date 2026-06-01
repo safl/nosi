@@ -25,7 +25,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     # The matrix is per-BASE (headless). Each leg bakes its headless base
-    # once, then derive_publish builds that base's derived shapes from the
+    # once, then derive_pack builds that base's derived shapes from the
     # same qcow2 in-job (no re-bake, no cross-job artifact passing): the
     # ubuntu-2604 leg also emits wsl + docker, the fedora-44 leg also emits
     # desktop. The derive's qemu-nbd + chroot + strip + (docker import /
@@ -81,7 +81,7 @@ jobs:
         # Hosted ubuntu-24.04 runners leave only ~14 GiB free on / but mount
         # a ~70 GiB ephemeral disk at /mnt. The build writes the qcow2, the
         # raw intermediate, the .img.gz and (wsl shape) the WSL tarball under
-        # ~/system_imaging; img_gz_publish's qcow2 -> raw -> gzip needs all
+        # ~/system_imaging; img_gz_pack's qcow2 -> raw -> gzip needs all
         # three on disk at once and overruns /. Point ~/system_imaging at
         # /mnt so the multi-GiB artifacts land on the roomy disk. Done
         # before the cache restore so the cached cloud image lands there too.
@@ -119,32 +119,31 @@ jobs:
           pipx install cijoe
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      # The build is four discrete cijoe phases; running them as separate
-      # GHA steps gives each its own duration in the run summary AND points
-      # a failure straight at the failing phase rather than at the
-      # 30+ minute aggregate. `cijoe ... <step-name>` invokes just the named
-      # task from cijoe/tasks/build.yaml; all four still emit into the same
-      # cijoe-output/ tree, which the upload step below picks up.
+      # Four discrete cijoe phases as separate GHA steps so each has its
+      # own duration in the run summary and a failure pinpoints the phase.
+      # Smoketest runs SECOND (right after Bake): if the bake is bad we
+      # fail before spending minutes packing and deriving from a broken
+      # base. Pack and Derive only run on a smoketest-passed image.
 
-      - name: Bake ${{ matrix.variant }} (cloud-init -> apply.sh -> poweroff)
+      - name: Bake
         run: |
           cd cijoe && cijoe tasks/build.yaml --monitor \
             -c configs/${{ matrix.variant }}.toml diskimage_build
 
-      - name: Publish .img.gz (qcow2 -> raw -> gzip)
-        run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
-            -c configs/${{ matrix.variant }}.toml img_gz_publish
-
-      - name: Derive shapes (desktop / wsl / docker on supported bases)
-        run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
-            -c configs/${{ matrix.variant }}.toml derive_publish
-
-      - name: Smoketest (boot overlay + assert)
+      - name: Smoketest
         run: |
           cd cijoe && cijoe tasks/build.yaml --monitor \
             -c configs/${{ matrix.variant }}.toml image_smoketest
+
+      - name: Pack .img.gz
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml img_gz_pack
+
+      - name: Pack derived shapes
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor \
+            -c configs/${{ matrix.variant }}.toml derive_pack
 
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
@@ -247,14 +246,14 @@ jobs:
           ls -lh "${report}"
 
       - name: Publish base + derived shapes to GHCR
-        # One step pushes the headless base AND every shape derive_publish
+        # One step pushes the headless base AND every shape derive_pack
         # produced for it. Disk-image (.img.gz) + wsl-rootfs (.tar.gz) go
         # via oras (each its own repo ghcr.io/<repo>/<variant>, so bty's
         # flashable catalog stays scoped to real disk images). The docker
-        # shape is a real OCI image (docker import in derive_publish), so
+        # shape is a real OCI image (docker import in derive_pack), so
         # it's `docker push`ed for `docker pull` / GHA `container:` use.
         # Annotations come from each artifact's OWN metadata.json (the base
-        # smoketest extracted the base's; derive_publish exported each
+        # smoketest extracted the base's; derive_pack exported each
         # derived one), description from variants.yml via gen_catalog.
         if: env.PUBLISH == 'true'
         env:
@@ -351,7 +350,7 @@ jobs:
                       "$($gc --describe "${v}")"
                   ;;
               oci)
-                  # Real OCI image (docker import in derive_publish): docker
+                  # Real OCI image (docker import in derive_pack): docker
                   # push so consumers `docker pull` / use as a GHA container:.
                   # Title set as a LABEL at import; the catalog carries the
                   # use-case prose.

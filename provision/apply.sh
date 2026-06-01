@@ -28,7 +28,7 @@
 # Layered build model: the headless base bakes once (full run: BASE +
 # SHAPE + FINAL; for headless no SHAPE step does anything). desktop /
 # wsl / docker are DERIVED from that baked rootfs -- cijoe's
-# derive_publish copies the base qcow2, chroots in, and runs
+# derive_pack copies the base qcow2, chroots in, and runs
 # `apply.sh <derived-variant> --shape-only`, which skips BASE_STEPS
 # (already done in the base, and several aren't chroot-safe to re-run:
 # the clock step would set the host clock, dkms/uname see the host
@@ -127,7 +127,7 @@ BASE_STEPS=(
 # others, so running the whole list applies exactly one shape's work.
 # The docker shape has no step here: its tools (cijoe + qemu) are in
 # the base, so "docker" is purely a packaging derivation (strip +
-# OCI import) handled by cijoe/scripts/derive_publish.py.
+# OCI import) handled by cijoe/scripts/derive_pack.py.
 SHAPE_STEPS=(
     50-desktop-stack
     55-wsl-tools
