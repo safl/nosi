@@ -230,8 +230,20 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     # offers an interactive prompt on WSL), so PAM doesn't block key
     # auth on a non-TTY session and no chage workaround is needed.
     # No power_state -- the VM stays up for the assertion run.
+    #
+    # `lock_passwd: false` is LOAD-BEARING here: cloud-init's `users:`
+    # module defaults `lock_passwd` to True, which would LOCK odus's
+    # baked password on every smoketest boot. That silently neuters the
+    # password-auth assertion below (the key we just added still works,
+    # so the rest of the smoketest looks healthy). Keep the baked
+    # `hashed_passwd` intact by overriding the default.
     (workdir / "user-data").write_text(
-        f"#cloud-config\nusers:\n  - name: odus\n    ssh_authorized_keys:\n      - {pubkey}\n"
+        "#cloud-config\n"
+        "users:\n"
+        "  - name: odus\n"
+        "    lock_passwd: false\n"
+        "    ssh_authorized_keys:\n"
+        f"      - {pubkey}\n"
     )
     seed = workdir / "smoketest-seed.iso"
     subprocess.run(
