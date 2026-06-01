@@ -225,23 +225,35 @@ def _build_seed_iso(workdir: Path, pubkey: str) -> Path:
     # (the baked image was cloud-init clean'd, so no stale state to fight).
     iid = f"nosi-smoketest-{os.getpid()}"
     (workdir / "meta-data").write_text(f"instance-id: {iid}\nlocal-hostname: nosi-smoketest\n")
-    # Authorise the per-run key on odus. Step 29 doesn't force a
-    # password rotation (it only marks the system as on the default and
-    # offers an interactive prompt on WSL), so PAM doesn't block key
-    # auth on a non-TTY session and no chage workaround is needed.
-    # No power_state -- the VM stays up for the assertion run.
+    # Authorise the per-run key on odus and pin odus's password to the
+    # same baked default. We need BOTH:
     #
-    # `lock_passwd: false` is LOAD-BEARING here: cloud-init's `users:`
-    # module defaults `lock_passwd` to True, which would LOCK odus's
-    # baked password on every smoketest boot. That silently neuters the
-    # password-auth assertion below (the key we just added still works,
-    # so the rest of the smoketest looks healthy). Keep the baked
-    # `hashed_passwd` intact by overriding the default.
+    #  * `lock_passwd: false` so cloud-init does not lock the password
+    #    on re-application (its default for an existing user with only
+    #    `users:` is true).
+    #  * `hashed_passwd: <baked hash>` because cloud-init's `users:`
+    #    module on a re-applied seed with ONLY `lock_passwd: false`
+    #    behaves inconsistently across implementations: some call
+    #    `usermod --unlock` (preserves the existing hash); others run
+    #    a full update path that clears it. Setting the hash explicitly
+    #    re-asserts the exact value the bake wrote, so the assertion is
+    #    not dancing on cloud-init's undefined-behavior corners.
+    #
+    # The hash is the SHA-512 of "odus.321" with salt "nosiOpRator" --
+    # identical to what every variant's bake .user file already
+    # contains. Verified end-to-end with `openssl passwd -6 -salt
+    # nosiOpRator odus.321`.
+    odus_hash = (
+        '"$6$nosiOpRator'
+        "$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3"
+        'YnkgRpcvOLc2V7nOGpbp/tOyD5M81"'
+    )
     (workdir / "user-data").write_text(
         "#cloud-config\n"
         "users:\n"
         "  - name: odus\n"
         "    lock_passwd: false\n"
+        f"    hashed_passwd: {odus_hash}\n"
         "    ssh_authorized_keys:\n"
         f"      - {pubkey}\n"
     )
