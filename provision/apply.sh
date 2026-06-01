@@ -100,6 +100,7 @@ ALWAYS_FIRST=(
 # several aren't chroot-safe to re-run).
 BASE_STEPS=(
     06-package-presence
+    07-odus-sudoers
     08-network-dhcp
     09-growroot
     10-r8125-dkms
@@ -148,6 +149,7 @@ FINAL_STEPS=(
 # headless shape and no derives, so there is no FreeBSD SHAPE_STEPS set.
 FREEBSD_BASE_STEPS=(
     06-package-presence
+    07-odus-sudoers
     08-network-dhcp
     09-growroot
     12-gdb-dashboard
