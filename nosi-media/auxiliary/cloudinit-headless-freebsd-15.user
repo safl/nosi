@@ -99,6 +99,19 @@ runcmd:
   - pw usermod odus -u 1000
   - chown -R 1000:1000 /home/odus
 
+  # nuageinit honors the top-level `users:` block's `name`, `uid`, `groups`
+  # and `hashed_passwd`, but NOT the per-user `sudo:` field that Linux
+  # cloud-init writes to /etc/sudoers.d/. Without an explicit sudoers
+  # drop-in, odus is in `wheel` (FreeBSD's sudo group) but has no
+  # NOPASSWD authorisation, so `sudo -n true` fails and every downstream
+  # consumer that relies on passwordless sudo is broken. Write the drop-in
+  # directly. `install -d` is idempotent on `apply.sh` re-runs; the
+  # single-line `sh -c` works around nuageinit's no-multi-line runcmd
+  # limitation; chmod 0440 matches sudo's required mode.
+  - install -d -m 0755 /usr/local/etc/sudoers.d
+  - sh -c 'echo "odus ALL=(ALL) NOPASSWD: ALL" > /usr/local/etc/sudoers.d/odus'
+  - chmod 0440 /usr/local/etc/sudoers.d/odus
+
   # Lock root so the only login channel is odus (matches Linux variants).
   - pw lock root
 
