@@ -124,25 +124,32 @@ jobs:
       # Smoketest runs SECOND (right after Bake): if the bake is bad we
       # fail before spending minutes packing and deriving from a broken
       # base. Pack and Derive only run on a smoketest-passed image.
+      #
+      # `--tag <name>` per invocation prefixes the archive directory cijoe
+      # writes to on workflow end. Without it, two cijoe runs that finish
+      # in the same wall-clock second land on the same
+      # `cijoe-archive/<YYYY-MM-DD_HH:MM:SS>` path and the second
+      # `os.makedirs(archive)` raises FileExistsError. With per-step tags
+      # the paths never collide.
 
       - name: Bake
         run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag bake \
             -c configs/${{ matrix.variant }}.toml diskimage_build
 
       - name: Smoketest
         run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag smoketest \
             -c configs/${{ matrix.variant }}.toml image_smoketest
 
       - name: Pack .img.gz
         run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-img \
             -c configs/${{ matrix.variant }}.toml img_gz_pack
 
       - name: Pack derived shapes
         run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor \
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-derive \
             -c configs/${{ matrix.variant }}.toml derive_pack
 
       - name: Show built-image sizes
