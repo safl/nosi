@@ -161,7 +161,12 @@ def main(args, cijoe):
     disk_path = Path(disk["path"])
     disk_path.parent.mkdir(parents=True, exist_ok=True)
     log.info("Compacting image (qemu-img convert -c)")
-    err, _ = cijoe.run_local(f"qemu-img convert -O qcow2 -c {guest.boot_img} {disk_path}")
+    # `-p` (progress) so GHA logs see periodic percentage updates instead of
+    # a silent multi-minute gap between the bake VM's poweroff and the
+    # qemu-img info dump that follows. This is the same fix as
+    # img_gz_publish.py applied here, where compaction of a 12 GiB qcow2
+    # down to ~3 GiB is the silent step the operator sees as a hang.
+    err, _ = cijoe.run_local(f"qemu-img convert -p -O qcow2 -c {guest.boot_img} {disk_path}")
     if err:
         log.error(f"Failed compacting image to {disk_path}")
         return err
