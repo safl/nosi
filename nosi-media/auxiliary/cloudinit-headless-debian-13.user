@@ -154,6 +154,8 @@ packages:
   - passt                # /usr/bin/pasta for podman rootless networking
   - podman
   - podman-docker
+  - podman-compose       # `podman compose` provider; without it the wrapper
+                         # dies with "looking up compose provider failed"
   - skopeo
   # hardware & storage
   - dmidecode

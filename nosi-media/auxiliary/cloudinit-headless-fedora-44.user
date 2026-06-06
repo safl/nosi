@@ -127,6 +127,8 @@ packages:
   - passt
   - podman
   - podman-docker
+  - podman-compose       # `podman compose` provider; without it the wrapper
+                         # dies with "looking up compose provider failed"
   - skopeo
   - dmidecode
   - hdparm
