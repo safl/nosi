@@ -1,9 +1,27 @@
 # Handoff: bake bty-bootstrap defaults into nosi images
 
-**Status:** open. Real-world reproduction on a fresh nosi host
-(2026-06-06, `bty-server` at 10.20.30.200). Two operator detours
-during the v0.36.0 bty container-deploy bootstrap; both are nosi-side
-gaps, not bty-side bugs.
+**Status:** addressed (2026-06-06). Both gaps closed in the provision
+tree; needs a re-bake + the verify run below to confirm, then notify
+the bty side so its workarounds can be retired. Real-world reproduction
+on a fresh nosi host (`bty-server` at 10.20.30.200). Two operator
+detours during the v0.36.0 bty container-deploy bootstrap; both are
+nosi-side gaps, not bty-side bugs.
+
+## What changed
+
+- **Editor default** -- `provision/steps/21-shell-tools.sh` now sets
+  `hx` as git `core.editor` (in the system `/etc/gitconfig` /
+  FreeBSD `/usr/local/etc/gitconfig` it already manages) and writes
+  `/etc/profile.d/nosi-editor.sh` exporting `EDITOR`/`GIT_EDITOR=hx`.
+  Implemented as system defaults (`/etc/gitconfig` + `/etc/profile.d`)
+  rather than the per-user `git config --global` Problem 1 suggests, so
+  they survive operator-account recreation. helix (`hx`) is already
+  baked by `20-upstream-tools.sh`, as Problem 1 now notes.
+- **Compose provider** -- `podman-compose` added to the `packages:`
+  block of all four Linux `.user` files (next to `podman`, same distro
+  source as podman itself). `24-podman-setup.sh` now asserts the
+  provider is on PATH so a missing/renamed package fails the bake loudly
+  instead of surfacing at first `podman compose up`.
 
 ## Problem 1 -- `$EDITOR` is unset on a fresh nosi host
 
