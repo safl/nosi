@@ -25,11 +25,11 @@ by writing `"${EDITOR:-vi}"`, but that fallback is belt-and-braces.
 The right fix is on the nosi side: ship every image with the user's
 actual editor preference baked in.
 
-**Action:**
+**Action:** Helix (``hx``) is already bundled in nosi images, so
+the only gap is the env-var + git-config defaults pointing at it:
 
 ```sh
 # In cloud-init runcmd, or the equivalent first-boot hook:
-apt-get install -y helix                      # Helix ('hx') is the user's editor
 echo 'EDITOR=hx'         >> /etc/environment
 echo 'GIT_EDITOR=hx'     >> /etc/environment
 # Optionally also drop a /etc/profile.d/editor.sh with the same.
