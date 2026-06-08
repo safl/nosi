@@ -182,6 +182,14 @@ packages:
   - ovmf
   - qemu-system-x86
   - qemu-utils
+  # Cross-arch user-mode emulation: the static qemu-<arch> interpreters +
+  # binfmt registrations so the kernel transparently runs foreign-arch
+  # binaries (arm64 in an x86 chroot, `podman --platform`, etc.).
+  # binfmt-support owns the boot-time registration. Complements qemu-system-x86
+  # (system emulation for cijoe guests) and makes `make build-rpi` work from an
+  # x86 host / the ubuntu-2604-wsl shape with no extra setup.
+  - qemu-user-static
+  - binfmt-support
   # cloud-init seed tooling: cloud-localds (cloud-image-utils) + mkisofs
   # (genisoimage) let an on-target cijoe build a NoCloud seed.iso to boot
   # cloud-init guests -- the docker bootstrap shape's job, and any guest
