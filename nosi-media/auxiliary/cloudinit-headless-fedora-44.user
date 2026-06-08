@@ -149,6 +149,12 @@ packages:
   - edk2-ovmf
   - qemu-img
   - qemu-system-x86-core
+  # Cross-arch user-mode emulation: the static qemu-<arch> interpreters +
+  # binfmt registrations so the kernel transparently runs foreign-arch
+  # binaries (arm64 in an x86 chroot, `podman --platform`, etc.). Fedora
+  # registers via systemd-binfmt (no binfmt-support package -- that's
+  # Debian-only), so the single qemu-user-static metapackage is the whole fix.
+  - qemu-user-static
   # cloud-init seed tooling: cloud-localds (cloud-utils) + mkisofs
   # (genisoimage) let an on-target cijoe build a NoCloud seed.iso to boot
   # cloud-init guests -- the docker bootstrap shape's job, and any guest
