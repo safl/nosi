@@ -28,15 +28,17 @@ from cijoe.core.misc import download
 from cijoe.qemu.wrapper import Guest
 from userdata_render import render as render_userdata
 
-# Bake-time disk size for the build VM. The cloud image grows to fill, we
-# install the nosi package set (~1 GB), then trim caches. 12 GiB gives plenty
-# of transient headroom for apt/dnf working space. The rootfs is expanded
-# to the operator's actual disk on first boot by nosi-growroot.service
-# (provision/steps/09-growroot.sh) -- NOT by cloud-init's growpart, which
-# never runs on a flashed bare-metal box (no datasource => cloud-init
-# disabled); cloud-init's growpart covers only this build VM and
-# datasource-backed cloud VMs.
-DISK_SIZE = "12G"
+# Bake-time disk size for the build VM. The cloud image grows to fill it, we
+# install the nosi package set + upstream tools, then trim caches. 8 GiB is
+# enough transient headroom for apt/dnf working space (peak is roughly 6-7 GiB
+# across package_upgrade plus the install) while keeping the flashed raw image
+# about half what a 12 GiB disk produced, so `gunzip | dd` moves far fewer
+# bytes on every flash. The rootfs is expanded to the operator's actual disk
+# on first boot by nosi-growroot.service (provision/steps/09-growroot.sh), not
+# by cloud-init's growpart (which never runs on a flashed bare-metal box: no
+# datasource, so cloud-init self-disables; growpart covers only this build VM
+# and datasource-backed cloud VMs).
+DISK_SIZE = "8G"
 
 
 def add_args(parser: ArgumentParser):
