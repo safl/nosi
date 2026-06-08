@@ -68,6 +68,7 @@ packages:
   # `lldb-dap` binary used for DAP debugging ships with base lldb.
   # baseline tools (per user-memory: must be pre-installed)
   - btop
+  - fastfetch            # system info summary (maintained C successor to neofetch)
   - helix                # binary is /usr/local/bin/hx
   - zellij
   # productivity / shell quality of life

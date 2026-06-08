@@ -79,6 +79,7 @@ packages:
   - systemd-timesyncd
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
+  - fastfetch            # system info summary (maintained C successor to neofetch)
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
   - fzf
