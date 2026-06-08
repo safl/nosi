@@ -54,6 +54,7 @@ import errno
 import json
 import logging as log
 import os
+import re
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -103,6 +104,7 @@ def main(args, cijoe):
     )
     if rc:
         return rc
+    _shrink_image(cijoe, disk_path)
 
     # ---- 3. derived shapes (desktop) from the baked headless .img ----------
     for entry in image.get("derive", []) or []:
@@ -120,13 +122,14 @@ def main(args, cijoe):
             src_img=disk_path,  # copy of the baked headless image
             dst_img=d_disk,
             variant=d_variant,
-            grow=d_image.get("grow"),  # usually None: headless already grown
+            grow=d_image.get("grow", "8G"),  # grow for the desktop install
             packages_path=None,  # shape step owns its own installs
             version=version,
             shape_only=True,
         )
         if rc:
             return rc
+        _shrink_image(cijoe, d_disk)
 
     return 0
 
@@ -403,6 +406,87 @@ def _grow_partition(cijoe, loopdev: str, root_part: str) -> int:
         log.error("resize2fs failed")
         return err
     return 0
+
+
+def _shrink_image(cijoe, img: Path) -> None:
+    """Shrink the ext4 root + its partition down to the used size (plus a
+    margin) and truncate the image file, so the published .img is compact
+    (it bakes large for provisioning headroom but ships small).
+    nosi-growroot expands it back to the full SD/USB on first boot.
+
+    Safe degradation: every step bails out on failure leaving the full-size
+    image, and the partition is resized to EXACTLY the shrunk filesystem
+    (never smaller) with the truncation padded past the partition end, so the
+    worst case is "not shrunk", never a clipped filesystem or bad table."""
+    loopdev = _losetup_attach(cijoe, img)
+    if not loopdev:
+        log.warning(f"shrink: losetup failed for {img.name}; leaving full size")
+        return
+    new_bytes = None
+    try:
+        root_part, _ = _partitions(cijoe, loopdev)
+        if not root_part:
+            log.warning(f"shrink: no ext4 root on {img.name}; leaving full size")
+            return
+        partnum = root_part[len(loopdev) :].lstrip("p")
+        cijoe.run_local(f"sudo e2fsck -p -f {root_part} >/dev/null 2>&1 || true")
+        est = _resize2fs_estimate(cijoe, root_part)
+        if est is None:
+            log.warning(f"shrink: cannot estimate fs min for {img.name}; leaving full size")
+            return
+        target_blocks = est + 65536  # + 256 MiB headroom (4 KiB blocks)
+        err, _ = cijoe.run_local(f"sudo resize2fs {root_part} {target_blocks} >/dev/null 2>&1")
+        if err:
+            log.warning(f"shrink: resize2fs failed for {img.name}; leaving full size")
+            return
+        start = _partition_start_sector(cijoe, loopdev, partnum)
+        if start is None:
+            log.warning(f"shrink: cannot read partition start for {img.name}; leaving full size")
+            return
+        part_sectors = target_blocks * 8  # 4 KiB block = 8 x 512-byte sectors
+        # Rewrite partition <partnum>'s size, keeping its start (sfdisk -N).
+        err, _ = cijoe.run_local(
+            f"printf ',{part_sectors}\\n' | "
+            f"sudo sfdisk -N {partnum} --no-reread -f {loopdev} >/dev/null 2>&1"
+        )
+        if err:
+            log.warning(f"shrink: sfdisk resize failed for {img.name}; leaving full size")
+            return
+        # +1 MiB tail past the partition end so the truncation never clips it.
+        new_bytes = (start + part_sectors) * 512 + (1 << 20)
+    finally:
+        cijoe.run_local(f"sudo losetup -d {loopdev} 2>/dev/null || true")
+    if new_bytes:
+        cijoe.run_local(f"truncate -s {new_bytes} {img}")
+        log.info(f"shrink: {img.name} -> {new_bytes // (1 << 20)} MiB")
+
+
+def _resize2fs_estimate(cijoe, part: str) -> int | None:
+    """`resize2fs -P` estimated minimum filesystem size, in fs blocks."""
+    out_file = Path(f"/tmp/nosi-rpi-resize-{os.getpid()}")
+    try:
+        cijoe.run_local(f"sudo resize2fs -P {part} > {out_file} 2>&1")
+        text = out_file.read_text() if out_file.exists() else ""
+    finally:
+        out_file.unlink(missing_ok=True)
+    m = re.search(r"[Ee]stimated minimum size of the filesystem:\s*(\d+)", text)
+    return int(m.group(1)) if m else None
+
+
+def _partition_start_sector(cijoe, loopdev: str, partnum: str) -> int | None:
+    """Start sector of partition <partnum>, parsed from `sfdisk -d`."""
+    out_file = Path(f"/tmp/nosi-rpi-sfdisk-{os.getpid()}")
+    try:
+        cijoe.run_local(f"sudo sfdisk -d {loopdev} > {out_file} 2>/dev/null")
+        text = out_file.read_text() if out_file.exists() else ""
+    finally:
+        out_file.unlink(missing_ok=True)
+    for line in text.splitlines():
+        if line.lstrip().startswith(f"{loopdev}p{partnum} "):
+            m = re.search(r"start=\s*(\d+)", line)
+            if m:
+                return int(m.group(1))
+    return None
 
 
 def _losetup_attach(cijoe, img: Path) -> str | None:
