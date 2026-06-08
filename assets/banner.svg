@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 312 196" font-family="ui-monospace, 'JetBrains Mono', Menlo, Monaco, Consolas, 'Courier New', monospace">
+  <!-- Catppuccin Mocha base panel with rounded corners + faint lavender hairline -->
+  <rect x="0" y="0" width="312" height="196" rx="14" fill="#1e1e2e"/>
+  <rect x="0.75" y="0.75" width="310.5" height="194.5" rx="13.25" fill="none" stroke="#b4befe" stroke-opacity="0.12" stroke-width="1.5"/>
+
+  <!-- NOSI wordmark: ANSI-Shadow block art, cool Mocha gradient top-to-bottom -->
+  <g xml:space="preserve" font-size="16" font-weight="700" text-anchor="middle">
+    <text x="156" y="40" fill="#cba6f7">███╗   ██╗ ██████╗ ███████╗██╗</text>
+    <text x="156" y="59" fill="#b4befe">████╗  ██║██╔═══██╗██╔════╝██║</text>
+    <text x="156" y="78" fill="#89b4fa">██╔██╗ ██║██║   ██║███████╗██║</text>
+    <text x="156" y="97" fill="#74c7ec">██║╚██╗██║██║   ██║╚════██║██║</text>
+    <text x="156" y="116" fill="#89dceb">██║ ╚████║╚██████╔╝███████║██║</text>
+    <text x="156" y="135" fill="#94e2d5">╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝</text>
+  </g>
+
+  <!-- Italic peach tagline: warm pop against the cool wordmark -->
+  <text x="156" y="170" font-size="13" font-style="italic" fill="#fab387" text-anchor="middle">Nic(h)e Operating System Images</text>
+</svg>
