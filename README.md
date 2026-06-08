@@ -44,6 +44,12 @@ under `cijoe/workflows/`. **`freebsd-<N>-headless`** variants run the
 same shared provision chain (delivered to FreeBSD's nuageinit as a
 base64 tarball since it has no `write_files`); they are C/C++/Python
 focused, with Rust/Zig opt-in via `pkg install` to keep llvm out.
+**`rpios-13-{headless,desktop}`** target the Raspberry Pi 4 + 5 (arm64,
+one image for both): since Raspberry Pi OS does not boot in a generic
+QEMU `virt` machine, these are not QEMU-baked but customized in place --
+the official image is loop-mounted and the same provision chain runs in
+a chroot (`make build-rpi`) -- so the result keeps the Foundation
+kernel / firmware / bootloader and flashes straight to SD/USB.
 
 For the up-to-date list of variants, baked tool versions, default
 credentials, pull/flash recipes, and full package inventories see the
@@ -62,6 +68,12 @@ Local builds need `qemu-system-x86_64` + KVM accessible. Deriving the
 desktop / wsl / docker shapes additionally needs `sudo` for `qemu-nbd`
 attach + chroot (and `docker` for the docker shape) -- any modern Linux
 host with the loadable `nbd` kernel module fits the bill.
+
+The Raspberry Pi image is built differently -- `make build-rpi` -- by
+loop-mounting the official Raspberry Pi OS image and running the
+provision chain in a chroot. Run it on an arm64 host for a native chroot
+(an x86 host additionally needs `binfmt` + `qemu-user-static`); it needs
+`sudo` for `losetup` / `mount` / `chroot`.
 
 ## Releasing
 

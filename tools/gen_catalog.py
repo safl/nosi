@@ -100,10 +100,11 @@ def _render_catalog(variants: dict[str, dict]) -> str:
         desc = str(entry.get("description", "")).strip()
         if not desc:
             raise SystemExit(f"variant {name!r}: flashable but has no description")
+        arch = str(entry.get("arch", "x86_64")).strip()
         lines += [
             "",
             "[[images]]",
-            f'name = "nosi {name} (x86_64, rolling)"',
+            f'name = "nosi {name} ({arch}, rolling)"',
             f'src = "oras://{ORAS_NAMESPACE}/{name}:latest"',
             'format = "img.gz"',
             f'description = "{_toml_escape(desc)}"',

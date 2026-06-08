@@ -2,7 +2,7 @@ VARIANT ?= debian-13-headless
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps hooks lint build all clean docs-deps docs-html docs-pdf docs-serve docs-clean
+.PHONY: help deps hooks lint build build-rpi all clean docs-deps docs-html docs-pdf docs-serve docs-clean
 
 help:
 	@echo "nosi: headless/desktop system images for bare-metal and VMs (qemu, WSL2), and container images"
@@ -12,6 +12,7 @@ help:
 	@echo "  hooks             Install the pre-commit git hooks (ruff + shellcheck + hygiene)"
 	@echo "  lint              Run all pre-commit hooks over the whole tree"
 	@echo "  build             Build one base (override VARIANT=...); derived shapes ride along"
+	@echo "  build-rpi         Build the Raspberry Pi OS arm64 image + desktop derive (chroot bake)"
 	@echo "  all               Build every base"
 	@echo "  clean             Remove cijoe artifacts"
 	@echo
@@ -29,6 +30,10 @@ help:
 	@echo "  fedora-44-headless    Fedora 44 -> derives fedora-44-desktop"
 	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"
 	@echo "  freebsd-15-headless   FreeBSD 15.0-RELEASE (Phase 1 scaffold)"
+	@echo
+	@echo "Raspberry Pi (arm64; chroot bake, use 'make build-rpi' not 'make build'):"
+	@echo "  rpios-13-headless     Raspberry Pi OS for Pi 4 + Pi 5 -> derives rpios-13-desktop"
+	@echo "  rpios-13-desktop      Sway desktop .img.gz (Pi as a small workstation)"
 	@echo
 	@echo "Derived shapes (built by their base, not a standalone 'make build VARIANT='):"
 	@echo "  ubuntu-2604-wsl       WSL2 rootfs .tar.gz (meld/gitk/git-gui via WSLg)"
@@ -64,6 +69,14 @@ lint:
 # for qemu-nbd + chroot (and docker for the docker shape).
 build:
 	cd cijoe && cijoe tasks/build.yaml --monitor -c configs/$(VARIANT).toml
+
+# Raspberry Pi OS (arm64). Not a QEMU bake: loop-mounts the official image and
+# runs apply.sh in a chroot (rpi_image_build), then smoketests + packs the
+# headless base and the desktop derive. Needs sudo (losetup/mount/chroot) and,
+# on an x86 host, binfmt + qemu-user-static; native on an arm64 host. The
+# desktop derive rides along (no separate invocation).
+build-rpi:
+	cd cijoe && cijoe tasks/build-rpi.yaml --monitor -c configs/rpios-13-headless.toml
 
 # Only the bases. ubuntu-2604-wsl / ubuntu-2604-docker / fedora-44-desktop
 # are produced by their base's build, not invoked here.

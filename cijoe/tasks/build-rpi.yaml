@@ -1,0 +1,36 @@
+---
+doc: |
+  nosi Raspberry Pi (arm64) image build
+  =====================================
+
+  The x86 build (tasks/build.yaml) boots a cloud image in QEMU and lets
+  cloud-init run apply.sh. Raspberry Pi OS does not boot in a generic QEMU
+  ``virt`` machine, so the Pi build customizes the official image in a
+  loop-mount + chroot instead:
+
+  1. ``rpi_image_build``: download + decompress Raspberry Pi OS Lite (arm64),
+     grow the root, loop-mount + chroot, install the base package set, run
+     ``apply.sh rpios-13-headless``; then repeat from a copy for each
+     ``[[...derive]]`` (desktop) with ``--shape-only``. Emits a raw ``.img``
+     + ``.metadata.json`` per variant.
+  2. ``rpi_image_smoketest``: loop-mount each baked ``.img`` read-only and
+     assert the on-disk contract (sentinel, identity, operator account, tool
+     binaries, sshd, root-lock; desktop greetd/sway). Offline -- no live
+     boot. Runs SECOND so a bad bake fails before packing.
+  3. ``rpi_image_pack``: gzip each raw ``.img`` -> ``.img.gz`` (+ sha256).
+
+  Each step processes the base + all its derives, so no per-variant argument
+  is needed. Run on an arm64 host/runner for a native chroot; on x86 it needs
+  binfmt + qemu-user-static.
+
+  Selected via ``-c configs/rpios-13-headless.toml``.
+
+steps:
+- name: rpi_image_build
+  uses: rpi_image_build
+
+- name: rpi_image_smoketest
+  uses: rpi_image_smoketest
+
+- name: rpi_image_pack
+  uses: rpi_image_pack
