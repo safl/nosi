@@ -17,6 +17,7 @@
 #
 #   Super + Return  foot
 #   Super + Space   fuzzel (app launcher)
+#   Super + E       thunar (file manager)
 #   Super + L       swaylock (screen lock)
 #   Super + Q       kill focused window
 #   Super + 1..9    switch workspace
@@ -60,6 +61,7 @@ dnf)
         foot waybar fuzzel mako wl-clipboard cliphist grim slurp \
         greetd tuigreet \
         firefox \
+        Thunar gvfs thunar-volman tumbler \
         meld gitk git-gui \
         pipewire pipewire-pulseaudio wireplumber pavucontrol \
         brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
@@ -81,6 +83,7 @@ apt)
         foot waybar fuzzel mako-notifier wl-clipboard cliphist grim slurp \
         greetd \
         firefox-esr \
+        thunar gvfs thunar-volman tumbler \
         meld gitk git-gui \
         pipewire pipewire-pulse wireplumber pavucontrol \
         brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
@@ -163,6 +166,7 @@ set $mod Mod4
 set $term foot
 set $menu fuzzel
 set $lockcmd swaylock
+set $filemanager thunar
 
 # Output: autodetect; sway handles hotplug. Wallpaper is a calm
 # solid color out of the Catppuccin Mocha base palette; operators
@@ -214,6 +218,7 @@ exec swayidle -w \
 # Window management
 bindsym $mod+Return       exec $term
 bindsym $mod+space        exec $menu
+bindsym $mod+e            exec $filemanager
 bindsym $mod+q            kill
 bindsym $mod+Shift+e      exit
 bindsym $mod+v            floating toggle
@@ -348,6 +353,7 @@ Press `q` to close this window.
 |------------------|---------------------------------|
 | Mod + Return     | Open terminal (foot)            |
 | Mod + Space      | App launcher (fuzzel)           |
+| Mod + E          | File manager (thunar)           |
 | Mod + Q          | Close focused window            |
 | Mod + V          | Toggle floating                 |
 | Mod + F          | Toggle fullscreen               |
