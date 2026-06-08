@@ -1,0 +1,111 @@
+# nosi base package set for the Raspberry Pi OS (arm64) headless image.
+#
+# Why this file exists: the x86 nosi variants install their baseline via
+# cloud-init's `packages:` block in the per-variant .user file. The Pi image
+# is NOT baked by booting + cloud-init; it is baked by loop-mounting the
+# official Raspberry Pi OS image and running apply.sh in a chroot
+# (cijoe/scripts/rpi_image_build.py). cloud-init never runs, so the chroot
+# build is the Pi's delivery mechanism and owns the package install that the
+# `packages:` block owns elsewhere. rpi_image_build.py reads this file
+# (ignoring blank lines and `#` comments) and `apt-get install`s it inside
+# the chroot before running apply.sh. 06-package-presence.sh still asserts the
+# critical subset afterwards, so a bad/renamed name fails the bake loudly.
+#
+# Curated from cloudinit-headless-debian-13.user (RPi OS is Debian-family, so
+# it resolves the same debian apt branch in every provision step). x86-only
+# entries are dropped: linux-headers-amd64 (an operator who wants out-of-tree
+# modules installs linux-headers-$(uname -r) on the Pi), linux-perf,
+# intel-microcode / amd64-microcode (no arm equivalent), ovmf, qemu-system-x86,
+# firmware-misc-nonfree (RPi OS already ships the Pi firmware + brcm wifi/bt
+# blobs it needs). qemu-system-x86 -> qemu-system-arm so cijoe can still drive
+# emulated guests.
+
+# base / login
+ca-certificates
+openssh-server
+sudo
+systemd-resolved
+systemd-timesyncd
+
+# user daily-driver baseline (hx / zellij / lazygit / yazi / taplo / marksman
+# come from upstream arm64 tarballs in step 20-upstream-tools)
+bash-completion
+btop
+fastfetch
+direnv
+fd-find
+fzf
+gh
+git
+git-delta
+htop
+just
+meson
+ninja-build
+parallel
+ripgrep
+shellcheck
+stress-ng
+sysstat
+time
+unzip
+libicu-dev
+
+# network & debug
+curl
+dnsutils
+jq
+lsof
+mtr-tiny
+network-manager
+nmap
+strace
+tcpdump
+wget
+
+# build & dev (compilers, LSPs, linters, debugger / memory tools)
+build-essential
+ccache
+clang
+clang-tools
+clangd
+cmake
+cppcheck
+gdb
+lldb
+make
+pipx
+pkg-config
+python3
+valgrind
+
+# containers (crun + fuse-overlayfs + dbus-user-session are podman's Recommends
+# on Debian; named explicitly because nosi installs --no-install-recommends)
+buildah
+crun
+dbus-user-session
+fuse-overlayfs
+passt
+podman
+podman-docker
+podman-compose
+skopeo
+
+# hardware & storage
+dmidecode
+hdparm
+lshw
+nvme-cli
+pciutils
+smartmontools
+usbutils
+
+# local virtualisation + cijoe guest seed tooling
+qemu-system-arm
+qemu-utils
+genisoimage
+cloud-image-utils
+# Cross-arch user-mode emulation (symmetric with the x86 images): run
+# foreign-arch binaries on the Pi, e.g. amd64 in a chroot or `podman --platform`.
+qemu-user-static
+binfmt-support

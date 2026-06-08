@@ -34,6 +34,19 @@ if nosi_is_wsl; then
     exit 0
 fi
 
+# The RTL8125 2.5GbE part this driver targets is an x86 add-in/onboard NIC;
+# arm64 boards (e.g. Raspberry Pi 4/5) drive their on-board NICs from
+# in-tree modules in their own kernel and never carry an RTL8125. DKMS also
+# cannot build here in an arm64 chroot bake (no matching running kernel /
+# headers). Skip on any non-x86 arch -- same `uname -m` idiom as step 20.
+case "$(uname -m)" in
+x86_64 | amd64) : ;;
+*)
+    nosi_info "non-x86 arch ($(uname -m)); skipping r8125 (x86-only NIC)"
+    exit 0
+    ;;
+esac
+
 nosi_require_root
 
 # ---- 1. install DKMS + kernel headers/devel matching the running kernel ---

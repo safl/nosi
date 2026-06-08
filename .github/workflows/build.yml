@@ -443,16 +443,221 @@ jobs:
               } >> "$GITHUB_STEP_SUMMARY"
           done <<< "$derives"
 
+  build-rpi:
+    # Raspberry Pi OS (arm64) for Pi 4 + Pi 5. Not a QEMU bake: Raspberry Pi
+    # OS does not boot in a generic QEMU `virt` machine, so the image is
+    # customized in place via loop-mount + chroot (rpi_image_build). Runs on
+    # an arm64 hosted runner so the chroot is NATIVE -- no qemu-user
+    # emulation. One leg emits the headless base AND the desktop derive (the
+    # build/smoketest/pack scripts each process base + derives in one go).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Reclaim runner disk space on /
+        run: |
+          df -h / | tail -1
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL /usr/local/lib/android 2>/dev/null || true
+          df -h / | tail -1
+
+      - name: Install build dependencies
+        # No qemu-system / KVM: the Pi image is never booted. losetup + mount +
+        # chroot come from util-linux (base); growpart from cloud-guest-utils,
+        # resize2fs/e2fsck from e2fsprogs, xz-utils to decompress the upstream
+        # image, pigz for the .img.gz pack.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cloud-guest-utils \
+            e2fsprogs \
+            dosfstools \
+            xz-utils \
+            pigz \
+            pipx \
+            python3-yaml \
+            jq
+
+      - name: Stage build artifacts on the large /mnt disk
+        run: |
+          sudo mkdir -p /mnt/system_imaging
+          sudo chown "$(id -un):$(id -gn)" /mnt/system_imaging
+          ln -s /mnt/system_imaging "$HOME/system_imaging"
+
+      - name: Cache upstream Raspberry Pi OS image
+        uses: actions/cache@v4
+        with:
+          path: ~/system_imaging/cloud
+          key: cloud-rpios-13-headless-${{ hashFiles('cijoe/configs/rpios-13-headless.toml') }}
+
+      - name: Install cijoe
+        run: |
+          pipx install cijoe
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Three discrete phases (build -> smoketest -> pack), each its own GHA
+      # step for per-phase timing + a pinpointed failure. Smoketest runs
+      # before pack so a bad bake fails before packing. Each step handles the
+      # headless base AND the desktop derive.
+
+      - name: Bake (chroot)
+        run: |
+          cd cijoe && cijoe tasks/build-rpi.yaml --monitor --tag bake \
+            -c configs/rpios-13-headless.toml rpi_image_build
+
+      - name: Smoketest (offline)
+        run: |
+          cd cijoe && cijoe tasks/build-rpi.yaml --monitor --tag smoketest \
+            -c configs/rpios-13-headless.toml rpi_image_smoketest
+
+      - name: Pack .img.gz
+        run: |
+          cd cijoe && cijoe tasks/build-rpi.yaml --monitor --tag pack \
+            -c configs/rpios-13-headless.toml rpi_image_pack
+
+      - name: Show built-image sizes
+        if: always()
+        run: |
+          set -eu
+          cd "$HOME/system_imaging/disk" || exit 0
+          {
+            echo "### Raspberry Pi built-image sizes"
+            echo
+            echo "| File | Size | Bytes |"
+            echo "|---|---:|---:|"
+            for f in nosi-rpios-*.img.gz; do
+                [ -e "$f" ] || continue
+                bytes=$(stat -c%s "$f")
+                printf '| `%s` | %s | %s |\n' "$f" "$(numfmt --to=iec "$bytes")" "$bytes"
+            done
+          } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/stderr}"
+
+      - name: Upload baked images + cijoe report (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nosi-rpios-13-arm64
+          path: |
+            ~/system_imaging/disk/nosi-rpios-*.img.gz
+            ~/system_imaging/disk/nosi-rpios-*.img.gz.sha256
+            ~/system_imaging/disk/nosi-rpios-*.metadata.json
+            cijoe/cijoe-output/
+          if-no-files-found: warn
+          retention-days: 14
+
+      # ----- publish (push-to-main, schedule, manual) -----
+
+      - name: Compute rolling tag
+        if: env.PUBLISH == 'true'
+        id: tag
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          date_tag=$(date -u +'%Y.%m.%d')
+          short=${SHA:0:7}
+          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up oras
+        if: env.PUBLISH == 'true'
+        uses: oras-project/setup-oras@v1
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" \
+            | oras login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: Bundle cijoe report into a zip
+        if: env.PUBLISH == 'true'
+        run: |
+          set -eu
+          report="$HOME/system_imaging/disk/nosi-rpios-13-arm64.cijoe-report.zip"
+          (cd cijoe/cijoe-output && zip -qr "${report}" .)
+          sha256sum "${report}" > "${report}.sha256"
+          ls -lh "${report}"
+
+      - name: Publish headless + desktop to GHCR
+        # Both Pi variants are flashable .img.gz disk-images; push each to its
+        # own repo (ghcr.io/<repo>/<variant>) with annotations from its own
+        # metadata.json + variants.yml description. Same oras_push helper as
+        # the x86 job, arch read from the metadata (arm64).
+        if: env.PUBLISH == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          cd "$HOME/system_imaging/disk"
+          report="nosi-rpios-13-arm64.cijoe-report.zip"
+          gc="python3 $GITHUB_WORKSPACE/tools/gen_catalog.py"
+
+          oras_push() {
+              local ref=$1 file=$2 meta=$3 desc=$4
+              jq -e . "$meta" >/dev/null
+              local variant shape distro distro_version kernel_release built arch
+              variant=$(jq -r '.nosi.variant // empty' "$meta")
+              shape=$(jq -r '.nosi.shape // empty' "$meta")
+              distro=$(jq -r '.distro.id // empty' "$meta")
+              distro_version=$(jq -r '.distro.version_id // empty' "$meta")
+              kernel_release=$(jq -r '.kernel.release // empty' "$meta")
+              built=$(jq -r '.nosi.built // empty' "$meta")
+              arch=$(jq -r '.architecture // empty' "$meta")
+              local attempts=0
+              until oras push "$ref" \
+                  --artifact-type application/vnd.nosi.disk-image.v1+gzip \
+                  --annotation "org.opencontainers.image.title=nosi-${variant}" \
+                  --annotation "org.opencontainers.image.description=${desc}" \
+                  --annotation "org.opencontainers.image.version=${ROLLING}" \
+                  --annotation "org.opencontainers.image.created=${built}" \
+                  --annotation "org.opencontainers.image.revision=${SHA}" \
+                  --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
+                  --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
+                  --annotation "org.opencontainers.image.architecture=${arch}" \
+                  --annotation "org.opencontainers.image.os=linux" \
+                  --annotation "dev.nosi.variant=${variant}" \
+                  --annotation "dev.nosi.shape=${shape}" \
+                  --annotation "dev.nosi.distro=${distro}" \
+                  --annotation "dev.nosi.distro-version=${distro_version}" \
+                  --annotation "dev.nosi.kernel-release=${kernel_release}" \
+                  "${file}:application/vnd.nosi.disk-image.layer.v1+gzip" \
+                  "${file}.sha256:text/plain" \
+                  "${report}:application/vnd.nosi.build-report.v1+zip" \
+                  "${report}.sha256:text/plain" \
+                  "${meta}:application/vnd.nosi.metadata.v1+json"; do
+                  attempts=$((attempts + 1))
+                  if [ $attempts -ge 3 ]; then
+                      echo "::error::oras push $ref failed after $attempts attempts"
+                      return 1
+                  fi
+                  echo "::warning::oras push $ref attempt $attempts failed; retrying"
+                  sleep $((attempts * 15))
+              done
+              oras tag "$ref" latest
+          }
+
+          for v in rpios-13-headless rpios-13-desktop; do
+              oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
+                  "nosi-${v}-arm64.img.gz" \
+                  "nosi-${v}-arm64.metadata.json" \
+                  "$($gc --describe "${v}")"
+          done
+
   publish-catalog:
     # Cut a GitHub release carrying the bty-compatible catalog.toml so an
     # operator can point bty at it:
     #   bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog.toml
-    # Runs once (not per-variant) AFTER every matrix variant built + pushed,
-    # so the catalog only advertises images that actually shipped. needs:
-    # build means one failed variant leg blocks the catalog -- deliberate:
-    # the catalog should not point at an image whose build broke. PRs don't
-    # publish (same gate as the per-variant GHCR push).
-    needs: build
+    # Runs once (not per-variant) AFTER every variant built + pushed, so the
+    # catalog only advertises images that actually shipped. needs: [build,
+    # build-rpi] means one failed leg (x86 or Pi) blocks the catalog --
+    # deliberate: the catalog should not point at an image whose build broke.
+    # PRs don't publish (same gate as the per-variant GHCR push).
+    needs: [build, build-rpi]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:

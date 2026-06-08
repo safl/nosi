@@ -23,6 +23,19 @@ if nosi_is_wsl; then
     exit 0
 fi
 
+# intel_iommu/amd_iommu are x86 kernel parameters, and the grub/grubby
+# cmdline plumbing below does not exist on the Raspberry Pi boot path
+# (kernel args live in /boot/firmware/cmdline.txt, there is no grub).
+# arm64 vfio passthrough (SMMU) is out of scope for now, so skip on any
+# non-x86 arch rather than half-write a config that never applies.
+case "$(uname -m)" in
+x86_64 | amd64) : ;;
+*)
+    nosi_info "non-x86 arch ($(uname -m)); skipping IOMMU cmdline (x86-only)"
+    exit 0
+    ;;
+esac
+
 nosi_require_root
 
 EXTRA="intel_iommu=on amd_iommu=on iommu=pt"

@@ -41,6 +41,12 @@
 # ethernet, so there the drop-in (for the cloud-init case) plus clearing
 # the baked keyfile is the whole fix.
 #
+# An apt system that uses NetworkManager instead of netplan (Raspberry Pi
+# OS) takes that same NM path: NM's default DHCP covers every wired NIC, so
+# nosi writes no netplan there, and the cloud-init drop-in is skipped when
+# cloud-init is not installed. Both guards key off what is actually present
+# (netplan, cloud-init), so the same step stays correct across renderers.
+#
 # We write config but never `netplan apply`: the build VM keeps its live
 # (cloud-init-brought-up) link through the rest of the bake; the new
 # config takes effect on the next boot -- first boot on the real box, and
@@ -92,8 +98,11 @@ if [ "$NOSI_PKGMGR" = "pkg" ]; then
 fi
 
 # ---- 1. cloud-init drop-in: glob DHCP for hosts where cloud-init runs -----
-# Applies on every distro. Renders a NIC-agnostic netplan (or NM keyfiles
-# on Fedora) on VMs/cloud; harmless on HW where cloud-init is disabled.
+# Only meaningful where cloud-init actually runs (VMs/cloud, and the x86
+# bake itself). On an image baked without cloud-init, the Raspberry Pi
+# chroot bake on NetworkManager-managed Raspberry Pi OS, it would drop an
+# inert file under /etc/cloud, so gate it on cloud-init being present.
+if command -v cloud-init >/dev/null 2>&1; then
 nosi_write_if_changed \
 "# Managed by nosi/provision/steps/08-network-dhcp.sh
 # DHCP on any wired interface, matched by NAME (en* predictable + eth*
@@ -114,12 +123,17 @@ network:
       dhcp6: true
       optional: true
 " /etc/cloud/cloud.cfg.d/90-nosi-network.cfg 0644
+else
+    nosi_info "cloud-init not installed; skipping cloud-init network drop-in"
+fi
 
 # ---- 2. concrete netplan for the datasource-less bare-metal boot ----------
 case "$NOSI_PKGMGR" in
 apt)
-    # Same glob + same ids as the cloud-init drop-in above.
-    nosi_write_if_changed \
+    if command -v netplan >/dev/null 2>&1; then
+        # netplan/networkd is the renderer (Debian/Ubuntu cloud images).
+        # Same glob + same ids as the cloud-init drop-in above.
+        nosi_write_if_changed \
 "# Managed by nosi/provision/steps/08-network-dhcp.sh
 # DHCP on any wired interface, matched by NAME (en* predictable + eth*
 # legacy/VM), never by MAC. optional:true keeps boot from blocking on a
@@ -140,14 +154,21 @@ network:
       optional: true
 " /etc/netplan/50-nosi.yaml 0600
 
-    # Drop the build-VM artifact pinned to the QEMU NIC. Our config
-    # supersedes it; leaving it would let a dead MAC pin win on HW.
-    rm -f /etc/netplan/50-cloud-init.yaml
+        # Drop the build-VM artifact pinned to the QEMU NIC. Our config
+        # supersedes it; leaving it would let a dead MAC pin win on HW.
+        rm -f /etc/netplan/50-cloud-init.yaml
 
-    # Validate the YAML we just wrote (generate backends only, no apply --
-    # the live link stays up for the rest of the bake). Fail loud on a typo.
-    if command -v netplan >/dev/null 2>&1; then
+        # Validate the YAML we just wrote (generate backends only, no apply,
+        # so the live link stays up for the rest of the bake). Fail on a typo.
         netplan generate || nosi_die "netplan generate rejected /etc/netplan/50-nosi.yaml"
+    else
+        # apt with no netplan means NetworkManager-managed (Raspberry Pi OS):
+        # NM already DHCPs every wired interface by default, so a netplan file
+        # would be inert here (and would fight NM if netplan were later
+        # installed). Mirror the dnf/NM path: clear any baked per-NIC keyfile
+        # pinned to the build NIC and rely on NM's default auto-DHCP.
+        rm -f /etc/NetworkManager/system-connections/cloud-init-*.nmconnection
+        nosi_info "apt + no netplan (NetworkManager-managed); relying on NM default DHCP"
     fi
     ;;
 dnf)

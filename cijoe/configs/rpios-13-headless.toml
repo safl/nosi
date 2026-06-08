@@ -1,0 +1,61 @@
+# nosi base image : Raspberry Pi OS Lite (arm64), Pi 4 + Pi 5
+#
+# Unlike the x86 variants this image is NOT baked by booting a cloud image in
+# QEMU + cloud-init. Raspberry Pi OS boots via the Pi firmware + config.txt
+# chain and does not come up in a generic QEMU `virt` machine, so it is baked
+# by loop-mounting the official image and running apply.sh in a chroot
+# (cijoe/scripts/rpi_image_build.py). Run it on an arm64 host/runner so the
+# chroot is native; on x86 it needs binfmt + qemu-user-static.
+#
+# Raspberry Pi OS reports ID=debian in /etc/os-release, so every provision
+# step takes its already-tested `debian` apt branch -- the `13` here tracks
+# the Debian (trixie) base. One image serves both Pi 4 and Pi 5.
+#
+# Usage (from repo root):
+#   make build-rpi VARIANT=rpios-13-headless
+
+[nosi]
+variant = "rpios-13-headless"
+
+[cijoe.workflow]
+fail_fast = true
+
+# ---- headless base ---------------------------------------------------------
+[system-imaging.images.nosi-rpios-13-headless-arm64]
+arch = "arm64"
+
+# Raspberry Pi OS Lite (arm64). The `_latest` endpoint redirects to the
+# current release; the local cache name is fixed to a .img.xz so the build's
+# decompress step finds it. Pin a dated URL here for a reproducible build /
+# to bust the CI toml-hash cache on a deliberate bump, e.g.
+#   https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-05-06/2026-05-06-raspios-trixie-arm64-lite.img.xz
+cloud.url = "https://downloads.raspberrypi.com/raspios_lite_arm64_latest"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/raspios-arm64-lite.img.xz"
+# The base package set the chroot build installs before apply.sh (cloud-init's
+# packages: equivalent for the Pi path).
+cloud.packages_path = "nosi-media/auxiliary/packages-rpios-headless.txt"
+
+# Extra space added to the ext4 root before provisioning (Pi OS Lite ships a
+# ~2 GiB root; the nosi tool/package set needs headroom). nosi-growroot.service
+# expands it to the operator's full SD/USB on first boot.
+grow = "8G"
+
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-rpios-13-headless-arm64.img"
+
+# disk.path is already raw; rpi_image_pack gzips it directly (no qcow2 convert).
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-rpios-13-headless-arm64.img.gz"
+publish.gzip_level = 9
+
+# Desktop derives from this headless base: rpi_image_build copies the baked
+# headless .img, chroots, and runs `apply.sh rpios-13-desktop --shape-only`
+# (step 50's apt Sway branch). Output paths live in its own image entry below.
+[[system-imaging.images.nosi-rpios-13-headless-arm64.derive]]
+variant = "rpios-13-desktop"
+output = "img"
+
+# ---- desktop derive --------------------------------------------------------
+[system-imaging.images.nosi-rpios-13-desktop-arm64]
+arch = "arm64"
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-rpios-13-desktop-arm64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-rpios-13-desktop-arm64.img.gz"
+publish.gzip_level = 9

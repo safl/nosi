@@ -48,24 +48,61 @@ nosi_require_root
 # `apply.sh <distro>-desktop` fully defines the desktop shape: a
 # vanilla-VM operator reaches the same result as the baked image, and
 # the derive-from-headless build only has to run this one step on the
-# baked headless rootfs. Fedora is the only desktop distro today, so
-# the names are dnf/Fedora; an apt desktop variant would add a branch.
-if [ "${NOSI_PKGMGR:-}" != "dnf" ]; then
-    nosi_die "desktop shape currently supports Fedora (dnf) only; got pkgmgr=${NOSI_PKGMGR:-?}"
-fi
-nosi_pkg_install \
-    sway swaylock swayidle swaybg \
-    xdg-desktop-portal-wlr lxpolkit \
-    foot waybar fuzzel mako wl-clipboard cliphist grim slurp \
-    greetd tuigreet \
-    firefox \
-    meld gitk git-gui \
-    pipewire pipewire-pulseaudio wireplumber pavucontrol \
-    brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
-    network-manager-applet \
-    cups cups-filters cups-pdf avahi avahi-tools system-config-printer \
-    google-noto-sans-fonts google-noto-color-emoji-fonts \
-    xdg-utils xdg-desktop-portal
+# baked headless rootfs. Fedora (dnf) and Debian/Ubuntu + Raspberry Pi OS
+# (apt) carry the same Sway stack under different package names; GREETER_CMD
+# captures the per-distro greetd greeter, expanded into the greetd config
+# below.
+case "${NOSI_PKGMGR:-}" in
+dnf)
+    nosi_pkg_install \
+        sway swaylock swayidle swaybg \
+        xdg-desktop-portal-wlr lxpolkit \
+        foot waybar fuzzel mako wl-clipboard cliphist grim slurp \
+        greetd tuigreet \
+        firefox \
+        meld gitk git-gui \
+        pipewire pipewire-pulseaudio wireplumber pavucontrol \
+        brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
+        network-manager-applet \
+        cups cups-filters cups-pdf avahi avahi-tools system-config-printer \
+        google-noto-sans-fonts google-noto-color-emoji-fonts \
+        xdg-utils xdg-desktop-portal
+    GREETER_CMD="tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd sway"
+    ;;
+apt)
+    # Debian package names for the same stack: mako -> mako-notifier,
+    # pipewire-pulseaudio -> pipewire-pulse, cups-pdf -> printer-driver-cups-pdf,
+    # avahi -> avahi-daemon + avahi-utils, the noto fonts as fonts-noto-*.
+    # firefox-esr is the Debian-main browser (the `firefox` snap/name isn't in
+    # Debian/RPi OS main). fontconfig is named explicitly for fc-cache below.
+    nosi_pkg_install \
+        sway swaylock swayidle swaybg \
+        xdg-desktop-portal-wlr lxpolkit \
+        foot waybar fuzzel mako-notifier wl-clipboard cliphist grim slurp \
+        greetd \
+        firefox-esr \
+        meld gitk git-gui \
+        pipewire pipewire-pulse wireplumber pavucontrol \
+        brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
+        network-manager-applet \
+        cups cups-filters printer-driver-cups-pdf avahi-daemon avahi-utils system-config-printer \
+        fonts-noto-core fonts-noto-color-emoji fontconfig \
+        xdg-utils xdg-desktop-portal
+    # greetd greeter: Debian/RPi OS package tuigreet as `greetd-tuigreet`.
+    # Install it best-effort; if the package (or its binary) is missing on a
+    # given suite, fall back to `agreety`, the minimal greeter that ships with
+    # greetd itself -- so greeter packaging drift never hard-fails the bake.
+    if nosi_pkg_install greetd-tuigreet 2>/dev/null && command -v tuigreet >/dev/null 2>&1; then
+        GREETER_CMD="tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd sway"
+    else
+        nosi_warn "greetd-tuigreet unavailable; falling back to agreety greeter"
+        GREETER_CMD="agreety --cmd sway"
+    fi
+    ;;
+*)
+    nosi_die "desktop shape supports dnf (Fedora) and apt (Debian/Ubuntu/RPi OS) only; got pkgmgr=${NOSI_PKGMGR:-?}"
+    ;;
+esac
 
 # ---- desktop seat access --------------------------------------------
 # The headless base puts odus in wheel + kvm only. The desktop shape
@@ -99,13 +136,15 @@ fi
 # /var/cache/greetd/state.toml so the operator's last selection
 # carries across reboots. --asterisks shows password masking instead
 # of nothing. Greeting line keeps it on-brand.
+# Heredoc is unquoted so ${GREETER_CMD} (set per-distro above) expands; the
+# rest of the file carries no shell metacharacters, so expansion is safe.
 install -d -m 0755 /etc/greetd
-cat > /etc/greetd/config.toml <<'EOF'
+cat > /etc/greetd/config.toml <<EOF
 [terminal]
 vt = 1
 
 [default_session]
-command = "tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd sway"
+command = "${GREETER_CMD}"
 user = "greeter"
 EOF
 chmod 0644 /etc/greetd/config.toml

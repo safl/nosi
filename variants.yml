@@ -17,6 +17,9 @@
 #   flashable    true if the published .img.gz is a flashable disk image
 #                that belongs in bty's catalog; false for the wsl rootfs
 #                (imported via `wsl --import`, not flashed to a block dev).
+#   arch         target architecture for the catalog label; optional,
+#                defaults to x86_64. Set to arm64 for the Raspberry Pi
+#                variants.
 #   description  org.opencontainers.image.description for the disk-image
 #                ORAS push AND the catalog entry's prose. The use-case
 #                statement: "what is this variant for?"
@@ -85,6 +88,25 @@ variants:
       Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet
       greeter + Firefox + audio / bluetooth / power-management on top
       of the headless baseline. For personal laptop / workstation use.
+
+  rpios-13-headless:
+    shape: headless
+    flashable: true
+    arch: arm64
+    description: >-
+      Raspberry Pi OS (arm64) headless for Pi 4 + Pi 5. The nosi dev
+      baseline (hx/zellij/uv + C/C++/Python/Rust/Zig toolchains, podman)
+      on the Foundation kernel/firmware, baked into the official image via
+      chroot. Flash to SD/USB and boot -- one image serves both boards.
+
+  rpios-13-desktop:
+    shape: desktop
+    flashable: true
+    arch: arm64
+    description: >-
+      Raspberry Pi OS (arm64) desktop for Pi 4 + Pi 5. Sway tiling Wayland
+      compositor + greeter + Firefox + audio / bluetooth / power-management
+      on top of the headless baseline. For a Pi used as a small workstation.
 
   freebsd-14-headless:
     shape: headless
