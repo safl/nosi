@@ -24,7 +24,7 @@ help:
 	@echo "  docs-clean        Remove docs/_build/"
 	@echo
 	@echo "Bakeable bases (VARIANT=...); each base also produces its derived shapes:"
-	@echo "  debian-13-headless    Debian 13 trixie"
+	@echo "  debian-13-headless    Debian 13 trixie -> derives debian-13-desktop"
 	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble (HW vendor stacks; cudadev/rocmdev pin here)"
 	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute -> derives ubuntu-2604-wsl + ubuntu-2604-docker"
 	@echo "  fedora-44-headless    Fedora 44 -> derives fedora-44-desktop"
@@ -36,9 +36,10 @@ help:
 	@echo "  rpios-13-desktop      Sway desktop .img.gz (Pi as a small workstation)"
 	@echo
 	@echo "Derived shapes (built by their base, not a standalone 'make build VARIANT='):"
+	@echo "  debian-13-desktop     Sway desktop .img.gz (preferred daily-driver desktop)"
 	@echo "  ubuntu-2604-wsl       WSL2 rootfs .tar.gz (meld/gitk/git-gui via WSLg)"
 	@echo "  ubuntu-2604-docker    OCI image (CI bootstrap host; docker pull / GHA container:)"
-	@echo "  fedora-44-desktop     Sway desktop .img.gz (personal laptop)"
+	@echo "  fedora-44-desktop     Sway desktop .img.gz (laptop where Debian's HW support falls short)"
 	@echo
 	@echo "Current VARIANT=$(VARIANT)"
 	@echo "Output (base):"
