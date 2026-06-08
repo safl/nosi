@@ -42,3 +42,13 @@ disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-13-headless-x8
 publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-13-headless-x86_64.img"
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-debian-13-headless-x86_64.img.gz"
 publish.gzip_level = 9
+
+# Desktop derives from this headless base (derive_pack copies the baked
+# qcow2, chroots, runs `apply.sh debian-13-desktop --shape-only` which
+# installs the Sway stack via step 50, then packages a bootable .img.gz, no
+# strip, kernel kept). firefox-esr comes from Debian main (a real deb, no
+# snap), so the apt desktop branch is clean here. No re-bake.
+[[system-imaging.images.nosi-debian-13-headless-x86_64.derive]]
+variant = "debian-13-desktop"
+output = "img"
+strip = false
