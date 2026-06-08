@@ -62,6 +62,7 @@ dnf)
         greetd tuigreet \
         firefox \
         Thunar gvfs thunar-volman tumbler \
+        librsvg2-tools \
         meld gitk git-gui \
         pipewire pipewire-pulseaudio wireplumber pavucontrol \
         brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
@@ -84,6 +85,7 @@ apt)
         greetd \
         firefox-esr \
         thunar gvfs thunar-volman tumbler \
+        librsvg2-bin \
         meld gitk git-gui \
         pipewire pipewire-pulse wireplumber pavucontrol \
         brightnessctl bluez bluez-tools power-profiles-daemon playerctl \
@@ -285,6 +287,43 @@ bindsym $mod+F1 exec foot --title cheatsheet -e less ~/.config/sway/cheatsheet.m
 # combo afterwards.
 bindsym $mod+slash exec nosi-keys
 EOF
+
+# ---- nosi backdrop --------------------------------------------------
+# Render the nosi banner to a desktop wallpaper and point sway's `output bg`
+# at it. The Catppuccin wordmark card is scaled + centered on a darker crust
+# field, and rsvg-convert (librsvg) rasterises it to a 4K PNG. The sway config
+# above ships a solid-color bg; we only rewrite that line to the PNG on a
+# successful render, so a render failure degrades to the solid Catppuccin base
+# rather than a black screen. The JetBrainsMono Nerd Font installed above (or
+# any monospace fallback) carries the block-drawing glyphs the wordmark uses.
+install -d -m 0755 /usr/share/backgrounds/nosi
+cat > /usr/share/backgrounds/nosi/nosi.svg <<'BGSVG'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" font-family="ui-monospace, 'JetBrains Mono', Menlo, Monaco, Consolas, 'Courier New', monospace">
+  <rect width="1920" height="1080" fill="#11111b"/>
+  <g transform="translate(570,295) scale(2.5)">
+    <rect x="0" y="0" width="312" height="196" rx="14" fill="#1e1e2e"/>
+    <rect x="0.75" y="0.75" width="310.5" height="194.5" rx="13.25" fill="none" stroke="#b4befe" stroke-opacity="0.12" stroke-width="1.5"/>
+    <g xml:space="preserve" font-size="16" font-weight="700" text-anchor="middle">
+      <text x="156" y="40" fill="#cba6f7">███╗   ██╗ ██████╗ ███████╗██╗</text>
+      <text x="156" y="59" fill="#b4befe">████╗  ██║██╔═══██╗██╔════╝██║</text>
+      <text x="156" y="78" fill="#89b4fa">██╔██╗ ██║██║   ██║███████╗██║</text>
+      <text x="156" y="97" fill="#74c7ec">██║╚██╗██║██║   ██║╚════██║██║</text>
+      <text x="156" y="116" fill="#89dceb">██║ ╚████║╚██████╔╝███████║██║</text>
+      <text x="156" y="135" fill="#94e2d5">╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝</text>
+    </g>
+    <text x="156" y="170" font-size="13" font-style="italic" fill="#fab387" text-anchor="middle">Nic(h)e Operating System Images</text>
+  </g>
+</svg>
+BGSVG
+if command -v rsvg-convert >/dev/null 2>&1 \
+    && rsvg-convert -w 3840 -h 2160 /usr/share/backgrounds/nosi/nosi.svg \
+        -o /usr/share/backgrounds/nosi/nosi.png 2>/dev/null; then
+    sed -i 's|^output \* bg #1e1e2e solid_color$|output * bg /usr/share/backgrounds/nosi/nosi.png fill|' \
+        /etc/skel/.config/sway/config
+    nosi_info "backdrop rendered (/usr/share/backgrounds/nosi/nosi.png)"
+else
+    nosi_warn "rsvg-convert unavailable or failed; keeping the solid Catppuccin bg"
+fi
 
 # ---- nosi-keys: interactive binding picker -------------------------
 # A small wrapper that pipes the operator's sway `bindsym` lines
