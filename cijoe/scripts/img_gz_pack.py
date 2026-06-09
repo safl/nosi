@@ -31,6 +31,8 @@ import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
+from imgshrink import shrink_raw
+
 
 def _gzip_cmd() -> str:
     """pigz (parallel, all cores) when present, else stock gzip. Both emit
@@ -90,6 +92,16 @@ def main(args, cijoe):
     if err:
         log.error("Failed converting qcow2 to raw")
         return err
+
+    # Shrink the raw to fit before compressing: the base bakes large for
+    # provisioning headroom but ships compact (nosi-growroot expands it back on
+    # first boot). The source qcow2 is left untouched so derive_pack still
+    # copies a roomy base. ext4 only; btrfs/xfs are left full-size.
+    rc = shrink_raw(cijoe, raw_path)
+    if rc:
+        log.error("Failed shrinking raw image (invalid partition table)")
+        raw_path.unlink(missing_ok=True)
+        return rc
 
     gz = _gzip_cmd()
     log.info(f"Compressing {raw_path} -> {gz_path} ({gz} -{level})")

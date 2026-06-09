@@ -50,6 +50,8 @@ import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
+from imgshrink import shrink_raw
+
 
 def _gzip_cmd() -> str:
     """pigz (parallel, all cores) when present, else stock gzip; same .gz
@@ -417,6 +419,14 @@ def _package_img(cijoe, work, variant, disk_dir) -> int:
     if err:
         log.error("qemu-img convert qcow2 -> raw failed")
         return err
+    # Shrink the derived raw to fit before compressing, same as the base
+    # img_gz_pack does. ext4 (Debian desktop) shrinks; Fedora's btrfs desktop is
+    # left full-size. nosi-growroot expands it back on first boot.
+    rc = shrink_raw(cijoe, raw_path)
+    if rc:
+        log.error(f"derive '{variant}': raw shrink produced an invalid table")
+        raw_path.unlink(missing_ok=True)
+        return rc
     err, _ = cijoe.run_local(f"{_gzip_cmd()} -9 -c {raw_path} > {gz_path}")
     if err:
         return err
