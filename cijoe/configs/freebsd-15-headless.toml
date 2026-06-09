@@ -49,6 +49,9 @@ cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
 cloud.userdata_path = "nosi-media/auxiliary/cloudinit-headless-freebsd-15.user"
 
 disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-15-headless-x86_64.qcow2"
+# UFS cannot be shrunk after the bake, so do not grow it: bake onto the cloud
+# image's native size and let FreeBSD's rc.d/growfs expand it on first boot.
+disk.bake_size = "native"
 
 publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-15-headless-x86_64.img"
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-15-headless-x86_64.img.gz"

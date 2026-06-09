@@ -113,11 +113,21 @@ def main(args, cijoe):
     guest.kill()
     guest.initialize(cloud_image_path)
 
-    log.info(f"Resizing boot image to {DISK_SIZE}")
-    err, _ = cijoe.run_local(f"qemu-img resize {guest.boot_img} {DISK_SIZE}")
-    if err:
-        log.error("Failed to resize boot image")
-        return err
+    # Bake disk size, per-variant via [disk].bake_size, default DISK_SIZE.
+    # "native" skips the resize and bakes onto the cloud image as-is: the
+    # FreeBSD UFS rootfs cannot be shrunk afterwards (no UFS shrink tool
+    # exists), so rather than grow it to 12 GiB and ship that, leave it at the
+    # cloud image's native size. growfs expands it to the real disk on first
+    # boot. The FreeBSD scaffold installs almost nothing, so native has room.
+    bake_size = str(disk.get("bake_size", DISK_SIZE))
+    if bake_size.lower() == "native":
+        log.info("Bake disk: cloud image native size (no resize)")
+    else:
+        log.info(f"Resizing boot image to {bake_size}")
+        err, _ = cijoe.run_local(f"qemu-img resize {guest.boot_img} {bake_size}")
+        if err:
+            log.error("Failed to resize boot image")
+            return err
 
     guest_metadata = guest.guest_path / "meta-data"
     guest_userdata = guest.guest_path / "user-data"
