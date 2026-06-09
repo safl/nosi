@@ -76,6 +76,7 @@ jobs:
             xz-utils \
             sshpass \
             e2fsprogs \
+            btrfs-progs \
             gdisk \
             python3-yaml
 

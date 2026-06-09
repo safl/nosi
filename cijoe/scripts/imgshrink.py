@@ -49,29 +49,24 @@ def shrink_raw(cijoe, raw: Path) -> int:
         if not root_part:
             log.warning(f"shrink: no rootfs partition on {raw.name}; leaving full size")
             return 0
-        if fstype != "ext4":
-            log.info(f"shrink: {raw.name} root is {fstype}, not ext4; leaving full size")
-            return 0
         partnum = root_part[len(loopdev) :].lstrip("p")
-        cijoe.run_local(f"sudo e2fsck -p -f {root_part} >/dev/null 2>&1 || true")
-        # Minimize to the true minimum (relocates blocks). resize2fs -P only
-        # estimates and over-reports by gigabytes on these toolchain-heavy
-        # images, so -M shrinks far more. Then grow back a small margin so the
-        # rootfs has slack on the first boot before nosi-growroot expands it.
-        min_blocks = _resize2fs_minimize(cijoe, root_part)
-        if min_blocks is None:
-            log.warning(f"shrink: minimize failed for {raw.name}; leaving full size")
+        # Shrink the filesystem to its used size + a margin, in 512-byte
+        # sectors, dispatched on fstype. xfs (and anything else) has no offline
+        # shrink, so it is left full-size.
+        if fstype == "ext4":
+            part_sectors = _shrink_ext4(cijoe, root_part)
+        elif fstype == "btrfs":
+            part_sectors = _shrink_btrfs(cijoe, root_part)
+        else:
+            log.info(f"shrink: {raw.name} root is {fstype}, not ext4/btrfs; leaving full size")
             return 0
-        target_blocks = min_blocks + 65536  # + 256 MiB slack (4 KiB blocks)
-        err, _ = cijoe.run_local(f"sudo resize2fs {root_part} {target_blocks} >/dev/null 2>&1")
-        if err:
-            log.warning(f"shrink: resize2fs grow-back failed for {raw.name}; leaving full size")
+        if part_sectors is None:
+            log.warning(f"shrink: filesystem shrink failed for {raw.name}; leaving full size")
             return 0
         start = _part_start(cijoe, loopdev, partnum)
         if start is None:
             log.warning(f"shrink: cannot read partition start for {raw.name}; leaving full size")
             return 0
-        part_sectors = target_blocks * 8  # 4 KiB block = 8 x 512-byte sectors
         err, _ = cijoe.run_local(
             f"printf ',{part_sectors}\\n' | "
             f"sudo sfdisk -N {partnum} --no-reread -f {loopdev} >/dev/null 2>&1"
@@ -163,6 +158,21 @@ def _rootfs(cijoe, loopdev: str):
     return None, None, pttype
 
 
+def _shrink_ext4(cijoe, part: str) -> int | None:
+    """Minimize an ext4 rootfs (`resize2fs -M`, which relocates blocks to the
+    true minimum), grow back a 256 MiB margin for first-boot slack, and return
+    the target partition size in 512-byte sectors."""
+    cijoe.run_local(f"sudo e2fsck -p -f {part} >/dev/null 2>&1 || true")
+    min_blocks = _resize2fs_minimize(cijoe, part)
+    if min_blocks is None:
+        return None
+    target_blocks = min_blocks + 65536  # + 256 MiB slack (4 KiB blocks)
+    err, _ = cijoe.run_local(f"sudo resize2fs {part} {target_blocks} >/dev/null 2>&1")
+    if err:
+        return None
+    return target_blocks * 8  # 4 KiB block = 8 x 512-byte sectors
+
+
 def _resize2fs_minimize(cijoe, part: str) -> int | None:
     """Shrink the fs to its minimum (`resize2fs -M`) and return the resulting
     size in fs blocks, parsed from resize2fs's `is now/already <N> (Nk) blocks
@@ -177,6 +187,47 @@ def _resize2fs_minimize(cijoe, part: str) -> int | None:
     if m:
         return int(m.group(1))
     m = re.search(r"[Ee]stimated minimum size of the filesystem:\s*(\d+)", text)
+    return int(m.group(1)) if m else None
+
+
+def _shrink_btrfs(cijoe, part: str) -> int | None:
+    """Online-shrink a btrfs rootfs (Fedora). btrfs has no offline minimize, so
+    mount it, resize to the used bytes + a generous margin (a snug target makes
+    btrfs refuse), unmount, and return the target partition size in 512-byte
+    sectors. nosi-growroot does `btrfs filesystem resize max` on first boot."""
+    mnt = Path(f"/tmp/nosi-shrink-btrfs-{os.getpid()}")
+    cijoe.run_local(f"sudo mkdir -p {mnt}")
+    err, _ = cijoe.run_local(f"sudo mount {part} {mnt}")
+    if err:
+        cijoe.run_local(f"sudo rmdir {mnt} 2>/dev/null || true")
+        return None
+    sectors = None
+    try:
+        used = _btrfs_used_bytes(cijoe, mnt)
+        if used is None:
+            return None
+        mib = 1 << 20
+        target = (used + (1 << 30) + mib - 1) // mib * mib  # used + 1 GiB, MiB-aligned
+        err, _ = cijoe.run_local(f"sudo btrfs filesystem resize {target} {mnt} >/dev/null 2>&1")
+        if err:
+            return None
+        sectors = target // 512
+    finally:
+        cijoe.run_local(f"sudo umount {mnt} 2>/dev/null || true")
+        cijoe.run_local(f"sudo rmdir {mnt} 2>/dev/null || true")
+    return sectors
+
+
+def _btrfs_used_bytes(cijoe, mnt: Path) -> int | None:
+    """Bytes in use on the mounted btrfs (the `Used:` line of `filesystem
+    usage -b`), the floor the shrink target must stay above."""
+    out_file = Path(f"/tmp/nosi-shrink-btrfs-usage-{os.getpid()}")
+    try:
+        cijoe.run_local(f"sudo btrfs filesystem usage -b {mnt} > {out_file} 2>/dev/null")
+        text = out_file.read_text() if out_file.exists() else ""
+    finally:
+        out_file.unlink(missing_ok=True)
+    m = re.search(r"\bUsed:\s*(\d+)", text)
     return int(m.group(1)) if m else None
 
 
