@@ -78,7 +78,8 @@ case "$VARIANT" in
 *-desktop)  export NOSI_SHAPE=desktop  ;;
 *-wsl)      export NOSI_SHAPE=wsl      ;;
 *-docker)   export NOSI_SHAPE=docker   ;;
-*)          nosi_die "variant must end in -headless, -desktop, -wsl, or -docker: $VARIANT" ;;
+*-lxc)      export NOSI_SHAPE=lxc      ;;
+*)          nosi_die "variant must end in -headless, -desktop, -wsl, -docker, or -lxc: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
@@ -131,6 +132,7 @@ BASE_STEPS=(
 SHAPE_STEPS=(
     50-desktop-stack
     55-wsl-tools
+    56-lxc-container
 )
 
 # Always last: 96 logs the final disk usage (read-only diagnostic), metadata
