@@ -133,9 +133,12 @@ SHAPE_STEPS=(
     55-wsl-tools
 )
 
-# Always last: metadata reflects the final inventory, motd's presence is
-# the at-a-glance "the whole chain ran" signal.
+# Always last: 96 logs the final disk usage (read-only diagnostic), metadata
+# reflects the final inventory, motd's presence is the at-a-glance "the whole
+# chain ran" signal. In FINAL_STEPS so it runs in every path -- base, shape
+# derive, and FreeBSD.
 FINAL_STEPS=(
+    96-disk-report
     98-metadata
     99-motd
 )
