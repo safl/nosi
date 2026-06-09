@@ -44,3 +44,6 @@ steps:
 
 - name: derive_pack
   uses: derive_pack
+
+- name: proxmox_smoketest
+  uses: proxmox_smoketest
