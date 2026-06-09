@@ -61,3 +61,12 @@ strip = false
 variant = "debian-13-lxc"
 output = "lxc"
 strip = true
+
+# Proxmox VE host: derive_pack runs `apply.sh debian-13-proxmox --shape-only`
+# (step 60 installs proxmox-ve into the chroot via policy-rc.d), then packs a
+# bootable .img.gz (no strip, PVE kernel kept). Flash to the OS NVMe; PVE
+# daemons come up on first boot (pveproxy on :8006).
+[[system-imaging.images.nosi-debian-13-headless-x86_64.derive]]
+variant = "debian-13-proxmox"
+output = "img"
+strip = false

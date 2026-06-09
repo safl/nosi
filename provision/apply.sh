@@ -79,7 +79,8 @@ case "$VARIANT" in
 *-wsl)      export NOSI_SHAPE=wsl      ;;
 *-docker)   export NOSI_SHAPE=docker   ;;
 *-lxc)      export NOSI_SHAPE=lxc      ;;
-*)          nosi_die "variant must end in -headless, -desktop, -wsl, -docker, or -lxc: $VARIANT" ;;
+*-proxmox)  export NOSI_SHAPE=proxmox  ;;
+*)          nosi_die "variant must end in -headless, -desktop, -wsl, -docker, -lxc, or -proxmox: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
@@ -133,6 +134,7 @@ SHAPE_STEPS=(
     50-desktop-stack
     55-wsl-tools
     56-lxc-container
+    60-proxmox-ve
 )
 
 # Always last: 96 logs the final disk usage (read-only diagnostic), metadata
