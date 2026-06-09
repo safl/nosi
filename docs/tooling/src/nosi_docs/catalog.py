@@ -136,6 +136,11 @@ def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
             timeout=60,
         )
         snap.metadata = json.loads(bres.stdout)
+    except subprocess.TimeoutExpired as exc:
+        # A slow GHCR fetch must not kill the whole catalog build -- record it
+        # as this variant's error and let the rest render, same as any other
+        # per-variant fetch failure below.
+        snap.error = f"oras fetch of {ref} timed out after {exc.timeout:.0f}s"
     except subprocess.CalledProcessError as exc:
         msg = (exc.stderr or exc.stdout or str(exc)).strip().splitlines()
         snap.error = msg[-1] if msg else str(exc)
