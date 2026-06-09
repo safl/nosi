@@ -57,3 +57,9 @@ strip = true
 variant = "ubuntu-2604-docker"
 output = "oci"
 strip = true
+
+#   lxc    -> nosi-ubuntu-2604-lxc.tar.zst  (Proxmox CT / Incus system container)
+[[system-imaging.images.nosi-ubuntu-2604-headless-x86_64.derive]]
+variant = "ubuntu-2604-lxc"
+output = "lxc"
+strip = true

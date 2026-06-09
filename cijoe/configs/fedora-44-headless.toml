@@ -53,3 +53,11 @@ publish.gzip_level = 9
 variant = "fedora-44-desktop"
 output = "img"
 strip = false
+
+# LXC system-container template (Proxmox CT / Incus). dnf-strip removes the
+# kernel/firmware/NetworkManager; step 56 installs systemd-networkd (Fedora
+# CTs network through it). zstd rootfs tarball for `pct create`.
+[[system-imaging.images.nosi-fedora-44-headless-x86_64.derive]]
+variant = "fedora-44-lxc"
+output = "lxc"
+strip = true

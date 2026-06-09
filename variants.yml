@@ -91,6 +91,15 @@ variants:
       dev base for a project's `make docker`. Pull with docker; use as
       a GHA job container.
 
+  ubuntu-2604-lxc:
+    shape: lxc
+    flashable: false
+    description: >-
+      Ubuntu 26.04 LTS (resolute) LXC system-container template (zstd rootfs
+      tarball) for Proxmox CT / Incus. The headless baseline minus kernel /
+      firmware / NetworkManager; shares the host kernel. Drop in template/cache
+      and `pct create`, or `incus image import`.
+
   fedora-44-headless:
     shape: headless
     flashable: true
@@ -106,6 +115,15 @@ variants:
       Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet
       greeter + Firefox + audio / bluetooth / power-management on top
       of the headless baseline. For personal laptop / workstation use.
+
+  fedora-44-lxc:
+    shape: lxc
+    flashable: false
+    description: >-
+      Fedora 44 LXC system-container template (zstd rootfs tarball) for
+      Proxmox CT / Incus. The headless baseline minus kernel / firmware /
+      NetworkManager (systemd-networkd drives the container network); shares
+      the host kernel. Drop in template/cache and `pct create`.
 
   rpios-13-headless:
     shape: headless
