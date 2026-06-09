@@ -114,11 +114,11 @@ def main(args, cijoe):
     guest.initialize(cloud_image_path)
 
     # Bake disk size, per-variant via [disk].bake_size, default DISK_SIZE.
-    # "native" skips the resize and bakes onto the cloud image as-is: the
-    # FreeBSD UFS rootfs cannot be shrunk afterwards (no UFS shrink tool
-    # exists), so rather than grow it to 12 GiB and ship that, leave it at the
-    # cloud image's native size. growfs expands it to the real disk on first
-    # boot. The FreeBSD scaffold installs almost nothing, so native has room.
+    # "native" skips the resize and bakes onto the cloud image as-is. FreeBSD
+    # sets a smaller fixed size than the 12 GiB default: its UFS rootfs cannot
+    # be shrunk after the bake (no UFS shrink tool exists anywhere), so bake
+    # size == ship size; it picks the smallest disk that still fits the install
+    # (base + tools + /usr/src + transient), and growfs expands it on first boot.
     bake_size = str(disk.get("bake_size", DISK_SIZE))
     if bake_size.lower() == "native":
         log.info("Bake disk: cloud image native size (no resize)")
