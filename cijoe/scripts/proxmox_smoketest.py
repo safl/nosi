@@ -39,8 +39,9 @@ from image_smoketest import (
 )
 
 # PVE's first boot (initramfs + pmxcfs + pveproxy startup) is slower than the
-# bare base image, so allow more time than image_smoketest's default.
-BOOT_TIMEOUT = 360
+# bare base image, and a TCG fallback (if KVM is unavailable) is slower still,
+# so allow generous time.
+BOOT_TIMEOUT = 600
 
 
 def add_args(parser: ArgumentParser):
@@ -105,11 +106,16 @@ def main(args, cijoe):
 
 def _boot_proxmox(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
     """Same shape as image_smoketest._boot_overlay, but 4 GiB for the PVE
-    stack (pmxcfs + pvedaemon + pveproxy + postfix)."""
+    stack (pmxcfs + pvedaemon + pveproxy + postfix). This runs late in the job
+    (after the long derive step), by which point the runner's /dev/kvm perms
+    set once at job start can have reverted, so re-grant access; accel=kvm:tcg
+    falls back to software emulation if KVM is genuinely unavailable rather than
+    hard-failing. `-cpu max` (not `host`) so a TCG fallback still works."""
+    cijoe.run_local("sudo chmod 0666 /dev/kvm 2>/dev/null || true")
     cmd = (
         "qemu-system-x86_64 "
-        "-machine type=q35,accel=kvm "
-        "-cpu host -smp 2 -m 4G "
+        "-machine type=q35,accel=kvm:tcg "
+        "-cpu max -smp 2 -m 4G "
         "-display none -monitor none "
         f"-serial file:{serial} "
         f"-drive file={overlay},if=virtio,format=qcow2 "
