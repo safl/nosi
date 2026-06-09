@@ -103,42 +103,50 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ' /etc/systemd/system/nosi-sshd-keygen.service 0644
 
-# Drop-in on ssh.service. Requires= (not the weaker Wants=) so ssh.service is
-# strictly gated on nosi-sshd-keygen completing -- including ssh.service's own
-# `sshd -t` ExecStartPre, which on Debian FAILS when host keys are missing and
-# is the race that intermittently failed the smoketest. Restart=on-failure is
-# the recovery net: if ssh ever still starts before the keys land, it retries
-# (within the default start-limit) and comes up once the oneshot has run.
+# Drop-in on ssh.service. The reliable fix is to regenerate the host keys
+# IN-PROCESS as ssh.service's first ExecStartPre, so they exist no matter what
+# else did or did not run. Keys are stripped at bake end; on a fresh boot
+# ssh.service's own `sshd -t` ExecStartPre (Debian/Ubuntu) fails when they are
+# missing, which is the smoketest flake. A separately-ordered oneshot was not
+# enough: in the failing boots nosi-sshd-keygen did not run before ssh.service.
+# An empty `ExecStartPre=` first RESETS the inherited list, then `ssh-keygen -A`
+# (idempotent, only creates missing keys) runs BEFORE the re-added `sshd -t`
+# config test, so the keys are guaranteed present when sshd starts. Wants= keeps
+# the keygen oneshot best-effort rather than a hard gate.
 install -d -m 0755 /etc/systemd/system/ssh.service.d
 nosi_write_if_changed \
 '[Unit]
-Requires=nosi-sshd-keygen.service
+Wants=nosi-sshd-keygen.service
 After=nosi-sshd-keygen.service
 
 [Service]
-Restart=on-failure
-RestartSec=2s
+ExecStartPre=
+ExecStartPre=/usr/bin/ssh-keygen -A
+ExecStartPre=/usr/sbin/sshd -t
 ' /etc/systemd/system/ssh.service.d/10-nosi-keygen.conf 0644
 
 # Same for ssh.socket (socket-activated path on newer Ubuntu). Socket units
-# take no [Service]; the Requires= ordering gate is the part that matters here.
+# take no ExecStartPre; the keys come from ssh.service's ExecStartPre above
+# when the socket activates it. Keep the oneshot ordered ahead, best-effort.
 install -d -m 0755 /etc/systemd/system/ssh.socket.d
 nosi_write_if_changed \
 '[Unit]
-Requires=nosi-sshd-keygen.service
+Wants=nosi-sshd-keygen.service
 After=nosi-sshd-keygen.service
 ' /etc/systemd/system/ssh.socket.d/10-nosi-keygen.conf 0644
 
-# Same for sshd.service on Fedora, with the same Requires= gate + recovery.
+# Same for sshd.service on Fedora: in-process ssh-keygen -A before the config
+# test, identical to ssh.service above.
 install -d -m 0755 /etc/systemd/system/sshd.service.d
 nosi_write_if_changed \
 '[Unit]
-Requires=nosi-sshd-keygen.service
+Wants=nosi-sshd-keygen.service
 After=nosi-sshd-keygen.service
 
 [Service]
-Restart=on-failure
-RestartSec=2s
+ExecStartPre=
+ExecStartPre=/usr/bin/ssh-keygen -A
+ExecStartPre=/usr/sbin/sshd -t
 ' /etc/systemd/system/sshd.service.d/10-nosi-keygen.conf 0644
 
 # Enablement: openssh-server on Debian/Ubuntu ships BOTH ssh.service and
