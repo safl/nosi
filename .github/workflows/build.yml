@@ -157,6 +157,16 @@ jobs:
           cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-derive \
             -c configs/${{ matrix.variant }}.toml derive_pack
 
+      - name: Proxmox boot-test
+        # Only the debian base derives a proxmox host. Boots the derived image
+        # in QEMU and asserts the PVE stack comes up on first boot (pmxcfs +
+        # pvedaemon + pveproxy, web UI on :8006) -- the chroot bake can't prove
+        # that, so this is the gate that does.
+        if: matrix.variant == 'debian-13-headless'
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag proxmox-smoketest \
+            -c configs/debian-13-headless.toml proxmox_smoketest
+
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
         # fails -- so the base qcow2 + .img.gz and every derived artifact
