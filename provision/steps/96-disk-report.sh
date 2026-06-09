@@ -30,4 +30,14 @@ nosi_info "largest directories (du -hxd2 /, top 30):"
 # big consumers (firmware, toolchains, /usr/lib, /usr/src on FreeBSD).
 du -hxd2 / 2>/dev/null | sort -rh | head -n 30 || true
 
+nosi_info "drill-down into the heaviest trees (du -hxd1):"
+# One level deeper into the usual heavyweights so cache/cruft (rustup
+# downloads, cargo registry, docs/man) is visible separately from the
+# toolchains and libraries that are genuine content.
+for d in /usr/local /usr/local/rustup /usr/local/cargo /usr/lib /usr/share; do
+    [ -d "$d" ] || continue
+    echo "## $d"
+    du -hxd1 "$d" 2>/dev/null | sort -rh | head -n 12 || true
+done
+
 nosi_info "step 96-disk-report done"
