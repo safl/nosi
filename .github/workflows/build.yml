@@ -75,6 +75,8 @@ jobs:
             cpu-checker \
             xz-utils \
             sshpass \
+            e2fsprogs \
+            gdisk \
             python3-yaml
 
       - name: Stage build artifacts on the large /mnt disk
