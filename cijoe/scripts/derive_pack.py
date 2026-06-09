@@ -528,10 +528,19 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
     """Largest ext4 / btrfs / xfs partition on NBD_DEV -- the rootfs
     (/boot, ESP, BIOS-boot are smaller or other fstypes). Cloud images
     differ by distro: Ubuntu / Debian ship ext4, Fedora ships btrfs,
-    others ship xfs; pick the largest rootfs-capable filesystem."""
+    others ship xfs; pick the largest rootfs-capable filesystem.
+
+    Only accept a candidate at least MIN_ROOTFS_BYTES: the partition nodes
+    appear asynchronously after qemu-nbd connect, and a too-early lsblk can
+    show a tiny reserved partition (e.g. a sub-GiB ext4 on nbd0p13) before the
+    multi-GiB rootfs node settles -- picking it mounts a partition with no
+    /etc/os-release and fails the derive. A nosi rootfs is always several GiB,
+    so requiring >= 1 GiB filters the phantom and we retry until the real one
+    is visible."""
     import json
 
     rootfs_fstypes = ("ext4", "btrfs", "xfs")
+    min_rootfs_bytes = 1 << 30  # 1 GiB
     out_file = work.with_suffix(".lsblk.json")
     try:
         for _ in range(attempts):
@@ -548,7 +557,7 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
                     for part in dev.get("children") or []:
                         if part.get("type") == "part" and part.get("fstype") in rootfs_fstypes:
                             size = part.get("size")
-                            if size is not None:
+                            if size is not None and int(size) >= min_rootfs_bytes:
                                 candidates.append((int(size), part["name"]))
                 if candidates:
                     candidates.sort(reverse=True)
