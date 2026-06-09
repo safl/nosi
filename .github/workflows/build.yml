@@ -78,6 +78,8 @@ jobs:
             e2fsprogs \
             btrfs-progs \
             gdisk \
+            zstd \
+            systemd-container \
             python3-yaml
 
       - name: Stage build artifacts on the large /mnt disk
@@ -176,7 +178,7 @@ jobs:
             # full bake disk) can't hide behind gzip squashing the zeros.
             echo "| File | Size | Flashed (raw) | Bytes |"
             echo "|---|---:|---:|---:|"
-            for f in nosi-*.qcow2 nosi-*.img.gz nosi-*.tar.gz; do
+            for f in nosi-*.qcow2 nosi-*.img.gz nosi-*.tar.gz nosi-*.tar.zst; do
                 [ -e "$f" ] || continue
                 bytes=$(stat -c%s "$f")
                 flashed="-"
@@ -205,6 +207,8 @@ jobs:
             ~/system_imaging/disk/nosi-*.img.gz.sha256
             ~/system_imaging/disk/nosi-*.tar.gz
             ~/system_imaging/disk/nosi-*.tar.gz.sha256
+            ~/system_imaging/disk/nosi-*.tar.zst
+            ~/system_imaging/disk/nosi-*.tar.zst.sha256
             ~/system_imaging/disk/nosi-*.metadata.json
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init-output.log
             ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.cloud-init.log
@@ -376,6 +380,16 @@ jobs:
                   docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:latest"
                   docker push "ghcr.io/${REPO}/${v}:${ROLLING}"
                   docker push "ghcr.io/${REPO}/${v}:latest"
+                  ;;
+              lxc)
+                  # LXC system-container template (Proxmox CT / Incus): zstd
+                  # rootfs tarball.
+                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
+                      application/vnd.nosi.lxc-rootfs.v1+zstd \
+                      application/vnd.nosi.lxc-rootfs.layer.v1+zstd \
+                      "nosi-${v}.tar.zst" \
+                      "nosi-${v}.metadata.json" \
+                      "$($gc --describe "${v}")"
                   ;;
               *)
                   echo "::error::unknown derive output '$output' for $v"

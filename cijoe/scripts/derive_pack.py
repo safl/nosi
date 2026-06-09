@@ -60,7 +60,7 @@ def _gzip_cmd() -> str:
     return "pigz" if shutil.which("pigz") else "gzip"
 
 
-# Packages purged for stripped shapes (wsl / docker): kernel + bootloader
+# Packages purged for stripped shapes (wsl / docker / lxc): kernel + bootloader
 # + firmware are meaningless without our own kernel; cloud-init + netplan
 # + NetworkManager because WSL and containers own their own first-boot +
 # networking. qemu + podman/buildah/skopeo stay (nested virt + containers
@@ -209,8 +209,8 @@ def _derive_one(cijoe, base_qcow2: Path, disk_dir: Path, entry: dict) -> int:
     variant = entry["variant"]
     output = entry["output"]
     strip = bool(entry.get("strip", False))
-    if output not in ("img", "tar", "oci"):
-        log.error(f"derive '{variant}': unknown output {output!r} (img|tar|oci)")
+    if output not in ("img", "tar", "oci", "lxc"):
+        log.error(f"derive '{variant}': unknown output {output!r} (img|tar|oci|lxc)")
         return errno.EINVAL
 
     # The per-derive banner (_group_open) already announces variant/output/
@@ -294,7 +294,7 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
 
         # tar/oci read the live mount; drop binds first so the rootfs view
         # is static (volatile /sys etc. trip tar's "file changed" check).
-        if output in ("tar", "oci"):
+        if output in ("tar", "oci", "lxc"):
             for cmd in reversed(bind_cleanup):
                 cijoe.run_local(cmd)
             bind_cleanup.clear()
@@ -380,6 +380,38 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
         log.info(f"derive '{variant}': wrote {gz_path}")
         return 0
 
+    if output == "lxc":
+        # Proxmox CT / Incus system-container template: the same stripped
+        # rootfs as wsl, packed as a zstd tarball (Proxmox's preferred CT
+        # format, dropped straight into template/cache/ for `pct create`).
+        # Validated under systemd-nspawn -- the systemd-PID1 shape a CT runs.
+        tar_path = disk_dir / f"nosi-{variant}.tar"
+        zst_path = disk_dir / f"nosi-{variant}.tar.zst"
+        err, _ = cijoe.run_local(
+            f"sudo tar --xattrs --acls --numeric-owner "
+            f"--exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' "
+            f"--exclude='./run/*' --exclude='./tmp/*' --exclude='./lost+found' "
+            f"-cf {tar_path} -C {mnt} ."
+        )
+        if err:
+            log.error("tar of rootfs failed")
+            return err
+        cijoe.run_local(f"sudo chown $(id -u):$(id -g) {tar_path}")
+        # Validate before compressing (the tar above already captured a clean
+        # rootfs; nspawn may touch the mount, which is discarded after).
+        rc = _nspawn_smoketest(cijoe, mnt, variant)
+        if rc:
+            tar_path.unlink(missing_ok=True)
+            return rc
+        err, _ = cijoe.run_local(f"zstd -19 -T0 -f -q -o {zst_path} {tar_path}")
+        if err:
+            log.error("zstd compression of CT tarball failed")
+            return err
+        cijoe.run_local(f"sha256sum {zst_path} > {zst_path}.sha256")
+        tar_path.unlink(missing_ok=True)
+        log.info(f"derive '{variant}': wrote {zst_path} (Proxmox CT / Incus template)")
+        return 0
+
     # output == "oci": stream the rootfs tar straight into docker import.
     tag = f"nosi-{variant}:latest"
     changes = (
@@ -408,6 +440,26 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
         log.error(f"container smoketest failed for {tag} (cijoe/qemu missing?)")
         return err
     log.info(f"derive '{variant}': imported + smoketested OCI image {tag}")
+    return 0
+
+
+def _nspawn_smoketest(cijoe, mnt, variant) -> int:
+    """Run the stripped CT rootfs under systemd-nspawn and assert it is a
+    complete container rootfs: systemd present (it is what a CT runs as PID 1),
+    sshd present, and a sample upstream tool executes. Parity with the OCI
+    shape's `docker run` check -- a namespaced run, not a full boot."""
+    check = (
+        "command -v systemctl >/dev/null "
+        "&& { command -v sshd >/dev/null || test -x /usr/sbin/sshd; } "
+        "&& /usr/local/bin/hx --version"
+    )
+    err, _ = cijoe.run_local(
+        f"sudo systemd-nspawn -q --register=no -D {mnt} --pipe /bin/sh -c {_q(check)}"
+    )
+    if err:
+        log.error(f"derive '{variant}': nspawn smoketest failed (rootfs not container-clean?)")
+        return err
+    log.info(f"derive '{variant}': nspawn smoketest passed")
     return 0
 
 

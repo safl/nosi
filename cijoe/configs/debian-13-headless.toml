@@ -52,3 +52,12 @@ publish.gzip_level = 9
 variant = "debian-13-desktop"
 output = "img"
 strip = false
+
+# LXC system-container template (Proxmox CT / Incus): derive_pack runs
+# `apply.sh debian-13-lxc --shape-only` (step 56 masks growroot + adds
+# ifupdown), strips kernel/firmware/NetworkManager, validates the rootfs under
+# systemd-nspawn, and packs a zstd tarball for `pct create`. No re-bake.
+[[system-imaging.images.nosi-debian-13-headless-x86_64.derive]]
+variant = "debian-13-lxc"
+output = "lxc"
+strip = true

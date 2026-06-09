@@ -44,6 +44,15 @@ variants:
       on top of the headless baseline. The preferred daily-driver desktop
       where Debian's hardware support is sufficient.
 
+  debian-13-lxc:
+    shape: lxc
+    flashable: false
+    description: >-
+      Debian 13 (trixie) LXC system-container template (zstd rootfs tarball)
+      for Proxmox CT / Incus. The headless baseline minus kernel / firmware /
+      NetworkManager; the container shares the host kernel. Drop in
+      template/cache and `pct create`, or `incus image import`.
+
   ubuntu-2404-headless:
     shape: headless
     flashable: true
