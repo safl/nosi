@@ -54,14 +54,18 @@ def shrink_raw(cijoe, raw: Path) -> int:
             return 0
         partnum = root_part[len(loopdev) :].lstrip("p")
         cijoe.run_local(f"sudo e2fsck -p -f {root_part} >/dev/null 2>&1 || true")
-        est = _resize2fs_estimate(cijoe, root_part)
-        if est is None:
-            log.warning(f"shrink: cannot estimate fs min for {raw.name}; leaving full size")
+        # Minimize to the true minimum (relocates blocks). resize2fs -P only
+        # estimates and over-reports by gigabytes on these toolchain-heavy
+        # images, so -M shrinks far more. Then grow back a small margin so the
+        # rootfs has slack on the first boot before nosi-growroot expands it.
+        min_blocks = _resize2fs_minimize(cijoe, root_part)
+        if min_blocks is None:
+            log.warning(f"shrink: minimize failed for {raw.name}; leaving full size")
             return 0
-        target_blocks = est + 65536  # + 256 MiB headroom (4 KiB blocks)
+        target_blocks = min_blocks + 65536  # + 256 MiB slack (4 KiB blocks)
         err, _ = cijoe.run_local(f"sudo resize2fs {root_part} {target_blocks} >/dev/null 2>&1")
         if err:
-            log.warning(f"shrink: resize2fs failed for {raw.name}; leaving full size")
+            log.warning(f"shrink: resize2fs grow-back failed for {raw.name}; leaving full size")
             return 0
         start = _part_start(cijoe, loopdev, partnum)
         if start is None:
@@ -159,14 +163,19 @@ def _rootfs(cijoe, loopdev: str):
     return None, None, pttype
 
 
-def _resize2fs_estimate(cijoe, part: str) -> int | None:
-    """`resize2fs -P` estimated minimum filesystem size, in fs blocks."""
+def _resize2fs_minimize(cijoe, part: str) -> int | None:
+    """Shrink the fs to its minimum (`resize2fs -M`) and return the resulting
+    size in fs blocks, parsed from resize2fs's `is now/already <N> (Nk) blocks
+    long`. Falls back to the conservative `-P` estimate if the line is absent."""
     out_file = Path(f"/tmp/nosi-shrink-resize-{os.getpid()}")
     try:
-        cijoe.run_local(f"sudo resize2fs -P {part} > {out_file} 2>&1")
+        cijoe.run_local(f"sudo resize2fs -M {part} > {out_file} 2>&1")
         text = out_file.read_text() if out_file.exists() else ""
     finally:
         out_file.unlink(missing_ok=True)
+    m = re.search(r"(?:now|already) (\d+) \(\d+k\) blocks long", text)
+    if m:
+        return int(m.group(1))
     m = re.search(r"[Ee]stimated minimum size of the filesystem:\s*(\d+)", text)
     return int(m.group(1)) if m else None
 
