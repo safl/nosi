@@ -120,6 +120,39 @@ rm -rf \\
 rm -f /etc/ssh/ssh_host_*
 """
 
+# Fedora/dnf equivalent of STRIP_SCRIPT_TEMPLATE. dnf removes the kernel +
+# firmware + bootloader + NetworkManager + cloud-init where it can (best
+# effort; `|| true` so a protected/awkward package never aborts the strip),
+# and the rm sweep guarantees the big trees go regardless. Same rationale as
+# the apt strip: a container shares the host kernel and the platform owns
+# networking + first boot.
+STRIP_SCRIPT_DNF = """\
+#!/bin/sh
+set -u
+dnf -y remove \\
+    kernel kernel-core kernel-modules kernel-modules-core \\
+    linux-firmware \\
+    'grub2*' 'shim*' \\
+    NetworkManager 'NetworkManager-*' \\
+    cloud-init \\
+    >/dev/null 2>&1 || true
+dnf -y autoremove >/dev/null 2>&1 || true
+dnf clean all >/dev/null 2>&1 || true
+rm -rf \\
+    /boot/* \\
+    /var/cache/dnf/* \\
+    /lib/modules/* \\
+    /usr/lib/modules/* \\
+    /lib/firmware \\
+    /usr/lib/firmware \\
+    /etc/grub.d \\
+    /etc/default/grub \\
+    /var/lib/cloud \\
+    /etc/cloud \\
+    /var/log/anaconda
+rm -f /etc/ssh/ssh_host_*
+"""
+
 NBD_DEV = "/dev/nbd0"
 
 # OCI image config for the docker shape. PATH includes /usr/local/bin so
@@ -343,7 +376,10 @@ def _chroot_provision(cijoe, mnt, variant, strip) -> int:
 
     if strip:
         script = mnt / "tmp" / "nosi-strip.sh"
-        body = STRIP_SCRIPT_TEMPLATE.format(globs=" ".join(STRIP_PURGE_GLOBS))
+        if osr == "fedora":
+            body = STRIP_SCRIPT_DNF
+        else:
+            body = STRIP_SCRIPT_TEMPLATE.format(globs=" ".join(STRIP_PURGE_GLOBS))
         cijoe.run_local(f"sudo mkdir -p {mnt}/tmp")
         # Write via tee so the heredoc lands inside the (root-owned) rootfs.
         _write_root_file(cijoe, script, body, mode="0755")

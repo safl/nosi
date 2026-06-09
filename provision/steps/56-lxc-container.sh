@@ -40,7 +40,10 @@ apt)
     nosi_pkg_install ifupdown
     ;;
 dnf)
-    : # Fedora: Proxmox drives the CT via systemd-networkd; nothing to add.
+    # Fedora CTs network via systemd-networkd (the shape strip removes
+    # NetworkManager). Install + enable it so Proxmox/Incus can drive it.
+    nosi_pkg_install systemd-networkd
+    systemctl enable systemd-networkd.service 2>/dev/null || true
     ;;
 *)
     nosi_die "lxc shape supports apt/dnf distros only; got pkgmgr=${NOSI_PKGMGR:-?}"
