@@ -64,8 +64,91 @@ apt-get install -y proxmox-ve postfix open-iscsi chrony
 apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null || true
 update-grub 2>/dev/null || true
 
+# ---- first-boot: directory storage on a blank second disk -----------------
+# The operator runs the OS on one NVMe and wants VM/CT storage on a second.
+# This oneshot sets that up automatically, but only for a disk that is
+# DEFINITELY safe: a whole disk that is not the boot disk, has no partitions,
+# and has no filesystem/partition-table signature (wipefs -n is empty). It
+# never touches a disk with data, and no-ops once `nvme-data` exists.
+nosi_write_if_changed \
+'#!/bin/sh
+# Managed by nosi/provision/steps/60-proxmox-ve.sh
+set -u
+log(){ logger -t nosi-proxmox-storage "$*" 2>/dev/null; echo "nosi-proxmox-storage: $*"; }
+command -v pvesm >/dev/null 2>&1 || exit 0
+pvesm status 2>/dev/null | grep -q "^nvme-data" && exit 0
+root_src=$(findmnt -nvo SOURCE / 2>/dev/null)
+root_disk=$(lsblk -ndo PKNAME "$root_src" 2>/dev/null)
+cand=""
+for d in $(lsblk -dno NAME); do
+    [ "$(lsblk -dno TYPE /dev/$d 2>/dev/null)" = "disk" ] || continue
+    [ "$d" = "$root_disk" ] && continue
+    [ -n "$(lsblk -no NAME /dev/$d | tail -n +2)" ] && continue
+    [ -n "$(wipefs -n /dev/$d 2>/dev/null)" ] && continue
+    cand="$cand $d"
+done
+set -- $cand
+[ "$#" -eq 1 ] || { log "need exactly one blank non-boot disk, found: $* ; skipping"; exit 0; }
+disk=/dev/$1
+log "formatting $disk as ext4 directory storage"
+mkfs.ext4 -q -F -L nosi-vmstore "$disk" || { log "mkfs failed"; exit 0; }
+mkdir -p /var/lib/nosi-vmstore
+uuid=$(blkid -s UUID -o value "$disk")
+grep -q "$uuid" /etc/fstab 2>/dev/null || printf "UUID=%s /var/lib/nosi-vmstore ext4 defaults,nofail 0 2\n" "$uuid" >> /etc/fstab
+mount /var/lib/nosi-vmstore 2>/dev/null || true
+pvesm add dir nvme-data --path /var/lib/nosi-vmstore --content images,rootdir,iso,vztmpl,backup,snippets || log "pvesm add failed"
+log "done: nvme-data on $disk at /var/lib/nosi-vmstore"
+' /usr/local/sbin/nosi-proxmox-storage 0755
+
+nosi_write_if_changed \
+'[Unit]
+Description=nosi: set up a blank second disk as Proxmox directory storage
+After=pve-cluster.service pveproxy.service
+Wants=pve-cluster.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nosi-proxmox-storage
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+' /etc/systemd/system/nosi-proxmox-storage.service 0644
+systemctl enable nosi-proxmox-storage.service 2>/dev/null || true
+
+# ---- helper (manual): create the vmbr0 bridge ------------------------------
+# Not run automatically: rewriting /etc/network/interfaces + handing the NIC
+# from the base networking to ifupdown2 is best done where it can be verified
+# (the web UI does it well). This writes the config + a backup and tells the
+# operator to apply it; `ifreload -a` activates it.
+nosi_write_if_changed \
+'#!/bin/sh
+# Managed by nosi/provision/steps/60-proxmox-ve.sh -- create vmbr0 over the
+# primary NIC (DHCP). Review, then apply with: ifreload -a
+set -u
+log(){ echo "nosi-proxmox-mkbridge: $*"; }
+ip -o link show type bridge 2>/dev/null | grep -q vmbr0 && { log "vmbr0 already exists"; exit 0; }
+nic=$(ip -o route show default 2>/dev/null | sed -n "s/.* dev \([^ ]*\).*/\1/p" | head -1)
+[ -n "$nic" ] || { log "no default-route NIC found; aborting"; exit 1; }
+cp /etc/network/interfaces /etc/network/interfaces.nosi-bak 2>/dev/null || true
+cat > /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+
+iface $nic inet manual
+
+auto vmbr0
+iface vmbr0 inet dhcp
+    bridge-ports $nic
+    bridge-stp off
+    bridge-fd 0
+EOF
+log "wrote vmbr0 over $nic (backup: /etc/network/interfaces.nosi-bak)"
+log "apply with: ifreload -a"
+' /usr/local/sbin/nosi-proxmox-mkbridge 0755
+
 # Restore normal service-start behavior for the first real boot.
 rm -f /usr/sbin/policy-rc.d
 apt-get clean
 
-nosi_info "step 60-proxmox-ve done (PVE installed; daemons start on first boot)"
+nosi_info "step 60-proxmox-ve done (PVE installed; daemons + storage on first boot)"
