@@ -169,13 +169,21 @@ jobs:
           {
             echo "### \`${IMG}\` built-image sizes"
             echo
-            echo "| File | Size | Bytes |"
-            echo "|---|---:|---:|"
+            # "Flashed" is the decompressed (raw) size -- what `dd` actually
+            # writes -- measured by streaming the .img.gz through wc, so the
+            # shrink-to-fit is visible and a silent regression (raw back to the
+            # full bake disk) can't hide behind gzip squashing the zeros.
+            echo "| File | Size | Flashed (raw) | Bytes |"
+            echo "|---|---:|---:|---:|"
             for f in nosi-*.qcow2 nosi-*.img.gz nosi-*.tar.gz; do
                 [ -e "$f" ] || continue
                 bytes=$(stat -c%s "$f")
-                printf '| `%s` | %s | %s |\n' \
-                    "$f" "$(numfmt --to=iec "$bytes")" "$bytes"
+                flashed="-"
+                case "$f" in
+                    *.img.gz) flashed="$(numfmt --to=iec "$(zcat "$f" | wc -c)")" ;;
+                esac
+                printf '| `%s` | %s | %s | %s |\n' \
+                    "$f" "$(numfmt --to=iec "$bytes")" "$flashed" "$bytes"
             done
             echo
             echo "Local OCI images (docker shape):"
