@@ -23,6 +23,7 @@ import errno
 import logging as log
 import os
 import shutil
+import time
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -128,19 +129,26 @@ def _boot_proxmox(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
         raise RuntimeError("qemu launch failed for proxmox boot-test")
 
 
-def _assert_pve(key: Path) -> int:
-    """All three core daemons active and the web UI listening on :8006."""
-    ok = True
+def _assert_pve(key: Path, timeout: int = 180) -> int:
+    """All three core daemons active and the web UI listening on :8006.
 
-    # `is-active a b c` exits 0 only if every unit is active.
-    rc, out = _ssh(key, "systemctl is-active pve-cluster pvedaemon pveproxy")
-    services_ok = rc == 0
-    log.info(f"[{'PASS' if services_ok else 'FAIL'}] pve daemons active: {out.strip()!r}")
-    ok = ok and services_ok
-
-    rc, out = _ssh(key, "sudo ss -Hltn 'sport = :8006' | grep -q . && echo LISTENING")
-    port_ok = rc == 0 and "LISTENING" in out
-    log.info(f"[{'PASS' if port_ok else 'FAIL'}] web UI on :8006: {out.strip()!r}")
-    ok = ok and port_ok
-
-    return 0 if ok else 1
+    Polls rather than checking once: sshd comes up before the PVE stack finishes
+    settling (pmxcfs, then its dependents), so an instant check races the
+    startup. Passes as soon as everything is up, fails only if it never is."""
+    end = time.monotonic() + timeout
+    last = "(no check yet)"
+    while True:
+        # `is-active a b c` exits 0 only if every unit is active.
+        rc_s, out_s = _ssh(key, "systemctl is-active pve-cluster pvedaemon pveproxy")
+        services_ok = rc_s == 0
+        rc_p, out_p = _ssh(key, "sudo ss -Hltn 'sport = :8006' | grep -q . && echo LISTENING")
+        port_ok = rc_p == 0 and "LISTENING" in out_p
+        if services_ok and port_ok:
+            log.info(f"[PASS] PVE up: daemons={out_s.strip()!r}, :8006 listening")
+            return 0
+        last = f"daemons={out_s.strip()!r} (rc={rc_s}); :8006={'up' if port_ok else 'down'}"
+        if time.monotonic() >= end:
+            break
+        time.sleep(10)
+    log.info(f"[FAIL] PVE not up within {timeout}s: {last}")
+    return 1
