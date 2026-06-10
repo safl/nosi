@@ -64,6 +64,42 @@ apt-get install -y proxmox-ve postfix open-iscsi chrony
 apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null || true
 update-grub 2>/dev/null || true
 
+# ---- first-boot: make the node hostname resolvable (pmxcfs needs it) -------
+# pve-cluster (pmxcfs) refuses to start unless the node hostname resolves to an
+# address, and everything else (pvedaemon, pveproxy, pvestatd, pve-firewall)
+# Requires it. Cloud images ship /etc/hosts without a hostname entry and rely on
+# cloud-init to add one -- but cloud-init is disabled on a flashed host, so add
+# it ourselves, ordered Before=pve-cluster. Read the live hostname each boot so
+# it works whatever the host ends up named (static or DHCP-assigned).
+nosi_write_if_changed \
+'#!/bin/sh
+# Managed by nosi/provision/steps/60-proxmox-ve.sh
+set -u
+hn=$(hostname 2>/dev/null)
+[ -n "$hn" ] && [ "$hn" != "localhost" ] || exit 0
+# Already resolvable (an /etc/hosts entry or DNS) -> nothing to do.
+getent hosts "$hn" >/dev/null 2>&1 && exit 0
+printf "127.0.1.1\t%s.localdomain %s\n" "$hn" "$hn" >> /etc/hosts
+' /usr/local/sbin/nosi-proxmox-hosts 0755
+
+nosi_write_if_changed \
+'[Unit]
+Description=nosi: ensure the node hostname resolves (required by pmxcfs)
+DefaultDependencies=no
+After=local-fs.target
+Before=pve-cluster.service basic.target
+ConditionPathExists=/usr/bin/pmxcfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nosi-proxmox-hosts
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+' /etc/systemd/system/nosi-proxmox-hosts.service 0644
+systemctl enable nosi-proxmox-hosts.service 2>/dev/null || true
+
 # ---- first-boot: directory storage on a blank second disk -----------------
 # The operator runs the OS on one NVMe and wants VM/CT storage on a second.
 # This oneshot sets that up automatically, but only for a disk that is
