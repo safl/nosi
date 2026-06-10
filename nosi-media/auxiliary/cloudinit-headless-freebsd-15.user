@@ -110,6 +110,17 @@ runcmd:
   - rm -f /etc/ssh/ssh_host_*
   - rm -f /etc/hostid
 
+  # Disable firstboot_freebsd_update. The BASIC-CLOUDINIT base image
+  # ships with firstboot_freebsd_update_enable=YES, so the consumer's
+  # first boot would pull the entire patch backlog
+  # (15.0-RELEASE -> 15.0-RELEASE-pXX = thousands of binary patches)
+  # from update.FreeBSD.org before LOGIN, gated by KEYWORD: firstboot
+  # against the same /firstboot sentinel that runs nosi_clock_from_http
+  # and nosi_firstboot_inventory. On a CI runner that easily exceeds
+  # the qemu wrapper's 120s is_up() window. Operators who want patches
+  # can run `freebsd-update fetch install` themselves.
+  - sysrc firstboot_freebsd_update_enable=NO
+
   # Kernel + world source for headless work: buildkernel, out-of-tree
   # modules, sys/ headers. Pattern borrowed from xNVMe's FreeBSD bootimg
   # workflow (github.com/xnvme/xnvme/blob/main/cijoe/workflows/bootimg-
