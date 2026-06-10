@@ -38,6 +38,7 @@ fzf
 gh
 git
 git-delta
+git-lfs
 htop
 just
 meson

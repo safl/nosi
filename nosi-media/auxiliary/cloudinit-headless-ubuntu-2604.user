@@ -86,6 +86,7 @@ packages:
   - gh                   # GitHub CLI
   - git
   - git-delta            # `delta` pager, wired into /etc/gitconfig
+  - git-lfs
   - htop
   - just                 # task runner (sister to make-as-task-runner)
   - meson
