@@ -36,7 +36,7 @@ nosi_info "step 06-package-presence"
 case "$NOSI_PKGMGR" in
 pkg)
     must_have=(
-        git curl wget jq python3
+        git git-lfs curl wget jq python3
         bash gmake cmake ninja meson pkgconf
         hx zellij btop rg fd fzf direnv gh delta
     )
@@ -44,6 +44,7 @@ pkg)
 *)
     must_have=(
         git
+        git-lfs
         curl
         jq
         python3

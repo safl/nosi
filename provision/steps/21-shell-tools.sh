@@ -47,6 +47,11 @@ if [ "$NOSI_DISTRO" = "freebsd" ]; then
     line-numbers = true
 [merge]
     conflictstyle = zdiff3
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
 ' /usr/local/etc/gitconfig 0644
     nosi_info "step 21-shell-tools done (freebsd)"
     exit 0
@@ -72,6 +77,11 @@ nosi_write_if_changed \
     line-numbers = true
 [merge]
     conflictstyle = zdiff3
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
 ' /etc/gitconfig 0644
 
 # ---- /etc/profile.d/nosi-localbin.sh --------------------------------------
