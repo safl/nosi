@@ -52,8 +52,14 @@ disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-14-headless-x
 # UFS cannot be shrunk after the bake, so bake size == ship size. Use the
 # smallest disk that still fits the install (base + tools + /usr/src ~1.5 GB +
 # the transient src.txz extraction, over UFS's ~8% reserve); native 6 GiB
-# overflows. growfs expands it to the real disk on first boot.
-disk.bake_size = "9G"
+# overflows, and 9 GiB was tight enough that the 14.4-p6 transient peak
+# (firstboot_freebsd_update install + src.txz extract) silently filled the
+# disk and left /usr/src truncated (974 zero-byte files, missing
+# conf/kmod.mk and sys/param.h), which then broke any kernel-module build
+# (DPDK contigmem.ko etc) on consumer images. growfs expands the partition
+# to the real disk on first boot, but UFS files only grow at write-time;
+# files truncated at bake stay truncated.
+disk.bake_size = "12G"
 
 publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-14-headless-x86_64.img"
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-freebsd-14-headless-x86_64.img.gz"
