@@ -2,11 +2,12 @@
 Shrink a raw disk image to fit
 ==============================
 
-Helper (not a runnable cijoe step) shared by ``img_gz_pack`` and
-``derive_pack``: trim an ext4 rootfs + its partition in a raw ``.img`` down to
-the used size (plus a margin), truncate the file, and relocate the GPT backup
-header to the new end. The images bake on a roomy disk for provisioning
-headroom but ship compact; nosi-growroot expands the rootfs back on first boot.
+Helper (not a runnable cijoe step) shared by ``img_gz_pack``, ``derive_pack``
+and ``rpi_image_build``: trim an ext4 or btrfs rootfs + its partition in a raw
+``.img`` down to the used size (plus a margin), truncate the file, and relocate
+the GPT backup header to the new end. The images bake on a roomy disk for
+provisioning headroom but ship compact; nosi-growroot (or the Pi's growroot /
+FreeBSD's growfs) expands the rootfs back on first boot.
 
 Why pack-time and not bake-time: ``derive_pack`` copies the baked base and
 installs the derived shape's packages into it, so the base must stay roomy
@@ -38,7 +39,7 @@ from pathlib import Path
 def shrink_raw(cijoe, raw: Path) -> int:
     """Shrink ``raw`` in place. Returns 0 on success or safe no-op, an errno on
     a post-truncate GPT-verify failure (a corrupt table that must not ship)."""
-    loopdev = _losetup(cijoe, raw)
+    loopdev = losetup_attach(cijoe, raw)
     if not loopdev:
         log.warning(f"shrink: losetup failed for {raw.name}; leaving full size")
         return 0
@@ -97,7 +98,7 @@ def shrink_raw(cijoe, raw: Path) -> int:
 def _fix_gpt_backup(cijoe, raw: Path) -> int:
     """Re-attach the truncated image, move the backup GPT to the new end, and
     verify. Returns 0 if the table is clean, errno.EIO otherwise."""
-    loopdev = _losetup(cijoe, raw)
+    loopdev = losetup_attach(cijoe, raw)
     if not loopdev:
         log.warning(f"shrink: re-attach for GPT fixup failed on {raw.name}")
         return errno.EIO
@@ -112,7 +113,7 @@ def _fix_gpt_backup(cijoe, raw: Path) -> int:
     return 0 if "No problems found" in text else errno.EIO
 
 
-def _losetup(cijoe, raw: Path) -> str | None:
+def losetup_attach(cijoe, raw: Path) -> str | None:
     """Attach ``raw`` as a partitioned loop device; return its path."""
     out_file = raw.with_suffix(raw.suffix + ".loop")
     try:
