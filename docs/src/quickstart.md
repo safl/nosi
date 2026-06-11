@@ -104,3 +104,29 @@ The imported distro boots with `systemd=true` and default user `odus`
 keys and the machine-id; `nosi-motd.service` writes the banner. GUI
 tools (`meld`, `gitk`, `git-gui`) render via WSLg as native Windows
 windows -- no compositor in the rootfs.
+
+## Create a Proxmox CT from an LXC template (`<distro>-lxc`)
+
+The `lxc` shapes (`debian-13-lxc`, `ubuntu-2604-lxc`, `fedora-44-lxc`)
+publish a system-container rootfs (`.tar.zst`) that Proxmox consumes
+directly as a CT template. On the Proxmox host:
+
+```bash
+# Pull the template into a storage's template cache
+# (local storage keeps templates in /var/lib/vz/template/cache/).
+cd /var/lib/vz/template/cache
+oras pull "ghcr.io/safl/nosi/debian-13-lxc:latest"
+
+# Create + start the container (CT id 200, adjust to taste).
+pct create 200 local:vztmpl/nosi-debian-13-lxc.tar.zst \
+  --hostname nosi-ct --memory 4096 --cores 2 \
+  --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+  --rootfs local:8 --unprivileged 1 --features nesting=1
+pct start 200
+pct enter 200
+```
+
+The container runs systemd as PID 1 with the full nosi toolset; user
+`odus` and sshd match the flashable variants. `nesting=1` lets podman
+run inside the CT. The same tarball imports into Incus / LXD with
+`incus image import` (metadata supplied at import time).
