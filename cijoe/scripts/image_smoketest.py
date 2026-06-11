@@ -43,6 +43,8 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
+import json
 import logging as log
 import os
 import shutil
@@ -209,7 +211,6 @@ def _read_sidecar_sha256(path: Path) -> str:
 
 
 def _file_sha256(path: Path) -> str:
-    import hashlib
 
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -449,10 +450,8 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
             f"{(res.stderr or res.stdout).strip()}"
         )
 
-    import json as _json
-
     try:
-        _json.loads(json_local.read_text())  # validate it parses before publish
+        json.loads(json_local.read_text())  # validate it parses before publish
     except (OSError, ValueError) as exc:
         raise RuntimeError(f"extracted metadata.json did not parse: {exc}") from exc
 

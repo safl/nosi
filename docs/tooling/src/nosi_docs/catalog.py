@@ -25,6 +25,7 @@ import json
 import logging
 import shutil
 import subprocess
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -286,7 +287,6 @@ def _render_variant_section(s: VariantSnapshot) -> str:
 
 def cli() -> None:
     """Console-script entry point: `nosi-docs-fetch-catalog`."""
-    import sys
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cwd = Path.cwd()

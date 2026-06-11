@@ -46,6 +46,7 @@ Retargetable: False
 from __future__ import annotations
 
 import errno
+import json
 import logging as log
 import os
 from argparse import ArgumentParser
@@ -533,7 +534,6 @@ def _find_rootfs_partition(cijoe, work, attempts=10):
     /etc/os-release and fails the derive. A nosi rootfs is always several GiB,
     so requiring >= 1 GiB filters the phantom and we retry until the real one
     is visible."""
-    import json
 
     rootfs_fstypes = ("ext4", "btrfs", "xfs")
     min_rootfs_bytes = 1 << 30  # 1 GiB
