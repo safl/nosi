@@ -28,3 +28,17 @@ jobs:
       # Runs every hook over the full tree. The shellcheck hook uses Docker
       # (preinstalled on hosted runners); ruff/hygiene hooks are pip-based.
       - uses: pre-commit/action@v3.0.1
+
+  unit-tests:
+    # Fast (<1 s) pytest over the pure functions in cijoe/scripts, tools
+    # and the docs tooling: marker expansion, catalog rendering, the
+    # variants.yml schema. Catches a parser/registry regression here in
+    # seconds instead of after a 50-minute bake in build-images.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml
+      - run: pytest tests/ -q
