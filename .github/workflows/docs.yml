@@ -37,6 +37,10 @@ jobs:
 
       - name: Install pipx + LaTeX (for PDF build)
         run: |
+          # Drop the runner-preinstalled Microsoft repos (azure-cli,
+          # packages.microsoft.com): unused here, and their mirror 403s
+          # have failed runs during this apt-get update.
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure*
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pipx \

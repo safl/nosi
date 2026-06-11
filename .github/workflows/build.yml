@@ -65,6 +65,10 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Drop the runner-preinstalled Microsoft repos (azure-cli,
+          # packages.microsoft.com): unused here, and their mirror 403s
+          # have failed runs during this apt-get update.
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure*
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             qemu-system-x86 \
@@ -504,6 +508,10 @@ jobs:
         # resize2fs/e2fsck from e2fsprogs, xz-utils to decompress the upstream
         # image, pigz for the .img.gz pack.
         run: |
+          # Drop the runner-preinstalled Microsoft repos (azure-cli,
+          # packages.microsoft.com): unused here, and their mirror 403s
+          # have failed runs during this apt-get update.
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure*
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cloud-guest-utils \
@@ -702,6 +710,10 @@ jobs:
 
       - name: Install catalog-generator deps
         run: |
+          # Drop the runner-preinstalled Microsoft repos (azure-cli,
+          # packages.microsoft.com): unused here, and their mirror 403s
+          # have failed runs during this apt-get update.
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure*
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-yaml
 
