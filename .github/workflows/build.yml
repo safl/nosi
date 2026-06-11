@@ -245,7 +245,7 @@ jobs:
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Log in to GHCR
         # Both clients: oras for the disk-image / wsl-rootfs artifacts,
@@ -596,7 +596,7 @@ jobs:
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Log in to GHCR
         if: env.PUBLISH == 'true'

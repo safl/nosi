@@ -60,7 +60,7 @@ jobs:
         # for the use-case prose, application/vnd.nosi.metadata.v1+json
         # layer for the tool / package inventory. oras is required on
         # the runner's PATH for both.
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Build HTML
         working-directory: docs
