@@ -10,9 +10,10 @@ installs the shape's packages + config via its shape step, skipping the
 base infrastructure that already ran), optionally strips
 kernel/boot/cloud-init, and repackages by output mode:
 
-  output = "img"   bootable .img.gz   (desktop; no strip, kernel kept)
+  output = "img"   bootable .img.gz   (desktop / proxmox; no strip, kernel kept)
   output = "tar"   rootfs .tar.gz     (wsl; strip)
   output = "oci"   OCI image via `docker import` (docker; strip)
+  output = "lxc"   rootfs .tar.zst    (Proxmox CT / Incus; strip + nspawn check)
 
 Driven by the base image's ``derive`` list in the cijoe config:
 
@@ -37,6 +38,7 @@ Artifact naming (also consumed by .github/workflows/build.yml):
   tar : <disk_dir>/nosi-<variant>.tar.gz        (+ .sha256)
   oci : local docker image tagged nosi-<variant>:latest (build.yml
         retags to ghcr.io/<repo>/<variant> and pushes)
+  lxc : <disk_dir>/nosi-<variant>.tar.zst       (+ .sha256)
 
 Retargetable: False
 """
