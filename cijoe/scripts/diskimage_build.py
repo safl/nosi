@@ -24,6 +24,7 @@ import logging as log
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import default_image_name as _default_image_name
 from cijoe.core.misc import download
 from cijoe.qemu.wrapper import Guest
 from userdata_render import render as render_userdata
@@ -201,9 +202,3 @@ def main(args, cijoe):
         return err
 
     return 0
-
-
-def _default_image_name(cijoe) -> str:
-    nosi = cijoe.getconf("nosi", {})
-    variant = nosi.get("variant", "debian-13-headless")
-    return f"nosi-{variant}-x86_64"

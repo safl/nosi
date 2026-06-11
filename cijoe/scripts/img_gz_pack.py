@@ -27,18 +27,12 @@ from __future__ import annotations
 
 import errno
 import logging as log
-import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import default_image_name as _default_image_name
+from buildlib import gzip_cmd as _gzip_cmd
 from imgshrink import shrink_raw
-
-
-def _gzip_cmd() -> str:
-    """pigz (parallel, all cores) when present, else stock gzip. Both emit
-    the same .gz format, so consumers are unaffected; pigz just saturates
-    the runner's cores instead of leaving three idle on a -9 pass."""
-    return "pigz" if shutil.which("pigz") else "gzip"
 
 
 def add_args(parser: ArgumentParser):
@@ -124,9 +118,3 @@ def main(args, cijoe):
     raw_path.unlink(missing_ok=True)
 
     return 0
-
-
-def _default_image_name(cijoe) -> str:
-    nosi = cijoe.getconf("nosi", {})
-    variant = nosi.get("variant", "debian-13-headless")
-    return f"nosi-{variant}-x86_64"

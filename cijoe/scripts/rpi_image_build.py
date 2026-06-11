@@ -58,6 +58,7 @@ import re
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import q as _q
 from cijoe.core.misc import download
 from userdata_render import _resolve_version
 
@@ -601,11 +602,6 @@ def _resolve_path(repo_root: Path, p: str) -> Path:
     (incl. expanded {{ local.env.HOME }}) pass through."""
     path = Path(p)
     return path if path.is_absolute() else (repo_root / path)
-
-
-def _q(s: str) -> str:
-    """Single-quote a string for `sh -c`."""
-    return "'" + s.replace("'", "'\\''") + "'"
 
 
 def _default_image_name(cijoe) -> str:
