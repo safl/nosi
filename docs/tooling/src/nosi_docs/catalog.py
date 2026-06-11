@@ -30,35 +30,29 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 log = logging.getLogger(__name__)
 
 
-# Variants nosi publishes as ORAS artifacts carrying the
-# vnd.nosi.metadata.v1+json layer this page reads. That's every base
-# (the build matrix + the Pi job) plus the oras-published derived shapes
-# (desktop / proxmox .img.gz, wsl rootfs .tar.gz, lxc rootfs .tar.zst).
-# The `docker` shape is intentionally absent: it's a `docker import` OCI
-# image without the metadata layer, so it's documented in prose
-# (overview.md) rather than auto-rendered here.
-# Keep in sync with .github/workflows/build.yml + the [[...derive]]
-# entries in cijoe/configs/.
-KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
-    ("debian-13-headless", "ghcr.io/safl/nosi/debian-13-headless:latest"),
-    ("debian-13-desktop", "ghcr.io/safl/nosi/debian-13-desktop:latest"),
-    ("debian-13-lxc", "ghcr.io/safl/nosi/debian-13-lxc:latest"),
-    ("debian-13-proxmox", "ghcr.io/safl/nosi/debian-13-proxmox:latest"),
-    ("ubuntu-2404-headless", "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
-    ("ubuntu-2604-headless", "ghcr.io/safl/nosi/ubuntu-2604-headless:latest"),
-    ("ubuntu-2604-wsl", "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"),
-    ("ubuntu-2604-lxc", "ghcr.io/safl/nosi/ubuntu-2604-lxc:latest"),
-    ("fedora-44-headless", "ghcr.io/safl/nosi/fedora-44-headless:latest"),
-    ("fedora-44-desktop", "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
-    ("fedora-44-lxc", "ghcr.io/safl/nosi/fedora-44-lxc:latest"),
-    ("rpios-13-headless", "ghcr.io/safl/nosi/rpios-13-headless:latest"),
-    ("rpios-13-desktop", "ghcr.io/safl/nosi/rpios-13-desktop:latest"),
-    ("freebsd-14-headless", "ghcr.io/safl/nosi/freebsd-14-headless:latest"),
-    ("freebsd-15-headless", "ghcr.io/safl/nosi/freebsd-15-headless:latest"),
-)
+GHCR_PREFIX = "ghcr.io/safl/nosi"
+
+
+def known_variants(repo_root: Path) -> tuple[tuple[str, str], ...]:
+    """(name, ref) for every variant nosi publishes as an ORAS artifact
+    carrying the vnd.nosi.metadata.v1+json layer this page reads.
+
+    Derived from variants.yml -- the same registry that drives the build
+    annotations and gen_catalog -- instead of a hand-maintained list here,
+    which had already drifted seven variants behind the fleet once. The
+    `docker` shape is excluded: it's a `docker import` OCI image without
+    the metadata layer, documented in prose (overview.md) instead."""
+    data = yaml.safe_load((repo_root / "variants.yml").read_text())
+    return tuple(
+        (name, f"{GHCR_PREFIX}/{name}:latest")
+        for name, spec in data["variants"].items()
+        if spec.get("shape") != "docker"
+    )
 
 
 @dataclass
@@ -80,7 +74,8 @@ def fetch_and_render(docs_root: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "catalog.md"
 
-    snapshots = [_fetch_variant(name, ref) for name, ref in KNOWN_VARIANTS]
+    variants = known_variants(docs_root.resolve().parent)
+    snapshots = [_fetch_variant(name, ref) for name, ref in variants]
     rendered = _render(snapshots)
     out.write_text(rendered)
     ok = sum(1 for s in snapshots if s.metadata is not None)
