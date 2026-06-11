@@ -316,67 +316,9 @@ jobs:
           report="nosi-${IMG}-x86_64.cijoe-report.zip"
           gc="python3 $GITHUB_WORKSPACE/tools/gen_catalog.py"
 
-          # oras push with the standard nosi annotation set + idempotent
-          # retry (ghcr.io intermittently resets the HTTP/2 upload stream;
-          # oras skips already-uploaded blobs by digest, so re-running
-          # resumes). $1 ref $2 artifact-type $3 layer-media $4 file
-          # $5 metadata.json $6 description.
-          oras_push() {
-              local ref=$1 atype=$2 lmedia=$3 file=$4 meta=$5 desc=$6
-              jq -e . "$meta" >/dev/null
-              local variant shape distro distro_version kernel_release built arch
-              variant=$(jq -r '.nosi.variant // empty' "$meta")
-              shape=$(jq -r '.nosi.shape // empty' "$meta")
-              distro=$(jq -r '.distro.id // empty' "$meta")
-              distro_version=$(jq -r '.distro.version_id // empty' "$meta")
-              kernel_release=$(jq -r '.kernel.release // empty' "$meta")
-              built=$(jq -r '.nosi.built // empty' "$meta")
-              arch=$(jq -r '.architecture // empty' "$meta")
-              local attempts=0
-              until oras push "$ref" \
-                  --artifact-type "$atype" \
-                  --annotation "org.opencontainers.image.title=nosi-${variant}" \
-                  --annotation "org.opencontainers.image.description=${desc}" \
-                  --annotation "org.opencontainers.image.version=${ROLLING}" \
-                  --annotation "org.opencontainers.image.created=${built}" \
-                  --annotation "org.opencontainers.image.revision=${SHA}" \
-                  --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
-                  --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
-                  --annotation "org.opencontainers.image.architecture=${arch}" \
-                  --annotation "org.opencontainers.image.os=linux" \
-                  --annotation "dev.nosi.variant=${variant}" \
-                  --annotation "dev.nosi.shape=${shape}" \
-                  --annotation "dev.nosi.distro=${distro}" \
-                  --annotation "dev.nosi.distro-version=${distro_version}" \
-                  --annotation "dev.nosi.kernel-release=${kernel_release}" \
-                  "${file}:${lmedia}" \
-                  "${file}.sha256:text/plain" \
-                  "${report}:application/vnd.nosi.build-report.v1+zip" \
-                  "${report}.sha256:text/plain" \
-                  "${meta}:application/vnd.nosi.metadata.v1+json"; do
-                  attempts=$((attempts + 1))
-                  if [ $attempts -ge 3 ]; then
-                      echo "::error::oras push $ref failed after $attempts attempts"
-                      return 1
-                  fi
-                  echo "::warning::oras push $ref attempt $attempts failed; retrying"
-                  sleep $((attempts * 15))
-              done
-              # Retag as :latest. Retried because GHCR is eventually
-              # consistent: a lookup right after the push can 404 ("not
-              # found") before the new tag propagates, even though the
-              # push itself succeeded.
-              local tag_attempts=0
-              until oras tag "$ref" latest; do
-                  tag_attempts=$((tag_attempts + 1))
-                  if [ $tag_attempts -ge 5 ]; then
-                      echo "::error::oras tag $ref latest failed after $tag_attempts attempts"
-                      return 1
-                  fi
-                  echo "::warning::oras tag $ref latest attempt $tag_attempts failed (GHCR propagation lag?); retrying"
-                  sleep $((tag_attempts * 10))
-              done
-          }
+          # One shared copy of the annotated, retried push: see the
+          # contract in .github/scripts/oras-push.sh.
+          source "$GITHUB_WORKSPACE/.github/scripts/oras-push.sh"
 
           # Base headless: flashable .img.gz disk-image.
           oras_push "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
@@ -685,65 +627,14 @@ jobs:
           report="nosi-rpios-13-arm64.cijoe-report.zip"
           gc="python3 $GITHUB_WORKSPACE/tools/gen_catalog.py"
 
-          oras_push() {
-              local ref=$1 file=$2 meta=$3 desc=$4
-              jq -e . "$meta" >/dev/null
-              local variant shape distro distro_version kernel_release built arch
-              variant=$(jq -r '.nosi.variant // empty' "$meta")
-              shape=$(jq -r '.nosi.shape // empty' "$meta")
-              distro=$(jq -r '.distro.id // empty' "$meta")
-              distro_version=$(jq -r '.distro.version_id // empty' "$meta")
-              kernel_release=$(jq -r '.kernel.release // empty' "$meta")
-              built=$(jq -r '.nosi.built // empty' "$meta")
-              arch=$(jq -r '.architecture // empty' "$meta")
-              local attempts=0
-              until oras push "$ref" \
-                  --artifact-type application/vnd.nosi.disk-image.v1+gzip \
-                  --annotation "org.opencontainers.image.title=nosi-${variant}" \
-                  --annotation "org.opencontainers.image.description=${desc}" \
-                  --annotation "org.opencontainers.image.version=${ROLLING}" \
-                  --annotation "org.opencontainers.image.created=${built}" \
-                  --annotation "org.opencontainers.image.revision=${SHA}" \
-                  --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
-                  --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
-                  --annotation "org.opencontainers.image.architecture=${arch}" \
-                  --annotation "org.opencontainers.image.os=linux" \
-                  --annotation "dev.nosi.variant=${variant}" \
-                  --annotation "dev.nosi.shape=${shape}" \
-                  --annotation "dev.nosi.distro=${distro}" \
-                  --annotation "dev.nosi.distro-version=${distro_version}" \
-                  --annotation "dev.nosi.kernel-release=${kernel_release}" \
-                  "${file}:application/vnd.nosi.disk-image.layer.v1+gzip" \
-                  "${file}.sha256:text/plain" \
-                  "${report}:application/vnd.nosi.build-report.v1+zip" \
-                  "${report}.sha256:text/plain" \
-                  "${meta}:application/vnd.nosi.metadata.v1+json"; do
-                  attempts=$((attempts + 1))
-                  if [ $attempts -ge 3 ]; then
-                      echo "::error::oras push $ref failed after $attempts attempts"
-                      return 1
-                  fi
-                  echo "::warning::oras push $ref attempt $attempts failed; retrying"
-                  sleep $((attempts * 15))
-              done
-              # Retag as :latest. Retried because GHCR is eventually
-              # consistent: a lookup right after the push can 404 ("not
-              # found") before the new tag propagates, even though the
-              # push itself succeeded.
-              local tag_attempts=0
-              until oras tag "$ref" latest; do
-                  tag_attempts=$((tag_attempts + 1))
-                  if [ $tag_attempts -ge 5 ]; then
-                      echo "::error::oras tag $ref latest failed after $tag_attempts attempts"
-                      return 1
-                  fi
-                  echo "::warning::oras tag $ref latest attempt $tag_attempts failed (GHCR propagation lag?); retrying"
-                  sleep $((tag_attempts * 10))
-              done
-          }
+          # Same shared push helper as the x86 job (6-arg form);
+          # media types passed explicitly below.
+          source "$GITHUB_WORKSPACE/.github/scripts/oras-push.sh"
 
           for v in rpios-13-headless rpios-13-desktop; do
               oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
+                  application/vnd.nosi.disk-image.v1+gzip \
+                  application/vnd.nosi.disk-image.layer.v1+gzip \
                   "nosi-${v}-arm64.img.gz" \
                   "nosi-${v}-arm64.metadata.json" \
                   "$($gc --describe "${v}")"
