@@ -258,11 +258,22 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+        # Retried: GHCR has transient wobbles (5xx, propagation lag) and a
+        # one-shot login losing the dice roll fails the whole publish.
         run: |
-          printf '%s' "$GHCR_TOKEN" \
-            | oras login ghcr.io -u "$GHCR_USER" --password-stdin
-          printf '%s' "$GHCR_TOKEN" \
-            | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          for i in 1 2 3 4 5; do
+              printf '%s' "$GHCR_TOKEN" \
+                | oras login ghcr.io -u "$GHCR_USER" --password-stdin \
+              && printf '%s' "$GHCR_TOKEN" \
+                | docker login ghcr.io -u "$GHCR_USER" --password-stdin \
+              && break
+              if [ "$i" = 5 ]; then
+                  echo "::error::ghcr login failed after 5 attempts"
+                  exit 1
+              fi
+              echo "::warning::ghcr login attempt $i failed; retrying"
+              sleep $((i * 10))
+          done
 
       - name: Bundle cijoe report into a zip
         # Ship the build provenance (report.html + per-step cmd_*.output
@@ -405,8 +416,19 @@ jobs:
                   # use-case prose.
                   docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:${ROLLING}"
                   docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:latest"
-                  docker push "ghcr.io/${REPO}/${v}:${ROLLING}"
-                  docker push "ghcr.io/${REPO}/${v}:latest"
+                  # Retried for the same GHCR wobbles as oras push/tag.
+                  for tag in "${ROLLING}" latest; do
+                      attempts=0
+                      until docker push "ghcr.io/${REPO}/${v}:${tag}"; do
+                          attempts=$((attempts + 1))
+                          if [ $attempts -ge 5 ]; then
+                              echo "::error::docker push ${v}:${tag} failed after $attempts attempts"
+                              exit 1
+                          fi
+                          echo "::warning::docker push ${v}:${tag} attempt $attempts failed; retrying"
+                          sleep $((attempts * 10))
+                      done
+                  done
                   ;;
               lxc)
                   # LXC system-container template (Proxmox CT / Incus): zstd
@@ -624,9 +646,19 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+        # Retried: same GHCR-wobble rationale as the x86 login.
         run: |
-          printf '%s' "$GHCR_TOKEN" \
-            | oras login ghcr.io -u "$GHCR_USER" --password-stdin
+          for i in 1 2 3 4 5; do
+              printf '%s' "$GHCR_TOKEN" \
+                | oras login ghcr.io -u "$GHCR_USER" --password-stdin \
+              && break
+              if [ "$i" = 5 ]; then
+                  echo "::error::ghcr login failed after 5 attempts"
+                  exit 1
+              fi
+              echo "::warning::ghcr login attempt $i failed; retrying"
+              sleep $((i * 10))
+          done
 
       - name: Bundle cijoe report into a zip
         if: env.PUBLISH == 'true'
@@ -767,12 +799,26 @@ jobs:
           notes="Rolling nosi image catalog (schema v1). Flash nosi images with bty: bty --catalog https://github.com/${REPO}/releases/latest/download/catalog.toml -- refs are oras :latest tags, the layer digest is verified at flash time."
           # Idempotent: a re-dispatch on the same commit reuses the tag, so
           # create-or-clobber. --latest makes releases/latest/download/
-          # resolve to this asset.
-          if gh release view "${ROLLING}" >/dev/null 2>&1; then
-              gh release upload "${ROLLING}" catalog.toml --clobber
-          else
-              gh release create "${ROLLING}" catalog.toml \
-                  --latest \
-                  --title "nosi ${ROLLING}" \
-                  --notes "${notes}"
-          fi
+          # resolve to this asset. Retried because the GitHub API has the
+          # same transient wobbles as GHCR, and idempotence makes a retry
+          # safe (worst case the asset is clobbered with identical bytes).
+          publish_catalog() {
+              if gh release view "${ROLLING}" >/dev/null 2>&1; then
+                  gh release upload "${ROLLING}" catalog.toml --clobber
+              else
+                  gh release create "${ROLLING}" catalog.toml \
+                      --latest \
+                      --title "nosi ${ROLLING}" \
+                      --notes "${notes}"
+              fi
+          }
+          attempts=0
+          until publish_catalog; do
+              attempts=$((attempts + 1))
+              if [ $attempts -ge 5 ]; then
+                  echo "::error::catalog release upload failed after $attempts attempts"
+                  exit 1
+              fi
+              echo "::warning::catalog release upload attempt $attempts failed; retrying"
+              sleep $((attempts * 10))
+          done
