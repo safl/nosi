@@ -136,7 +136,7 @@ def main(args, cijoe):
     qemu_pidfile = workdir / "qemu.pid"
     key = None
     try:
-        key, _key_pub = _gen_ssh_keypair(workdir)
+        key, _key_pub = gen_ssh_keypair(workdir)
         # NO cloud-init seed. The smoketest's job is to validate the BAKED
         # image as a downstream consumer sees it -- a fresh boot, no seed
         # attached. Re-applying any kind of user-data on top would just
@@ -147,15 +147,15 @@ def main(args, cijoe):
         # password to SSH in (= the entry channel a real consumer uses),
         # then install our per-run pubkey via that password connection so
         # the rest of the assertions can use key auth.
-        overlay = _make_overlay(workdir, qcow2)
+        overlay = make_overlay(workdir, qcow2)
         _boot_overlay(cijoe, overlay, qemu_pidfile, workdir / "serial.log")
 
-        if not _wait_for_ssh_password_ready(DEFAULT_PASSWORD, SSH_HOST_PORT, args.boot_timeout):
+        if not wait_for_ssh_password_ready(DEFAULT_PASSWORD, SSH_HOST_PORT, args.boot_timeout):
             log.error("Smoketest VM did not become SSH-ready within the timeout")
-            _dump_serial(workdir / "serial.log")
+            dump_serial(workdir / "serial.log")
             return errno.ETIMEDOUT
 
-        _install_key_via_password(_key_pub.read_text().strip(), DEFAULT_PASSWORD)
+        install_key_via_password(_key_pub.read_text().strip(), DEFAULT_PASSWORD)
 
         # Pull /etc/nosi-metadata.json (and render a .md alongside) out of
         # the running smoketest VM into the disk dir, so the ORAS push step
@@ -169,7 +169,7 @@ def main(args, cijoe):
         _report(results)
         rc = 0 if all(ok for ok, _name, _detail in results) else 1
     finally:
-        _kill_qemu(qemu_pidfile)
+        kill_qemu(qemu_pidfile)
         with contextlib.suppress(Exception):
             os.chmod(qcow2, qcow2_orig_mode)
         # Verify the baked qcow2 still matches its bake-time sha256. If
@@ -219,7 +219,7 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
+def gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
     key = workdir / "id_ed25519"
     pub = workdir / "id_ed25519.pub"
     subprocess.run(
@@ -229,7 +229,7 @@ def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
     return key, pub
 
 
-def _wait_for_ssh_password_ready(password: str, port: int, timeout: int) -> bool:
+def wait_for_ssh_password_ready(password: str, port: int, timeout: int) -> bool:
     """Wait until sshd accepts a real password handshake (not just TCP).
 
     Mirrors the old key-based wait, but exercises the path a downstream
@@ -255,11 +255,11 @@ def _wait_for_ssh_password_ready(password: str, port: int, timeout: int) -> bool
                 return True
             last_err = out or f"exit {rc}"
         time.sleep(3)
-    log.error(f"_wait_for_ssh_password_ready last error: {last_err}")
+    log.error(f"wait_for_ssh_password_ready last error: {last_err}")
     return False
 
 
-def _install_key_via_password(pubkey: str, password: str) -> None:
+def install_key_via_password(pubkey: str, password: str) -> None:
     """SSH in with the baked password and append the per-run pubkey.
 
     After this returns, the existing key-based helpers (_ssh, scp via
@@ -299,7 +299,7 @@ def _install_key_via_password(pubkey: str, password: str) -> None:
         )
 
 
-def _make_overlay(workdir: Path, backing: Path) -> Path:
+def make_overlay(workdir: Path, backing: Path) -> Path:
     overlay = workdir / "overlay.qcow2"
     subprocess.run(
         [
@@ -331,7 +331,7 @@ def _boot_overlay(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
     # No -cdrom seed.iso: the smoketest validates the BAKED image as a
     # downstream consumer sees it -- fresh boot, no seed. cloud-init /
     # nuageinit discovers no NoCloud datasource and exits cleanly; the
-    # baked operator account + sshd state stand. _install_key_via_password
+    # baked operator account + sshd state stand. install_key_via_password
     # injects the per-run pubkey over the baked password channel after
     # boot so the remaining assertions can use key auth.
     cmd = (
@@ -458,7 +458,7 @@ def _extract_metadata(key: Path, qcow2: Path) -> None:
     log.info(f"metadata written: {json_local.name}")
 
 
-def _ssh(key: Path, cmd: str) -> tuple[int, str]:
+def ssh_run(key: Path, cmd: str) -> tuple[int, str]:
     """Run a single shell command on the smoketest VM, capture stdout+stderr."""
     full = [
         "ssh",
@@ -522,12 +522,12 @@ def _run_assertions(
     # phase still re-checks account state. cloud-init status --wait
     # blocks until cloud-init is done; bounded so a hung cloud-init does
     # not hang the smoketest forever.
-    _, _ = _ssh(key, "timeout 60 cloud-init status --wait || true")
+    _, _ = ssh_run(key, "timeout 60 cloud-init status --wait || true")
 
     results: list[tuple[bool, str, str]] = []
 
     def check(name: str, cmd: str, predicate) -> None:
-        rc, out = _ssh(key, cmd)
+        rc, out = ssh_run(key, cmd)
         ok, detail = predicate(rc, out)
         results.append((ok, name, detail))
 
@@ -855,7 +855,7 @@ def _report(results: list[tuple[bool, str, str]]) -> None:
         log.log(log.INFO if ok else log.ERROR, f"  {mark}  {name}  [{detail}]")
 
 
-def _kill_qemu(pidfile: Path) -> None:
+def kill_qemu(pidfile: Path) -> None:
     if not pidfile.exists():
         return
     try:
@@ -870,7 +870,7 @@ def _kill_qemu(pidfile: Path) -> None:
         os.kill(pid, 9)
 
 
-def _dump_serial(serial: Path) -> None:
+def dump_serial(serial: Path) -> None:
     if serial.exists():
         tail = serial.read_text(errors="replace").splitlines()[-40:]
         log.error("---- last 40 lines of smoketest VM serial console ----")
