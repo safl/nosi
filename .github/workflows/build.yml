@@ -351,7 +351,20 @@ jobs:
                   echo "::warning::oras push $ref attempt $attempts failed; retrying"
                   sleep $((attempts * 15))
               done
-              oras tag "$ref" latest
+              # Retag as :latest. Retried because GHCR is eventually
+              # consistent: a lookup right after the push can 404 ("not
+              # found") before the new tag propagates, even though the
+              # push itself succeeded.
+              local tag_attempts=0
+              until oras tag "$ref" latest; do
+                  tag_attempts=$((tag_attempts + 1))
+                  if [ $tag_attempts -ge 5 ]; then
+                      echo "::error::oras tag $ref latest failed after $tag_attempts attempts"
+                      return 1
+                  fi
+                  echo "::warning::oras tag $ref latest attempt $tag_attempts failed (GHCR propagation lag?); retrying"
+                  sleep $((tag_attempts * 10))
+              done
           }
 
           # Base headless: flashable .img.gz disk-image.
@@ -681,7 +694,20 @@ jobs:
                   echo "::warning::oras push $ref attempt $attempts failed; retrying"
                   sleep $((attempts * 15))
               done
-              oras tag "$ref" latest
+              # Retag as :latest. Retried because GHCR is eventually
+              # consistent: a lookup right after the push can 404 ("not
+              # found") before the new tag propagates, even though the
+              # push itself succeeded.
+              local tag_attempts=0
+              until oras tag "$ref" latest; do
+                  tag_attempts=$((tag_attempts + 1))
+                  if [ $tag_attempts -ge 5 ]; then
+                      echo "::error::oras tag $ref latest failed after $tag_attempts attempts"
+                      return 1
+                  fi
+                  echo "::warning::oras tag $ref latest attempt $tag_attempts failed (GHCR propagation lag?); retrying"
+                  sleep $((tag_attempts * 10))
+              done
           }
 
           for v in rpios-13-headless rpios-13-desktop; do
