@@ -48,6 +48,20 @@ are **derived** from it (see [the layered model](#the-layered-model)):
   `--privileged` / passes `/dev/kvm`, or real device passthrough on
   bare metal), and a general dev base for a project's `make docker`.
   Used as a GHA job `container:` or pulled with docker.
+- **`lxc`** : the headless base as an LXC **system** container
+  (systemd as PID 1, unlike the single-process `docker` shape):
+  kernel / firmware / cloud-init / NetworkManager stripped (the
+  container shares the host kernel and the platform owns networking),
+  validated under `systemd-nspawn`, packaged as a `.tar.zst` rootfs
+  tarball. Drop into a Proxmox storage's `template/cache/` and
+  `pct create`, or import into Incus / LXD.
+- **`proxmox`** : the headless Debian base turned into a Proxmox VE
+  host (PVE 9, no-subscription repo): the PVE kernel + stack baked in,
+  daemons come up on first boot (web UI on `:8006`), a first-boot
+  oneshot turns a blank second disk into `nvme-data` directory
+  storage, and `nosi-proxmox-mkbridge` scaffolds the `vmbr0` bridge.
+  Bootable `.img.gz`; the hypervisor inherits nosi's hardware support
+  and IOMMU / vfio tuning.
 
 Optional tooling collections that don't define a shape (agentic AI
 CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,

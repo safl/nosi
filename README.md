@@ -13,14 +13,15 @@
 *(Pronounced "nosy" -- a nosy person can't help poking their nose in everywhere, and I can't help putting these images on every machine I touch.)*
 
 Automated builds of headless and desktop system images for bare metal and
-virtual machines (qemu, WSL2), plus container images, pre-loaded with an
-opinionated toolset for systems-development work in C, C++, Python, Rust,
-and Zig.
+virtual machines (qemu, WSL2, Proxmox), plus container images (OCI and
+LXC), pre-loaded with an opinionated toolset for systems-development work
+in C, C++, Python, Rust, and Zig.
 
 The output is a `.img.gz` (flashable to bare metal with `dd` / Balena
 Etcher / any tool that handles gzip-compressed disk images), for the `wsl`
-shape a `.tar.gz` consumable by `wsl --import`, and for the `docker` shape
-an OCI image pullable with docker. The companion project
+shape a `.tar.gz` consumable by `wsl --import`, for the `docker` shape an
+OCI image pullable with docker, and for the `lxc` shape a `.tar.zst`
+system-container template for Proxmox CT / Incus. The companion project
 [bty](https://github.com/safl/bty) is one convenient flasher; it is not
 required.
 
