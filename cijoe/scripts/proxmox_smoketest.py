@@ -30,13 +30,13 @@ from pathlib import Path
 from image_smoketest import (
     DEFAULT_PASSWORD,
     SSH_HOST_PORT,
-    _dump_serial,
-    _gen_ssh_keypair,
-    _install_key_via_password,
-    _kill_qemu,
-    _make_overlay,
-    _ssh,
-    _wait_for_ssh_password_ready,
+    dump_serial,
+    gen_ssh_keypair,
+    install_key_via_password,
+    kill_qemu,
+    make_overlay,
+    ssh_run,
+    wait_for_ssh_password_ready,
 )
 
 # PVE's first boot (initramfs + pmxcfs + pveproxy startup) is slower than the
@@ -66,7 +66,7 @@ def main(args, cijoe):
     raw = workdir / "proxmox.raw"
     qcow2 = workdir / "proxmox.qcow2"
 
-    # Decompress + convert to qcow2 so _make_overlay can lay a copy-on-write
+    # Decompress + convert to qcow2 so make_overlay can lay a copy-on-write
     # overlay on top (the boot never mutates the published artifact).
     err, _ = cijoe.run_local(f"bash -o pipefail -c 'zcat {gz} > {raw}'")
     if err:
@@ -82,21 +82,21 @@ def main(args, cijoe):
     serial = workdir / "serial.log"
     rc = 1
     try:
-        key, key_pub = _gen_ssh_keypair(workdir)
-        overlay = _make_overlay(workdir, qcow2)
+        key, key_pub = gen_ssh_keypair(workdir)
+        overlay = make_overlay(workdir, qcow2)
         _boot_proxmox(cijoe, overlay, pidfile, serial)
 
-        if not _wait_for_ssh_password_ready(DEFAULT_PASSWORD, SSH_HOST_PORT, BOOT_TIMEOUT):
+        if not wait_for_ssh_password_ready(DEFAULT_PASSWORD, SSH_HOST_PORT, BOOT_TIMEOUT):
             log.error("proxmox VM did not become SSH-ready within the timeout")
-            _dump_serial(serial)
+            dump_serial(serial)
             return errno.ETIMEDOUT
 
-        _install_key_via_password(key_pub.read_text().strip(), DEFAULT_PASSWORD)
+        install_key_via_password(key_pub.read_text().strip(), DEFAULT_PASSWORD)
         rc = _assert_pve(key)
         if rc:
-            _dump_serial(serial)
+            dump_serial(serial)
     finally:
-        _kill_qemu(pidfile)
+        kill_qemu(pidfile)
         if rc == 0:
             with contextlib.suppress(Exception):
                 shutil.rmtree(workdir)
@@ -139,9 +139,9 @@ def _assert_pve(key: Path, timeout: int = 180) -> int:
     last = "(no check yet)"
     while True:
         # `is-active a b c` exits 0 only if every unit is active.
-        rc_s, out_s = _ssh(key, "systemctl is-active pve-cluster pvedaemon pveproxy")
+        rc_s, out_s = ssh_run(key, "systemctl is-active pve-cluster pvedaemon pveproxy")
         services_ok = rc_s == 0
-        rc_p, out_p = _ssh(key, "sudo ss -Hltn 'sport = :8006' | grep -q . && echo LISTENING")
+        rc_p, out_p = ssh_run(key, "sudo ss -Hltn 'sport = :8006' | grep -q . && echo LISTENING")
         port_ok = rc_p == 0 and "LISTENING" in out_p
         if services_ok and port_ok:
             log.info(f"[PASS] PVE up: daemons={out_s.strip()!r}, :8006 listening")
