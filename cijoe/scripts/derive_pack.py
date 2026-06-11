@@ -48,19 +48,13 @@ from __future__ import annotations
 import errno
 import logging as log
 import os
-import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import default_image_name as _default_image_name
+from buildlib import gzip_cmd as _gzip_cmd
+from buildlib import q as _q
 from imgshrink import shrink_raw
-
-
-def _gzip_cmd() -> str:
-    """pigz (parallel, all cores) when present, else stock gzip; same .gz
-    format either way. The derive's tar/img passes are -9, so on a 4-core
-    runner pigz is the difference between one busy core and four."""
-    return "pigz" if shutil.which("pigz") else "gzip"
-
 
 # Packages purged for stripped shapes (wsl / docker / lxc): kernel + bootloader
 # + firmware are meaningless without our own kernel; cloud-init + netplan
@@ -604,14 +598,3 @@ def _write_root_file(cijoe, path: Path, body: str, mode: str = "0644"):
     cijoe.run_local(f"sudo cp {host_tmp} {path}")
     cijoe.run_local(f"sudo chmod {mode} {path}")
     host_tmp.unlink(missing_ok=True)
-
-
-def _q(s: str) -> str:
-    """Single-quote a string for `sh -c`."""
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
-def _default_image_name(cijoe) -> str:
-    nosi = cijoe.getconf("nosi", {})
-    variant = nosi.get("variant", "ubuntu-2604-headless")
-    return f"nosi-{variant}-x86_64"

@@ -20,16 +20,11 @@ from __future__ import annotations
 
 import errno
 import logging as log
-import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import gzip_cmd as _gzip_cmd
 from rpi_image_build import _resolve_path, target_images
-
-
-def _gzip_cmd() -> str:
-    """pigz (all cores) when present, else stock gzip; same .gz format."""
-    return "pigz" if shutil.which("pigz") else "gzip"
 
 
 def add_args(parser: ArgumentParser):

@@ -53,6 +53,8 @@ import time
 from argparse import ArgumentParser
 from pathlib import Path
 
+from buildlib import default_image_name as _default_image_name
+
 SSH_HOST_PORT = 4242
 SSH_USER = "odus"
 SSH_OPTS = [
@@ -214,11 +216,6 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def _default_image_name(cijoe) -> str:
-    nosi = cijoe.getconf("nosi", {})
-    return f"nosi-{nosi.get('variant', 'debian-13-headless')}-x86_64"
 
 
 def _gen_ssh_keypair(workdir: Path) -> tuple[Path, Path]:
