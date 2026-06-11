@@ -34,19 +34,27 @@ log = logging.getLogger(__name__)
 
 # Variants nosi publishes as ORAS artifacts carrying the
 # vnd.nosi.metadata.v1+json layer this page reads. That's every base
-# (the build matrix) plus the oras-published derived shapes (wsl
-# rootfs, desktop .img.gz). The `docker` shape is intentionally absent:
-# it's a `docker import` OCI image without the metadata layer, so it's
-# documented in prose (overview.md) rather than auto-rendered here.
+# (the build matrix + the Pi job) plus the oras-published derived shapes
+# (desktop / proxmox .img.gz, wsl rootfs .tar.gz, lxc rootfs .tar.zst).
+# The `docker` shape is intentionally absent: it's a `docker import` OCI
+# image without the metadata layer, so it's documented in prose
+# (overview.md) rather than auto-rendered here.
 # Keep in sync with .github/workflows/build.yml + the [[...derive]]
 # entries in cijoe/configs/.
 KNOWN_VARIANTS: tuple[tuple[str, str], ...] = (
     ("debian-13-headless", "ghcr.io/safl/nosi/debian-13-headless:latest"),
+    ("debian-13-desktop", "ghcr.io/safl/nosi/debian-13-desktop:latest"),
+    ("debian-13-lxc", "ghcr.io/safl/nosi/debian-13-lxc:latest"),
+    ("debian-13-proxmox", "ghcr.io/safl/nosi/debian-13-proxmox:latest"),
     ("ubuntu-2404-headless", "ghcr.io/safl/nosi/ubuntu-2404-headless:latest"),
     ("ubuntu-2604-headless", "ghcr.io/safl/nosi/ubuntu-2604-headless:latest"),
     ("ubuntu-2604-wsl", "ghcr.io/safl/nosi/ubuntu-2604-wsl:latest"),
+    ("ubuntu-2604-lxc", "ghcr.io/safl/nosi/ubuntu-2604-lxc:latest"),
     ("fedora-44-headless", "ghcr.io/safl/nosi/fedora-44-headless:latest"),
     ("fedora-44-desktop", "ghcr.io/safl/nosi/fedora-44-desktop:latest"),
+    ("fedora-44-lxc", "ghcr.io/safl/nosi/fedora-44-lxc:latest"),
+    ("rpios-13-headless", "ghcr.io/safl/nosi/rpios-13-headless:latest"),
+    ("rpios-13-desktop", "ghcr.io/safl/nosi/rpios-13-desktop:latest"),
     ("freebsd-14-headless", "ghcr.io/safl/nosi/freebsd-14-headless:latest"),
     ("freebsd-15-headless", "ghcr.io/safl/nosi/freebsd-15-headless:latest"),
 )
