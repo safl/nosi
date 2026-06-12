@@ -136,7 +136,10 @@ cpu_model="$(awk -F'"'"': '"'"' '"'"'/^model name/ {print $2; exit}'"'"' /proc/c
 cpu_count="$(nproc)"
 ram_kib="$(awk '"'"'/MemTotal:/ {print $2}'"'"' /proc/meminfo)"
 ram_gib=$(( ram_kib / 1024 / 1024 ))
-nvme_count="$(find /dev -maxdepth 1 -name '"'"'nvme*n*'"'"' 2>/dev/null | wc -l)"
+# Count controllers (/dev/nvme0, /dev/nvme1, ...), not namespaces or
+# partitions: the old nvme*n* glob also matched nvme0n1p2 (the partition
+# suffix still contains an n), so partitioned drives overcounted.
+nvme_count="$(find /dev -maxdepth 1 -regextype posix-extended -regex ".*/nvme[0-9]+" 2>/dev/null | wc -l)"
 
 # Default-password warning. Touched by step 29 when odus is still on the
 # baked default. Operator removes it after rotating (or step 29 clears
