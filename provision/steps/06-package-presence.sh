@@ -39,6 +39,7 @@ pkg)
         git git-lfs curl wget jq python3
         bash gmake cmake ninja meson pkgconf
         hx zellij btop rg fd fzf direnv gh delta
+        wg
     )
     ;;
 *)
@@ -52,6 +53,7 @@ pkg)
         make
         gcc
         pkg-config
+        wg
     )
     ;;
 esac

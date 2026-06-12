@@ -254,4 +254,36 @@ install -m 0755 -t /usr/local/bin "$tmp/oras"
 rm -rf "$tmp"
 /usr/local/bin/oras version
 
+# ---- tailscale (static build, pkgs.tailscale.com) --------------------------
+# The static tarball rather than the vendor apt/dnf repo: keeps third-party
+# repos out of the image's sources, and `tailscale update` self-updates the
+# static install. Installed DORMANT by design -- tailscaled is NOT enabled.
+# A running tailscaled costs idle RSS and ships diagnostics to Tailscale's
+# log service (logtail) even before login, so the daemon starting is an
+# operator opt-in, not a bake default:
+#   sudo systemctl enable --now tailscaled && sudo tailscale up
+# The derive strip (cijoe/scripts/derive_pack.py) removes these exact paths
+# for the wsl / docker / lxc shapes -- a VPN daemon belongs to the host.
+
+case "$arch" in
+    x86_64)  ts_arch=amd64 ;;
+    aarch64) ts_arch=arm64 ;;
+    *) nosi_die "unsupported arch $arch for tailscale" ;;
+esac
+tmp=$(mktemp -d)
+curl -fsSL "https://pkgs.tailscale.com/stable/tailscale_latest_${ts_arch}.tgz" \
+    | tar -xz -C "$tmp" --strip-components=1
+install -m 0755 "$tmp/tailscale" /usr/local/bin/tailscale
+install -m 0755 "$tmp/tailscaled" /usr/local/sbin/tailscaled
+[ -e /etc/default/tailscaled ] \
+    || install -m 0644 "$tmp/systemd/tailscaled.defaults" /etc/default/tailscaled
+# The shipped unit hardcodes /usr/sbin/tailscaled (the deb/rpm layout);
+# rewrite for the /usr/local/sbin install above. StateDirectory= in the
+# unit owns /var/lib/tailscale, so no state dir is created here.
+sed 's|/usr/sbin/tailscaled|/usr/local/sbin/tailscaled|g' \
+    "$tmp/systemd/tailscaled.service" > /etc/systemd/system/tailscaled.service
+chmod 0644 /etc/systemd/system/tailscaled.service
+rm -rf "$tmp"
+/usr/local/bin/tailscale version
+
 nosi_info "step 20-upstream-tools done"

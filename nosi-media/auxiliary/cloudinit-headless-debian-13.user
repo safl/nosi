@@ -129,6 +129,7 @@ packages:
   - strace
   - tcpdump
   - wget
+  - wireguard-tools      # wg / wg-quick for the in-kernel module; dormant until configured
   # build & dev (compilers, LSPs, linters, debugger / memory tools)
   - build-essential
   - ccache              # transparent compiler cache; wraps gcc/clang

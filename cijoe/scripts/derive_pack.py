@@ -62,6 +62,12 @@ from imgshrink import shrink_raw
 # + NetworkManager because WSL and containers own their own first-boot +
 # networking. qemu + podman/buildah/skopeo stay (nested virt + containers
 # are the point of the docker shape, and useful under WSL too).
+#
+# Both strip scripts also remove tailscale (a static /usr/local install from
+# step 20, invisible to dpkg/dnf so no purge glob can catch it): a VPN daemon
+# belongs to the host, not to a container rootfs or a WSL distro. The
+# wireguard-tools package stays -- tiny, and `wg` works inside a CT against
+# the host's module.
 STRIP_PURGE_GLOBS = [
     "linux-image-*",
     "linux-headers-*",
@@ -113,7 +119,12 @@ rm -rf \\
     /etc/default/grub \\
     /var/log/installer \\
     /var/lib/dkms \\
-    /usr/src/r8125-*
+    /usr/src/r8125-* \\
+    /usr/local/bin/tailscale \\
+    /usr/local/sbin/tailscaled \\
+    /etc/systemd/system/tailscaled.service \\
+    /etc/default/tailscaled \\
+    /var/lib/tailscale
 rm -f /etc/ssh/ssh_host_*
 """
 
@@ -146,7 +157,12 @@ rm -rf \\
     /etc/default/grub \\
     /var/lib/cloud \\
     /etc/cloud \\
-    /var/log/anaconda
+    /var/log/anaconda \\
+    /usr/local/bin/tailscale \\
+    /usr/local/sbin/tailscaled \\
+    /etc/systemd/system/tailscaled.service \\
+    /etc/default/tailscaled \\
+    /var/lib/tailscale
 rm -f /etc/ssh/ssh_host_*
 """
 

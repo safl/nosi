@@ -81,6 +81,11 @@ packages:
   - htop
   - jq
   - ripgrep
+  # vpn: if_wg (WireGuard) is in the base kernel; tailscaled installs
+  # dormant (pkg never enables rc services). Activate with
+  # `service tailscaled enable && service tailscaled start && tailscale up`.
+  - tailscale
+  - wireguard-tools
 
 # nuageinit doesn't honour cloud-init's write_files: directive (which the
 # Linux variants use to drop the provision tree), so the provision/ tree

@@ -63,6 +63,7 @@ nmap
 strace
 tcpdump
 wget
+wireguard-tools
 
 # build & dev (compilers, LSPs, linters, debugger / memory tools)
 build-essential
