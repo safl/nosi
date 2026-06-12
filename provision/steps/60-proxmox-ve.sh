@@ -72,6 +72,17 @@ postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost' || tru
 apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null || true
 update-grub 2>/dev/null || true
 
+# ---- identity: a PVE host gets its own default hostname ---------------------
+# The derive inherits the headless base identity (hostname nosi-debian), but
+# the hostname IS the PVE node name (/etc/pve/nodes/<hostname>), so give the
+# hypervisor its own default. Replace only the baked placeholder, never a
+# name an operator chose, so re-runs of this step on a live host stay safe.
+if [ "$(cat /etc/hostname 2>/dev/null)" = "nosi-debian" ]; then
+    echo "nosi-proxmox" > /etc/hostname
+    sed -i 's/^127\.0\.1\.1[[:space:]].*/127.0.1.1 nosi-proxmox.localdomain nosi-proxmox/' /etc/hosts
+    nosi_info "default hostname set to nosi-proxmox"
+fi
+
 # ---- first-boot: make the node hostname resolvable (pmxcfs needs it) -------
 # pve-cluster (pmxcfs) refuses to start unless the node hostname resolves to an
 # address, and everything else (pvedaemon, pveproxy, pvestatd, pve-firewall)
@@ -107,6 +118,64 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ' /etc/systemd/system/nosi-proxmox-hosts.service 0644
 systemctl enable nosi-proxmox-hosts.service 2>/dev/null || true
+
+# ---- every boot, once online: real-IP hosts entry + node cert + UI login ---
+# The 127.0.1.1 mapping above is only good enough for pmxcfs: `pvecm
+# updatecerts` refuses loopback, so a freshly flashed host came up with no
+# /etc/pve/local/pve-ssl.pem and the web UI could not complete TLS (observed
+# on the first real-hardware boot). Once the network is online (ordered
+# Before=pveproxy so the cert exists when the proxy starts): map the live
+# hostname to the primary IPv4, regenerate node files, and grant the baked
+# operator web-UI admin exactly once (root ships locked, so without this no
+# one can log in to :8006). Re-runs every boot so an operator rename or a
+# new DHCP lease re-keys the mapping + certs automatically.
+nosi_write_if_changed \
+'#!/bin/sh
+# Managed by nosi/provision/steps/60-proxmox-ve.sh
+set -u
+log(){ logger -t nosi-proxmox-online "$*" 2>/dev/null; echo "nosi-proxmox-online: $*"; }
+hn=$(hostname 2>/dev/null)
+[ -n "$hn" ] && [ "$hn" != "localhost" ] || exit 0
+ip=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n "s/.* src \([0-9.]*\).*/\1/p" | head -1)
+if [ -n "$ip" ]; then
+    sed -i "/ # nosi-proxmox-online\$/d" /etc/hosts
+    sed -i "/^127\.0\.1\.1[[:space:]].*[[:space:]]$hn\([[:space:]]\|\$\)/d" /etc/hosts
+    printf "%s\t%s.localdomain %s # nosi-proxmox-online\n" "$ip" "$hn" "$hn" >> /etc/hosts
+    log "mapped $hn -> $ip"
+fi
+pvecm updatecerts --silent 2>/dev/null || log "updatecerts failed (retries next boot)"
+if [ ! -e /var/lib/nosi/proxmox-admin-granted ]; then
+    if pveum user add odus@pam --comment "nosi operator" 2>/dev/null \
+        || pveum user list 2>/dev/null | grep -q "odus@pam"; then
+        if pveum acl modify / --users odus@pam --roles Administrator 2>/dev/null; then
+            mkdir -p /var/lib/nosi
+            touch /var/lib/nosi/proxmox-admin-granted
+            log "granted odus@pam the Administrator role"
+        else
+            log "acl grant failed (retries next boot)"
+        fi
+    fi
+fi
+exit 0
+' /usr/local/sbin/nosi-proxmox-online 0755
+
+nosi_write_if_changed \
+'[Unit]
+Description=nosi: PVE node identity once online (hosts entry, certs, UI admin)
+Wants=network-online.target
+After=network-online.target pve-cluster.service
+Before=pveproxy.service
+ConditionPathExists=/usr/bin/pmxcfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nosi-proxmox-online
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+' /etc/systemd/system/nosi-proxmox-online.service 0644
+systemctl enable nosi-proxmox-online.service 2>/dev/null || true
 
 # ---- first-boot: directory storage on a blank second disk -----------------
 # The operator runs the OS on one NVMe and wants VM/CT storage on a second.

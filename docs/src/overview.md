@@ -57,11 +57,24 @@ are **derived** from it (see [the layered model](#the-layered-model)):
   `pct create`, or import into Incus / LXD.
 - **`proxmox`** : the headless Debian base turned into a Proxmox VE
   host (PVE 9, no-subscription repo): the PVE kernel + stack baked in,
-  daemons come up on first boot (web UI on `:8006`), a first-boot
-  oneshot turns a blank second disk into `nvme-data` directory
-  storage, and `nosi-proxmox-mkbridge` scaffolds the `vmbr0` bridge.
-  Bootable `.img.gz`; the hypervisor inherits nosi's hardware support
-  and IOMMU / vfio tuning.
+  daemons come up on first boot (web UI on `:8006`). Bootable
+  `.img.gz`; the hypervisor inherits nosi's hardware support and
+  IOMMU / vfio tuning. Default hostname `nosi-proxmox` (the hostname
+  names the PVE node). Bring-up after flashing:
+  - **Log in**: `https://<ip>:8006`, user `odus`, realm "Linux PAM
+    standard authentication". A first-boot oneshot grants `odus@pam`
+    the Administrator role (root ships locked) and maps the hostname
+    to the primary IP so the node TLS certificate generates; renaming
+    the host re-keys both on the next boot.
+  - **Bridge**: VMs need `vmbr0`; run `sudo nosi-proxmox-mkbridge`
+    then `sudo ifreload -a` (writes the bridge over the default-route
+    NIC, backup kept). Not automatic: rewriting the interfaces file
+    on unknown hardware is the operator's call.
+  - **Storage**: a first-boot oneshot turns a blank second disk into
+    `nvme-data` directory storage, but only when exactly one blank
+    non-boot disk exists; with more disks it logs and skips
+    (`journalctl -t nosi-proxmox-storage`), and you pick via the UI:
+    Datacenter, Storage, Add, Directory.
 
 Optional tooling collections that don't define a shape (agentic AI
 CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,
