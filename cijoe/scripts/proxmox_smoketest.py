@@ -130,23 +130,45 @@ def _boot_proxmox(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
 
 
 def _assert_pve(key: Path, timeout: int = 180) -> int:
-    """All three core daemons active and the web UI listening on :8006.
+    """Daemons active, web UI serving TLS with a real node cert, operator
+    can log in.
 
-    Polls rather than checking once: sshd comes up before the PVE stack finishes
-    settling (pmxcfs, then its dependents), so an instant check races the
-    startup. Passes as soon as everything is up, fails only if it never is."""
+    The first real-hardware flash surfaced that "daemons active + port
+    listening" is not "working": `pvecm updatecerts` refuses a hostname that
+    resolves to 127.0.1.1, so the node had no pve-ssl.pem and the UI could
+    not complete TLS -- while every is-active check stayed green. Assert the
+    outcomes instead: the cert exists, https://:8006 answers 200 (TLS
+    actually handshakes), and odus@pam holds the Administrator ACL (root
+    ships locked; without the grant the UI is up but no one can log in).
+
+    Polls rather than checking once: sshd comes up before the PVE stack
+    (and the nosi-proxmox-online oneshot) finishes settling, so an instant
+    check races the startup. Passes as soon as everything is up."""
     end = time.monotonic() + timeout
     last = "(no check yet)"
     while True:
         # `is-active a b c` exits 0 only if every unit is active.
         rc_s, out_s = ssh_run(key, "systemctl is-active pve-cluster pvedaemon pveproxy")
         services_ok = rc_s == 0
-        rc_p, out_p = ssh_run(key, "sudo ss -Hltn 'sport = :8006' | grep -q . && echo LISTENING")
-        port_ok = rc_p == 0 and "LISTENING" in out_p
-        if services_ok and port_ok:
-            log.info(f"[PASS] PVE up: daemons={out_s.strip()!r}, :8006 listening")
+        rc_u, out_u = ssh_run(
+            key,
+            "sudo test -s /etc/pve/local/pve-ssl.pem && "
+            "curl -ks -o /dev/null -w %{http_code} https://127.0.0.1:8006/",
+        )
+        ui_ok = rc_u == 0 and out_u.strip().endswith("200")
+        rc_a, out_a = ssh_run(key, "sudo pveum acl list 2>/dev/null | grep -c odus@pam || true")
+        admin_ok = rc_a == 0 and out_a.strip() not in ("", "0")
+        if services_ok and ui_ok and admin_ok:
+            log.info(
+                f"[PASS] PVE up: daemons={out_s.strip()!r}, UI https 200 "
+                "with node cert, odus@pam is Administrator"
+            )
             return 0
-        last = f"daemons={out_s.strip()!r} (rc={rc_s}); :8006={'up' if port_ok else 'down'}"
+        last = (
+            f"daemons={out_s.strip()!r} (rc={rc_s}); "
+            f"ui={'200+cert' if ui_ok else out_u.strip() or 'down'}; "
+            f"admin={'granted' if admin_ok else 'missing'}"
+        )
         if time.monotonic() >= end:
             break
         time.sleep(10)
