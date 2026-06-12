@@ -310,7 +310,11 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
             return errno.ENOENT
 
         # Kernel API filesystems + DNS for the chroot's package installs.
-        for sub in ("dev", "proc", "sys", "run"):
+        # dev/pts separately: a plain bind of /dev does not carry submounts,
+        # and without a pty apt logs "E: Can not write log (Is /dev/pts
+        # mounted?)" on every chroot transaction (cleanup runs reversed, so
+        # pts unmounts before dev).
+        for sub in ("dev", "dev/pts", "proc", "sys", "run"):
             err, _ = cijoe.run_local(f"sudo mount --bind /{sub} {rootfs}/{sub}")
             if err:
                 log.error(f"bind-mount {sub} failed")

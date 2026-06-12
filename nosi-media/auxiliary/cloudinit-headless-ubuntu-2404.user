@@ -83,7 +83,9 @@ packages:
   - systemd-timesyncd
   - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
   - btop
-  - fastfetch            # system info summary (maintained C successor to neofetch)
+  # fastfetch is not packaged in noble (it lands in 26.04); operators can
+  # install the upstream .deb. Listing it here made cloud-init silently
+  # drop it from the install and warn into the void.
   - direnv               # per-directory env vars; bash hook in /etc/profile.d
   - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
   - fzf
@@ -112,7 +114,7 @@ packages:
   - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
   - linux-tools-common   # shared man pages + helpers for the -generic tool set
   - curl
-  - dnsutils
+  - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
   - jq
   - lsof
   - mtr-tiny

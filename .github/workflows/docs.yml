@@ -74,14 +74,14 @@ jobs:
         working-directory: docs
         run: nosi-docs-build-pdf
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-html
           path: docs/_build/html
           if-no-files-found: error
           retention-days: 14
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-pdf
           path: docs/_build/latex/nosi.pdf
@@ -108,7 +108,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: docs-html
           path: html/

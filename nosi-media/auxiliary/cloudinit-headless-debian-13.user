@@ -24,6 +24,15 @@ ssh_pwauth: true
 # operator).
 bootcmd:
   - userdel -r debian 2>/dev/null || true
+  # The Debian cloud image ships APT sources with `Components: main` only,
+  # so the microcode + firmware packages in the packages: list below
+  # (non-free-firmware section) were silently unavailable -- cloud-init
+  # filters unavailable names out of the apt install and only WARNS, so
+  # the bake stayed green while every flashed box ran without CPU
+  # microcode mitigations. Enable the full component set before the
+  # package module runs; the flashed image keeps it, so operators can
+  # apt install firmware later too.
+  - "sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources"
 
 # Operator account: `odus` with password `odus.321`, passwordless sudo,
 # pinned to UID 1000. Created here (cloud-init users-module) rather than
@@ -120,7 +129,7 @@ packages:
                           # is the equivalent metapackage
   # network & debug
   - curl
-  - dnsutils
+  - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
   - jq
   - lsof
   - mtr-tiny
