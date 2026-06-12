@@ -93,14 +93,17 @@ apt)
         cups cups-filters printer-driver-cups-pdf avahi-daemon avahi-utils system-config-printer \
         fonts-noto-core fonts-noto-color-emoji fontconfig \
         xdg-utils xdg-desktop-portal
-    # greetd greeter: Debian/RPi OS package tuigreet as `greetd-tuigreet`.
-    # Install it best-effort; if the package (or its binary) is missing on a
-    # given suite, fall back to `agreety`, the minimal greeter that ships with
-    # greetd itself -- so greeter packaging drift never hard-fails the bake.
-    if nosi_pkg_install greetd-tuigreet 2>/dev/null && command -v tuigreet >/dev/null 2>&1; then
+    # greetd greeter: Debian trixie (and RPi OS, which mirrors it) packages
+    # tuigreet as plain `tuigreet`; probing only the `greetd-tuigreet` name
+    # silently shipped the bare agreety fallback on every apt desktop. Try
+    # both names, best-effort; fall back to `agreety` (greetd's built-in
+    # minimal greeter) only if neither lands, so greeter packaging drift
+    # still never hard-fails the bake.
+    if { nosi_pkg_install tuigreet 2>/dev/null || nosi_pkg_install greetd-tuigreet 2>/dev/null; } \
+        && command -v tuigreet >/dev/null 2>&1; then
         GREETER_CMD="tuigreet --time --remember --remember-user-session --asterisks --greeting 'nosi' --cmd sway"
     else
-        nosi_warn "greetd-tuigreet unavailable; falling back to agreety greeter"
+        nosi_warn "tuigreet unavailable; falling back to agreety greeter"
         GREETER_CMD="agreety --cmd sway"
     fi
     ;;

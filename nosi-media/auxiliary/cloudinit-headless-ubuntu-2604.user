@@ -107,7 +107,7 @@ packages:
   - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
   - linux-tools-common   # shared man pages + helpers for the -generic tool set
   - curl
-  - dnsutils
+  - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
   - jq
   - lsof
   - mtr-tiny
@@ -171,7 +171,7 @@ packages:
   # binfmt-support owns the boot-time registration. Complements qemu-system-x86
   # (system emulation for cijoe guests) and makes `make build-rpi` work from an
   # x86 host / the ubuntu-2604-wsl shape with no extra setup.
-  - qemu-user-static
+  - qemu-user-binfmt      # resolute dropped qemu-user-static; binfmt variant registers the interpreters
   - binfmt-support
   # cloud-init seed tooling: cloud-localds (cloud-image-utils) + mkisofs
   # (genisoimage) let an on-target cijoe build a NoCloud seed.iso to boot

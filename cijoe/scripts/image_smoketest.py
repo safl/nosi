@@ -687,6 +687,23 @@ def _run_assertions(
         lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
     )
 
+    # ---- no packages silently dropped at bake time -------------------------
+    # cloud-init pre-filters the packages: list against the archive, installs
+    # what it can, and only WARNS about the rest -- which is how the debian
+    # images shipped without CPU microcode for weeks (sources lacked the
+    # non-free-firmware component) with every bake green. The bake's
+    # cloud-init log rides along in the image; the filter warning's absence
+    # proves every requested package actually landed.
+    check(
+        "bake installed every requested package (no cloud-init filter warning)",
+        "sudo grep -hc 'Failure when attempting to install packages' "
+        "/var/log/cloud-init.log 2>/dev/null || true",
+        lambda rc, out: (
+            out.strip() in ("", "0"),
+            f"filter warnings in bake log: {out.strip() or '0'}",
+        ),
+    )
+
     # ---- build identity ---------------------------------------------------
     check(
         "/etc/nosi-release has NOSI_VARIANT",

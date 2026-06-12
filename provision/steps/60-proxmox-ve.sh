@@ -58,6 +58,14 @@ echo "postfix postfix/mailname string nosi-proxmox" | debconf-set-selections
 apt-get update
 apt-get install -y proxmox-ve postfix open-iscsi chrony
 
+# postfix's postinst snapshots the BUILD host's FQDN into main.cf -- in the
+# derive chroot that is the ephemeral CI runner (e.g.
+# runnervm....internal.cloudapp.net), which then ships in the published image.
+# Drop the baked myhostname so postfix derives it from the live hostname at
+# runtime, and pin mydestination to runtime-derived names for the same reason.
+postconf -X myhostname 2>/dev/null || true
+postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost' || true
+
 # Proxmox ships + boots its own kernel; drop the Debian cloud kernel and
 # os-prober so GRUB defaults to the PVE kernel (per Proxmox's install-on-Debian
 # guide). proxmox-ve already pulled proxmox-default-kernel, so a kernel remains.

@@ -106,7 +106,7 @@ jobs:
         # fallback: a stale cache from a prior URL would satisfy
         # diskimage_build's path-existence check and the bake would proceed
         # with the wrong upstream.
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/system_imaging/cloud
           key: cloud-${{ matrix.variant }}-${{ hashFiles(format('cijoe/configs/{0}.toml', matrix.variant)) }}
@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload baked image + cijoe report (always)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nosi-${{ matrix.variant }}
           path: |
@@ -507,7 +507,7 @@ jobs:
           ln -s /mnt/system_imaging "$HOME/system_imaging"
 
       - name: Cache upstream Raspberry Pi OS image
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/system_imaging/cloud
           key: cloud-rpios-13-headless-${{ hashFiles('cijoe/configs/rpios-13-headless.toml') }}
@@ -556,7 +556,7 @@ jobs:
 
       - name: Upload baked images + cijoe report (always)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nosi-rpios-13-arm64
           path: |
