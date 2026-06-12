@@ -180,11 +180,12 @@ dnf)
 esac
 
 # ---- default hostname -------------------------------------------------------
-# The variant userdata sets `hostname: nosi-<distro>`, but on Fedora
-# cloud-init's early set-hostname call races systemd-hostnamed and fails
-# ("Failed to set the hostname"), so the baked image shipped `localhost`.
-# Guarantee the default here: replace only placeholder names (the cloud
-# image's default or the bake VM's), never a hostname an operator chose.
+# The variant userdata sets `hostname: nosi-<distro>`. On Fedora cloud-init's
+# EARLY set-hostname call fails every bake ("Failed to set the hostname",
+# racing systemd-hostnamed), but the later apply succeeds, so images have so
+# far always shipped the right name. This is the safety net for the day that
+# later apply also loses: replace only placeholder names (the cloud image's
+# default or the bake VM's), never a hostname an operator chose.
 current_hn=$(cat /etc/hostname 2>/dev/null || true)
 case "${current_hn:-}" in
 "" | localhost | localhost.localdomain | nosi-build)
