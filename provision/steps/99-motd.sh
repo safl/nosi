@@ -59,6 +59,8 @@ if [ "$NOSI_DISTRO" = "freebsd" ]; then
   Reconfigure:
     sudo passwd odus                                operator password
     sudo sysrc hostname=NAME && sudo hostname NAME  hostname (default: ${NOSI_DEFAULT_HOSTNAME})
+    sudo service tailscaled enable && sudo service tailscaled start && sudo tailscale up
+                                                    join tailnet (tailscale ships dormant)
 " /etc/motd.template 0644
     # Compose /etc/motd now; the authoritative path is rc.d/motd on the
     # next fresh boot, so this is best-effort.
@@ -145,6 +147,14 @@ if [ -f /etc/nosi/default-password-active ]; then
     default_pw_warning="$(printf "\033[33m  !! odus is on the baked default password 'odus.321' -- rotate with: sudo passwd odus\033[0m\n")"
 fi
 
+# Tailscale ships installed but dormant on the bootable shapes (and is
+# removed entirely from wsl / docker / lxc), so the hint renders only
+# where the binary actually exists.
+vpn_hint=""
+if command -v tailscale >/dev/null 2>&1; then
+    vpn_hint="    sudo systemctl enable --now tailscaled && sudo tailscale up   join tailnet (ships dormant)"
+fi
+
 cat <<EOM
 
   nosi ${shape} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
@@ -168,7 +178,7 @@ ${default_pw_warning}
     sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
     sudo hostnamectl set-hostname NAME                hostname (default: ${default_host})
     sudo passwd odus                                  operator password (default: odus.321)
-
+${vpn_hint}
 EOM
 ' /usr/local/bin/nosi-motd 0755
 

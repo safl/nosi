@@ -635,8 +635,8 @@ def _run_assertions(
         # Check binary names, NOT package names: ripgrep's binary is
         # `rg`, helix's is `hx`.
         check(
-            "baseline tools (git, hx, zellij, btop, meson, ninja, rg) on PATH",
-            "for t in git hx zellij btop meson ninja rg jq fzf direnv; do "
+            "baseline tools (git, hx, zellij, btop, meson, ninja, rg, wg, ...) on PATH",
+            "for t in git hx zellij btop meson ninja rg jq fzf direnv wg tailscale; do "
             'command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; '
             "done && echo ok",
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
@@ -737,6 +737,7 @@ def _run_assertions(
         "taplo",
         "marksman",
         "oras",
+        "tailscale",
     ):
         check(
             f"/usr/local/bin/{tool} exists (step 20)",
@@ -747,6 +748,27 @@ def _run_assertions(
         "/usr/local/cargo/bin/rustc exists (step 20: rustup toolchain)",
         "test -x /usr/local/cargo/bin/rustc && echo ok",
         lambda rc, out: (out == "ok", out or "missing rustc"),
+    )
+
+    # ---- vpn baseline (step 20 + packages) --------------------------------
+    # tailscale ships installed but DORMANT: enabling the daemon is an
+    # operator opt-in (idle RSS + pre-auth logtail diagnostics), so an
+    # enabled tailscaled in the baked image is a regression. `wg` comes
+    # from the wireguard-tools baseline package.
+    check(
+        "/usr/local/sbin/tailscaled exists (step 20)",
+        "test -x /usr/local/sbin/tailscaled && echo ok",
+        lambda rc, out: (out == "ok", out or "missing tailscaled"),
+    )
+    check(
+        "tailscaled.service is disabled (dormant-by-design contract)",
+        "systemctl is-enabled tailscaled.service",
+        lambda rc, out: (out.strip() == "disabled", out or f"exit {rc}"),
+    )
+    check(
+        "wg on PATH (wireguard-tools baseline package)",
+        "command -v wg >/dev/null 2>&1 && echo ok",
+        lambda rc, out: (out == "ok", out or "missing wg"),
     )
 
     # ---- gdb-dashboard wired into the system gdbinit (step 12) -----------

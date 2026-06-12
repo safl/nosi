@@ -176,12 +176,23 @@ def _run_checks(cijoe, mnt: Path, variant: str, failures: list[str]) -> None:
         "oras",
         "zig",
         "zls",
+        "tailscale",
     )
     failures.extend(
         f"upstream tool /usr/local/bin/{t} missing"
         for t in tools
         if not _exists(cijoe, mnt / "usr/local/bin" / t)
     )
+
+    # ---- vpn baseline: wg present, tailscaled installed but DORMANT --------
+    # The dormant contract (no idle daemon, no pre-auth logtail) shows up
+    # offline as the absence of the multi-user.target.wants/ enable link.
+    if not _exists(cijoe, mnt / "usr/bin/wg"):
+        failures.append("/usr/bin/wg missing (wireguard-tools baseline package)")
+    if not _exists(cijoe, mnt / "usr/local/sbin/tailscaled"):
+        failures.append("/usr/local/sbin/tailscaled missing (step 20)")
+    if _exists(cijoe, mnt / "etc/systemd/system/multi-user.target.wants/tailscaled.service"):
+        failures.append("tailscaled.service is enabled (must ship dormant)")
 
     # ---- arm64 guards held (x86-only steps must NOT have run) --------------
     if _exists(cijoe, mnt / "etc/modprobe.d/nosi-r8125.conf"):

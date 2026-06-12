@@ -111,6 +111,7 @@ packages:
   - strace
   - tcpdump
   - wget
+  - wireguard-tools      # wg / wg-quick for the in-kernel module; dormant until configured
   - ccache               # transparent compiler cache; wraps gcc/clang
   - clang
   - clang-tools-extra    # clangd (C/C++ LSP), clang-format, clang-tidy

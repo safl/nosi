@@ -182,6 +182,9 @@ meta = {
             # fails for some reason, record None rather than blowing up.
             "marksman": ver("marksman", "--version"),
             "oras": ver("oras", "version"),
+            # static install from pkgs.tailscale.com; daemon ships disabled.
+            # None on the stripped shapes (wsl / docker / lxc remove it).
+            "tailscale": ver("tailscale", "version"),
         },
         # step 22: pipx --global installs
         "pipx_global": {
