@@ -57,6 +57,54 @@ shape="${NOSI_SHAPE:-headless}"
 variant="${NOSI_VARIANT:-unknown}"
 built="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# ---- default hostname: nosi-<variant> ---------------------------------------
+# Set here (ALWAYS_FIRST, runs in every path) rather than in the base-only
+# 08-network-dhcp so each DERIVE stamps its OWN variant name: the desktop /
+# proxmox derive overrides the headless base's name instead of inheriting it
+# (a `--shape-only` run re-exports the derived NOSI_VARIANT). Claim the
+# hostname only when it is still a nosi-managed default -- a known placeholder
+# (incl. Raspberry Pi OS's `raspberrypi`, which the old 08 list missed) or a
+# prior `nosi-*` name -- so a name an operator deliberately chose (anything not
+# starting `nosi-`) survives an apply.sh re-run on a live box.
+if [ "$variant" != "unknown" ]; then
+    want_hn="nosi-${variant}"
+    if [ "${NOSI_DISTRO:-}" = "freebsd" ]; then
+        cur_hn="$(sysrc -n hostname 2>/dev/null || hostname 2>/dev/null || true)"
+        case "${cur_hn:-}" in
+        "" | localhost | localhost.localdomain | nosi-build | freebsd | nosi-*)
+            sysrc hostname="$want_hn" >/dev/null 2>&1 || true
+            nosi_info "hostname set to ${want_hn} (was: ${cur_hn:-empty})"
+            ;;
+        esac
+    else
+        cur_hn="$(cat /etc/hostname 2>/dev/null || true)"
+        case "${cur_hn:-}" in
+        "" | localhost | localhost.localdomain | nosi-build | raspberrypi | nosi-*)
+            printf '%s\n' "$want_hn" > /etc/hostname
+            # Keep 127.0.1.1 resolvable: sudo warns without it, and pmxcfs
+            # (proxmox) refuses to start unless the node name resolves.
+            if [ -f /etc/hosts ]; then
+                if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+                    sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1\t${want_hn}.localdomain ${want_hn}/" /etc/hosts
+                else
+                    printf '127.0.1.1\t%s.localdomain %s\n' "$want_hn" "$want_hn" >> /etc/hosts
+                fi
+            fi
+            nosi_info "hostname set to ${want_hn} (was: ${cur_hn:-empty})"
+            ;;
+        esac
+        # The seed that set cloud-init's `hostname:` is consumed at bake; on
+        # the operator's first flash-boot cloud-init's set-hostname module
+        # would otherwise revert /etc/hostname. Preserve the baked name.
+        if [ -d /etc/cloud ]; then
+            install -d -m 0755 /etc/cloud/cloud.cfg.d
+            printf '# Managed by nosi/provision/steps/05-nosi-release.sh\npreserve_hostname: true\n' \
+                > /etc/cloud/cloud.cfg.d/95-nosi-hostname.cfg
+            chmod 0644 /etc/cloud/cloud.cfg.d/95-nosi-hostname.cfg
+        fi
+    fi
+fi
+
 content="# /etc/nosi-release - written by nosi/provision/steps/05-nosi-release.sh
 NOSI_VERSION=${version}
 NOSI_SHAPE=${shape}

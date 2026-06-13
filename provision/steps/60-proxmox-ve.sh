@@ -72,16 +72,11 @@ postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost' || tru
 apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null || true
 update-grub 2>/dev/null || true
 
-# ---- identity: a PVE host gets its own default hostname ---------------------
-# The derive inherits the headless base identity (hostname nosi-debian), but
-# the hostname IS the PVE node name (/etc/pve/nodes/<hostname>), so give the
-# hypervisor its own default. Replace only the baked placeholder, never a
-# name an operator chose, so re-runs of this step on a live host stay safe.
-if [ "$(cat /etc/hostname 2>/dev/null)" = "nosi-debian" ]; then
-    echo "nosi-proxmox" > /etc/hostname
-    sed -i 's/^127\.0\.1\.1[[:space:]].*/127.0.1.1 nosi-proxmox.localdomain nosi-proxmox/' /etc/hosts
-    nosi_info "default hostname set to nosi-proxmox"
-fi
+# ---- identity ---------------------------------------------------------------
+# The hostname IS the PVE node name (/etc/pve/nodes/<hostname>). 05-nosi-release
+# already stamped the derive's own default (nosi-<variant>, e.g.
+# nosi-debian-13-proxmox) + the matching /etc/hosts entry; the boot services
+# below read the live hostname, so they work whatever the host ends up named.
 
 # ---- first-boot: make the node hostname resolvable (pmxcfs needs it) -------
 # pve-cluster (pmxcfs) refuses to start unless the node hostname resolves to an

@@ -179,19 +179,8 @@ dnf)
     ;;
 esac
 
-# ---- default hostname -------------------------------------------------------
-# The variant userdata sets `hostname: nosi-<distro>`. On Fedora cloud-init's
-# EARLY set-hostname call fails every bake ("Failed to set the hostname",
-# racing systemd-hostnamed), but the later apply succeeds, so images have so
-# far always shipped the right name. This is the safety net for the day that
-# later apply also loses: replace only placeholder names (the cloud image's
-# default or the bake VM's), never a hostname an operator chose.
-current_hn=$(cat /etc/hostname 2>/dev/null || true)
-case "${current_hn:-}" in
-"" | localhost | localhost.localdomain | nosi-build)
-    echo "nosi-${NOSI_DISTRO}" > /etc/hostname
-    nosi_info "hostname defaulted to nosi-${NOSI_DISTRO} (was: ${current_hn:-empty})"
-    ;;
-esac
+# The default hostname (nosi-<variant>) is set in 05-nosi-release, which
+# runs in every build path so each derive stamps its own variant name;
+# this base-only step would leave derives with the headless base's name.
 
 nosi_info "step 08-network-dhcp done"
