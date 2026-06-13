@@ -164,6 +164,29 @@ if command -v tailscale >/dev/null 2>&1; then
     vpn_hint="    sudo systemctl enable --now tailscaled && sudo tailscale up   join tailnet (ships dormant)"
 fi
 
+# Proxmox hosts run headless, so the operator otherwise has to guess the web
+# UI port, the login realm, and that root ships locked. Surface all of it in
+# the banner, computed live so the URL tracks the current address and the
+# bridge line reflects whether vmbr0 exists yet.
+pve_block=""
+if [ "$shape" = proxmox ]; then
+    primary_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '"'"'{print $4}'"'"' | cut -d/ -f1 | head -1)"
+    [ -z "$primary_ip" ] && primary_ip="<host-ip>"
+    if ip -o link show type bridge 2>/dev/null | grep -q vmbr0; then
+        pve_bridge="vmbr0 up"
+    else
+        pve_bridge="none yet; run: sudo nosi-proxmox-mkbridge && sudo ifreload -a"
+    fi
+    pve_block="
+  Proxmox VE:
+    web UI:  https://${primary_ip}:8006
+    login:   user odus  (realm: Linux PAM standard authentication)
+             root@pam login needs a password first; run: sudo passwd root
+    bridge:  ${pve_bridge}
+    storage: a blank extra disk auto-enrolls as nvme-data; else Datacenter > Storage
+"
+fi
+
 cat <<EOM
 
   nosi ${shape} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
@@ -176,7 +199,7 @@ ${default_pw_warning}
   cpu:       ${cpu_model} x ${cpu_count}
   ram:       ${ram_gib} GiB
   nvme:      ${nvme_count}
-
+${pve_block}
   Tools:     rg fd fzf lazygit delta yazi oras gh just direnv
   Helpers:
     iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
