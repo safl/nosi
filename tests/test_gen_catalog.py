@@ -20,11 +20,32 @@ def test_registry_schema(registry):
     for name, spec in registry.items():
         assert spec.get("shape") in KNOWN_SHAPES, f"{name}: bad shape {spec.get('shape')!r}"
         assert isinstance(spec.get("flashable"), bool), f"{name}: flashable must be a bool"
-        assert str(spec.get("description", "")).strip(), f"{name}: missing description"
+
+
+def test_every_variant_has_a_description_file(registry):
+    """Each variant's use-case prose lives in its own descriptions/<name>.md
+    (and <name>.wsl.md for the wsl shape). A registered variant without its
+    file would fail the ORAS --describe push, so catch it here instead."""
+    for name, spec in registry.items():
+        assert (gen_catalog.DESCRIPTIONS_DIR / f"{name}.md").is_file(), (
+            f"{name}: missing descriptions/{name}.md"
+        )
+        assert gen_catalog._load_description(name), f"{name}: empty description file"
         if spec["shape"] == "wsl":
-            assert str(spec.get("wsl_description", "")).strip(), (
-                f"{name}: wsl needs wsl_description"
+            assert (gen_catalog.DESCRIPTIONS_DIR / f"{name}.wsl.md").is_file(), (
+                f"{name}: wsl shape needs descriptions/{name}.wsl.md"
             )
+            assert gen_catalog._load_description(name, wsl=True), (
+                f"{name}: empty wsl description file"
+            )
+
+
+def test_no_orphan_description_files(registry):
+    """Every descriptions/*.md maps to a registered variant, so a renamed or
+    removed variant does not leave dead prose behind."""
+    for path in gen_catalog.DESCRIPTIONS_DIR.glob("*.md"):
+        name = path.name[: -len(".wsl.md")] if path.name.endswith(".wsl.md") else path.stem
+        assert name in registry, f"{path.name}: no such variant in variants.yml"
 
 
 def test_variant_names_match_their_shape_suffix(registry):

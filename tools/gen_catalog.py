@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Generate a bty-compatible ``catalog.toml`` from ``variants.yml``.
 
-Two jobs, one source of truth (``variants.yml`` at the repo root):
+Two jobs over two sources: ``variants.yml`` (structured per-variant metadata:
+shape / flashable / arch) and ``descriptions/<name>.md`` (one file per variant
+holding its use-case prose; ``descriptions/<name>.wsl.md`` for the wsl shape's
+separate rootfs blurb):
 
 1. ``--describe <variant>`` / ``--describe-wsl <variant>`` -- print one
    variant's use-case prose. ``.github/workflows/build.yml`` calls these
@@ -36,6 +39,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = REPO_ROOT / "variants.yml"
+# Per-variant use-case prose, one file each: descriptions/<name>.md for the
+# image description, descriptions/<name>.wsl.md for the wsl shape's separate
+# rootfs blurb. Kept out of variants.yml so the registry stays pure structured
+# metadata and each description can be edited / reviewed on its own.
+DESCRIPTIONS_DIR = REPO_ROOT / "descriptions"
 
 # GHCR namespace the build workflow pushes each variant to
 # (ghcr.io/<owner>/<repo>/<variant>). Kept in lockstep with build.yml's
@@ -62,12 +70,29 @@ def _variant(variants: dict[str, dict], name: str) -> dict:
         ) from None
 
 
+def _load_description(name: str, *, wsl: bool = False) -> str:
+    """Read a variant's use-case prose from its own file.
+
+    Whitespace is collapsed to a single line, so a file wrapped for
+    readability still yields the exact single-line string the ORAS
+    image.description annotation and the catalog.toml entry expect.
+    """
+    path = DESCRIPTIONS_DIR / f"{name}{'.wsl.md' if wsl else '.md'}"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        raise SystemExit(f"variant {name!r}: missing description file {path}") from None
+    collapsed = " ".join(text.split())
+    if not collapsed:
+        raise SystemExit(f"variant {name!r}: description file {path} is empty")
+    return collapsed
+
+
 def _describe(variants: dict[str, dict], name: str, *, key: str) -> str:
-    entry = _variant(variants, name)
-    value = entry.get(key)
-    if not value:
-        raise SystemExit(f"variant {name!r}: no {key!r} in {REGISTRY_PATH}")
-    return str(value).strip()
+    # Validate the variant is registered first, so an unknown name fails with
+    # the registry hint rather than a bare missing-file error.
+    _variant(variants, name)
+    return _load_description(name, wsl=(key == "wsl_description"))
 
 
 def _toml_escape(text: str) -> str:
@@ -97,9 +122,7 @@ def _render_catalog(variants: dict[str, dict]) -> str:
         entry = variants[name]
         if not entry.get("flashable"):
             continue
-        desc = str(entry.get("description", "")).strip()
-        if not desc:
-            raise SystemExit(f"variant {name!r}: flashable but has no description")
+        desc = _load_description(name)  # raises if the file is missing/empty
         arch = str(entry.get("arch", "x86_64")).strip()
         lines += [
             "",

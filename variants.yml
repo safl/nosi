@@ -13,162 +13,87 @@
 # push step's --describe lookup loudly (no generic placeholder).
 #
 # Fields:
-#   shape        headless | desktop | wsl -- the artifact's form factor.
+#   shape        headless | desktop | wsl | docker | lxc | proxmox --
+#                the artifact's form factor.
 #   flashable    true if the published .img.gz is a flashable disk image
 #                that belongs in bty's catalog; false for the wsl rootfs
 #                (imported via `wsl --import`, not flashed to a block dev).
 #   arch         target architecture for the catalog label; optional,
 #                defaults to x86_64. Set to arm64 for the Raspberry Pi
 #                variants.
-#   description  org.opencontainers.image.description for the disk-image
-#                ORAS push AND the catalog entry's prose. The use-case
-#                statement: "what is this variant for?"
-#   wsl_description  (wsl shape only) the description for the separate
-#                -wsl rootfs ORAS push, flagged as the WSL derivative.
+#
+# The use-case prose ("what is this variant for?") is NOT here: each
+# variant's description lives in its own file, descriptions/<name>.md,
+# and the wsl shape's separate rootfs blurb in descriptions/<name>.wsl.md.
+# gen_catalog.py reads those for the ORAS image.description annotation and
+# the catalog entry. One description per file keeps this registry to pure
+# structured metadata and lets the prose be edited (and reviewed) on its
+# own.
 
 variants:
+
   debian-13-headless:
     shape: headless
     flashable: true
-    description: >-
-      Debian 13 (trixie) headless. The nicer user-land choices and
-      stability; general-purpose headless base when HW-vendor stacks
-      aren't load-bearing.
 
   debian-13-desktop:
     shape: desktop
     flashable: true
-    description: >-
-      Debian 13 (trixie) desktop. Sway tiling Wayland compositor + greeter
-      + Firefox (firefox-esr, no snap) + audio / bluetooth / power-management
-      on top of the headless baseline. The preferred daily-driver desktop
-      where Debian's hardware support is sufficient.
 
   debian-13-lxc:
     shape: lxc
     flashable: false
-    description: >-
-      Debian 13 (trixie) LXC system-container template (zstd rootfs tarball)
-      for Proxmox CT / Incus. The headless baseline minus kernel / firmware /
-      NetworkManager; the container shares the host kernel. Drop in
-      template/cache and `pct create`, or `incus image import`.
 
   debian-13-proxmox:
     shape: proxmox
     flashable: true
-    description: >-
-      Debian 13 (trixie) as a Proxmox VE host (PVE 9, no-subscription) on top
-      of the headless baseline, so the hypervisor inherits nosi's hardware
-      support + IOMMU/vfio tuning and the dev toolset on the host. Flash to the
-      OS NVMe; PVE daemons come up on first boot (web UI on :8006).
 
   ubuntu-2404-headless:
     shape: headless
     flashable: true
-    description: >-
-      Ubuntu 24.04 LTS (noble) headless. For HW to get driver-support
-      for CUDA / ROCm devices and Mellanox NICs / DPUs.
 
   ubuntu-2604-headless:
     shape: headless
     flashable: true
-    description: >-
-      Ubuntu 26.04 LTS (resolute) headless. For a more recent kernel
-      and user-land packages on Ubuntu LTS.
 
   ubuntu-2604-wsl:
     shape: wsl
     flashable: false
-    description: >-
-      Ubuntu 26.04 LTS (resolute) WSL2 rootfs. Headless baseline +
-      meld / gitk / git-gui rendered through WSLg (no compositor in the
-      rootfs). Imported via wsl --import.
-    wsl_description: >-
-      Ubuntu 26.04 LTS (resolute) WSL2 rootfs (kernel/grub/firmware/cloud-init
-      stripped post-bake). Headless baseline + meld / gitk / git-gui
-      rendered through WSLg. Import via wsl --import.
 
   ubuntu-2604-docker:
     shape: docker
     flashable: false
-    description: >-
-      Ubuntu 26.04 LTS (resolute) OCI/container image: the headless
-      baseline (qemu + cijoe included) CI-tuned (no systemd as PID1;
-      kernel / boot / cloud-init stripped). A bootstrap host that
-      launches qemu guests via cijoe (nested KVM on GHA with
-      --privileged, or device passthrough on bare metal), and a general
-      dev base for a project's `make docker`. Pull with docker; use as
-      a GHA job container.
 
   ubuntu-2604-lxc:
     shape: lxc
     flashable: false
-    description: >-
-      Ubuntu 26.04 LTS (resolute) LXC system-container template (zstd rootfs
-      tarball) for Proxmox CT / Incus. The headless baseline minus kernel /
-      firmware / NetworkManager; shares the host kernel. Drop in template/cache
-      and `pct create`, or `incus image import`.
 
   fedora-44-headless:
     shape: headless
     flashable: true
-    description: >-
-      Fedora 44 headless. An alternative from the RHEL family for
-      operators in Red-Hat-shaped environments (dnf, SELinux, RHEL/EL
-      package universe).
 
   fedora-44-desktop:
     shape: desktop
     flashable: true
-    description: >-
-      Fedora 44 desktop. Sway tiling Wayland compositor + tuigreet
-      greeter + Firefox + audio / bluetooth / power-management on top
-      of the headless baseline. For personal laptop / workstation use.
 
   fedora-44-lxc:
     shape: lxc
     flashable: false
-    description: >-
-      Fedora 44 LXC system-container template (zstd rootfs tarball) for
-      Proxmox CT / Incus. The headless baseline minus kernel / firmware /
-      NetworkManager (systemd-networkd drives the container network); shares
-      the host kernel. Drop in template/cache and `pct create`.
 
   rpios-13-headless:
     shape: headless
     flashable: true
     arch: arm64
-    description: >-
-      Raspberry Pi OS (arm64) headless for Pi 4 + Pi 5. The nosi dev
-      baseline (hx/zellij/uv + C/C++/Python/Rust/Zig toolchains, podman)
-      on the Foundation kernel/firmware, baked into the official image via
-      chroot. Flash to SD/USB and boot -- one image serves both boards.
 
   rpios-13-desktop:
     shape: desktop
     flashable: true
     arch: arm64
-    description: >-
-      Raspberry Pi OS (arm64) desktop for Pi 4 + Pi 5. Sway tiling Wayland
-      compositor + greeter + Firefox + audio / bluetooth / power-management
-      on top of the headless baseline. For a Pi used as a small workstation.
 
   freebsd-14-headless:
     shape: headless
     flashable: true
-    description: >-
-      FreeBSD 14.4-RELEASE headless. C/C++/Python dev base (base
-      clang/lldb + cmake/meson/ninja/gmake/python, plus gdb/ruff/uv/
-      lazygit/cijoe); runs the shared provision chain (NIC-agnostic DHCP,
-      growfs, sshd) via nuageinit; kernel source in /usr/src. Rust/Zig are
-      opt-in (pkg install) to keep llvm out of the image.
 
   freebsd-15-headless:
     shape: headless
     flashable: true
-    description: >-
-      FreeBSD 15.0-RELEASE headless. C/C++/Python dev base (base
-      clang/lldb + cmake/meson/ninja/gmake/python, plus gdb/ruff/uv/
-      lazygit/cijoe); runs the shared provision chain (NIC-agnostic DHCP,
-      growfs, sshd) via nuageinit; kernel source in /usr/src. Rust/Zig are
-      opt-in (pkg install) to keep llvm out of the image.
