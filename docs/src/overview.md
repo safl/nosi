@@ -203,8 +203,10 @@ cijoe/
   scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
   scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
   scripts/derive_publish.py         # base qcow2 -> chroot --shape-only -> .img.gz / .tar.gz / OCI
-variants.yml                        # per-variant metadata (shape, flashable, description)
-tools/gen_catalog.py                # variants.yml -> bty-compatible catalog.toml
+variants.yml                        # per-variant metadata (shape, flashable, arch)
+descriptions/                       # one use-case blurb per variant (<name>.md)
+tools/gen_catalog.py                # variants.yml + descriptions/ -> catalog.toml
+
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data

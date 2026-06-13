@@ -301,7 +301,8 @@ jobs:
         # it's `docker push`ed for `docker pull` / GHA `container:` use.
         # Annotations come from each artifact's OWN metadata.json (the base
         # smoketest extracted the base's; derive_pack exported each
-        # derived one), description from variants.yml via gen_catalog.
+        # derived one), description from descriptions/<variant>.md via
+        # gen_catalog --describe.
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
