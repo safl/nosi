@@ -61,11 +61,14 @@ are **derived** from it (see [the layered model](#the-layered-model)):
   `.img.gz`; the hypervisor inherits nosi's hardware support and
   IOMMU / vfio tuning. Default hostname `nosi-proxmox` (the hostname
   names the PVE node). Bring-up after flashing:
-  - **Log in**: `https://<ip>:8006`, user `odus`, realm "Linux PAM
-    standard authentication". A first-boot oneshot grants `odus@pam`
-    the Administrator role (root ships locked) and maps the hostname
-    to the primary IP so the node TLS certificate generates; renaming
-    the host re-keys both on the next boot.
+  - **Log in**: browse to `https://<ip>:8006`. Set a root password
+    first (`sudo passwd root`, root ships locked), then log in as
+    `root` with realm "Linux PAM standard authentication", the
+    conventional PVE admin. The baked `odus` operator is also granted
+    the Administrator role on first boot, so `odus@pam` (same realm)
+    works too without unlocking root. A first-boot oneshot maps the
+    hostname to the primary IP so the node TLS certificate generates;
+    renaming the host re-keys both on the next boot.
   - **Bridge**: VMs need `vmbr0`; run `sudo nosi-proxmox-mkbridge`
     then `sudo ifreload -a` (writes the bridge over the default-route
     NIC, backup kept). Not automatic: rewriting the interfaces file

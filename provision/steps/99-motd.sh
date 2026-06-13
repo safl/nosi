@@ -180,8 +180,9 @@ if [ "$shape" = proxmox ]; then
     pve_block="
   Proxmox VE:
     web UI:  https://${primary_ip}:8006
-    login:   user odus  (realm: Linux PAM standard authentication)
-             root@pam login needs a password first; run: sudo passwd root
+    login:   first set a root password: sudo passwd root
+             then log in as root, realm: Linux PAM standard authentication
+             (odus, same realm, is also an admin)
     bridge:  ${pve_bridge}
     storage: a blank extra disk auto-enrolls as nvme-data; else Datacenter > Storage
 "
