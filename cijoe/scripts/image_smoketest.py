@@ -777,6 +777,20 @@ def _run_assertions(
         lambda rc, out: (out == "ok", out or "missing wg"),
     )
 
+    # ---- on-box health check (step 95) ------------------------------------
+    # nosi-selfcheck is the operator's "did the box come up healthy?" tool;
+    # running it here means CI and operators validate the image from one
+    # definition. It exits non-zero if any check FAILED, and on failure we
+    # surface just the [FAIL] lines so the smoketest log names what broke.
+    check(
+        "nosi-selfcheck passes on the booted image",
+        "nosi-selfcheck",
+        lambda rc, out: (
+            rc == 0,
+            "; ".join(x.strip() for x in out.splitlines() if "[FAIL]" in x) or f"exit {rc}",
+        ),
+    )
+
     # ---- gdb-dashboard wired into the system gdbinit (step 12) -----------
     check(
         "gdb-dashboard installed as /etc/gdb/gdbinit",
