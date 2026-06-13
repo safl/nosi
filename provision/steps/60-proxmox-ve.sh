@@ -63,14 +63,34 @@ apt-get install -y proxmox-ve postfix open-iscsi chrony
 # runnervm....internal.cloudapp.net), which then ships in the published image.
 # Drop the baked myhostname so postfix derives it from the live hostname at
 # runtime, and pin mydestination to runtime-derived names for the same reason.
-postconf -X myhostname 2>/dev/null || true
-postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost' || true
+# These edit main.cf and should succeed in the chroot, so surface a failure
+# (a silent one ships the runner FQDN, the exact bug this fixes) instead of
+# swallowing it.
+postconf -X myhostname \
+    || nosi_warn "postconf -X myhostname failed; the build-host FQDN may persist in postfix main.cf"
+postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost' \
+    || nosi_warn "postconf -e mydestination failed"
 
 # Proxmox ships + boots its own kernel; drop the Debian cloud kernel and
 # os-prober so GRUB defaults to the PVE kernel (per Proxmox's install-on-Debian
 # guide). proxmox-ve already pulled proxmox-default-kernel, so a kernel remains.
-apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null || true
-update-grub 2>/dev/null || true
+# update-grub legitimately fails in a chroot with no /boot device (the live
+# host regenerates it on first boot), so warn rather than die; the assertions
+# below catch the outcomes that actually matter.
+apt-get remove -y os-prober 'linux-image-amd64' 'linux-image-6.*' 2>/dev/null \
+    || nosi_warn "removing the Debian cloud kernel / os-prober reported an error"
+update-grub 2>/dev/null \
+    || nosi_warn "update-grub failed (expected in a chroot with no /boot; the live host regenerates it on first boot)"
+
+# Assert what the suppression above could otherwise hide: a Proxmox kernel
+# survived (without one the host has nothing to boot), and the Debian cloud
+# kernel is gone (left installed, GRUB can default back to it on first boot).
+if ! dpkg-query -W -f='${Package}\n' 'proxmox-kernel-*' 2>/dev/null | grep -q .; then
+    nosi_die "no proxmox-kernel-* installed after the cloud-kernel removal; the PVE host would have no bootable kernel"
+fi
+if dpkg-query -W -f='${db:Status-Status}\n' linux-image-amd64 2>/dev/null | grep -q '^installed'; then
+    nosi_warn "linux-image-amd64 still installed; GRUB may default to the Debian cloud kernel instead of PVE"
+fi
 
 # ---- identity ---------------------------------------------------------------
 # The hostname IS the PVE node name (/etc/pve/nodes/<hostname>). 05-nosi-release
