@@ -25,7 +25,7 @@ your choice. It's pre-installed at `/usr/local/bin/oras` on every nosi
 image; elsewhere it's a single-binary install from
 [oras-project/oras/releases](https://github.com/oras-project/oras/releases).
 
-The [catalog](_generated/catalog.md) lists the currently-published
+The [catalog](catalog/index.md) lists the currently-published
 variants, baked tool versions, and digests.
 
 ### Two-step (pull to disk, then flash)
