@@ -6,15 +6,13 @@
 [![release](https://img.shields.io/badge/release-rolling-orange.svg)](release.md)
 ```
 
-Automated builds of headless and desktop system images for bare metal and
-virtual machines (qemu, WSL2), plus container images, pre-loaded with an
-opinionated toolset for systems-development work in C, C++, Python, Rust,
-and Zig.
-
-Flash the resulting `.img.gz` with `dd`, Balena Etcher, or any tool that
-handles gzip-compressed disk images, and you have a ready-to-SSH dev box.
-The companion project [bty](https://github.com/safl/bty) is one convenient
-flasher; it is not required.
+Automated, rolling builds of headless and desktop system images for bare metal
+and virtual machines (QEMU, WSL2, Proxmox), plus container images (OCI, LXC),
+pre-loaded with an opinionated toolset for systems-development work in C, C++,
+Python, Rust, and Zig. Flash the `.img.gz` with `dd` (or any tool that handles
+gzip-compressed disk images) and you have a ready-to-SSH dev box. The companion
+project [bty](https://github.com/safl/bty) is one convenient flasher; it is not
+required.
 
 ```{toctree}
 :maxdepth: 2

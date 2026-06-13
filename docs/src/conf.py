@@ -38,6 +38,9 @@ html_title = ""
 # retina-crisp at the rendered size. The full-res nosi.png stays for the README
 # hero and as the source to regenerate this from.
 html_logo = "_static/nosi-logo.png"
+# The logo already carries the "nosi" wordmark, so hide the project name Furo
+# would otherwise render as text beneath it in the sidebar.
+html_theme_options = {"sidebar_hide_name": True}
 # Browser-tab icon: a 180px square crop of the floppy-disk logo. Pointing
 # this at nosi.png directly would make every page pull the ~2 MB original.
 html_favicon = "_static/favicon.png"
