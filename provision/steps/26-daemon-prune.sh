@@ -40,6 +40,12 @@ ubuntu)
 fedora)
     pkgs="ModemManager PackageKit udisks2"
     ;;
+*)
+    # Unknown distro (e.g. a future apt derivative): nothing to prune by
+    # name. Initialize pkgs so the `for pkg in $pkgs` below cannot trip
+    # `set -u` on an unset variable.
+    pkgs=""
+    ;;
 esac
 
 case "$NOSI_PKGMGR" in

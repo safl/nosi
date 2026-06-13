@@ -16,7 +16,7 @@ Distro + numerical version in a variant name are self-explanatory
 (Ubuntu 24.04, Debian 13, ...); the shape is the nosi-specific bit
 that needs an introduction.
 
-Four shapes ship today. `headless` is the **base**; the other three
+Six shapes ship today. `headless` is the **base**; the other five
 are **derived** from it (see [the layered model](#the-layered-model)):
 
 - **`headless`** : the base. C / C++ / Python / Rust / Zig systems
@@ -104,14 +104,14 @@ call post-flash.
 
 Per distro+version, the `headless` variant is the **base**: it bakes
 once from the stock cloud image, running the full
-`apply.sh <variant>` provision chain. The `desktop` / `wsl` / `docker`
-variants are **derived** from that baked rootfs rather than re-baked:
-`derive_publish` copies the base qcow2, chroots in, runs
+`apply.sh <variant>` provision chain. The `desktop` / `wsl` / `docker` /
+`lxc` / `proxmox` variants are **derived** from that baked rootfs rather
+than re-baked: `derive_pack` copies the base qcow2, chroots in, runs
 `apply.sh <derived-variant> --shape-only` (which re-stamps identity
 and runs only the shape's step, installing the shape's packages +
 config), optionally strips kernel / boot / cloud-init, and repackages
-(bootable `.img.gz` for desktop, `.tar.gz` for wsl, OCI image for
-docker).
+(bootable `.img.gz` for desktop and proxmox, `.tar.gz` for wsl,
+`.tar.zst` for lxc, OCI image for docker).
 
 The shared infrastructure (the base provision steps: release stamp,
 tool installs, ssh, daemon-prune, ...) therefore runs **once** per
@@ -179,17 +179,18 @@ user-data file under `nosi-media/auxiliary/`. A
 5. Compact the baked qcow2 and gzip-publish it as a dd-able `.img.gz`
    with a SHA-256 sidecar.
 6. For a base that declares `[[...derive]]` entries (today:
-   `ubuntu-2604-headless` -> wsl + docker; `fedora-44-headless` ->
-   desktop), `derive_publish` builds each derived shape from the same
+   `debian-13-headless` -> desktop + lxc + proxmox;
+   `ubuntu-2604-headless` -> wsl + docker + lxc; `fedora-44-headless` ->
+   desktop + lxc), `derive_pack` builds each derived shape from the same
    bake without re-baking: copy the qcow2, attach via `qemu-nbd`,
    mount the detected ext4 rootfs, bind-mount /dev /proc /sys /run +
    the host resolv.conf, chroot in to run
    `apply.sh <derived-variant> --shape-only` (installs the shape's
    packages + config), optionally apt-purge the
    kernel/grub/firmware/cloud-init/netplan/NM plumbing, then repackage:
-   bootable `.img.gz` (desktop), `tar`-ed + gzipped rootfs (wsl), or
-   `docker import` into an OCI image (docker). No-op for a base with
-   no `derive` entries.
+   bootable `.img.gz` (desktop, proxmox), `tar`-ed + gzipped rootfs
+   (wsl), `.tar.zst` rootfs (lxc), or `docker import` into an OCI image
+   (docker). No-op for a base with no `derive` entries.
 
 Layout mirrors `safl/bty`'s internal `cijoe/` + `bty-media/` pattern.
 
@@ -201,12 +202,11 @@ cijoe/
   configs/<variant>.toml            # cloud image URL, qemu guest, publish paths
   tasks/build.yaml                  # cijoe workflow
   scripts/diskimage_build.py        # download -> resize -> seed -> boot -> snapshot
-  scripts/img_gz_publish.py         # qcow2 -> raw -> .img.gz + sha256
-  scripts/derive_publish.py         # base qcow2 -> chroot --shape-only -> .img.gz / .tar.gz / OCI
+  scripts/img_gz_pack.py            # qcow2 -> raw -> .img.gz + sha256
+  scripts/derive_pack.py            # base qcow2 -> chroot --shape-only -> .img.gz / .tar.gz / .tar.zst / OCI
 variants.yml                        # per-variant metadata (shape, flashable, arch)
 descriptions/                       # one use-case blurb per variant (<name>.md)
 tools/gen_catalog.py                # variants.yml + descriptions/ -> catalog.toml
-
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data

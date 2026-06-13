@@ -70,4 +70,22 @@ dnf/apt to abort the transaction. Check /var/log/cloud-init.log (or the bake's s
 for the rejected name."
 fi
 
+# Bake-time tripwire for SILENTLY-dropped packages. cloud-init pre-filters the
+# packages: list against the archive, installs what it can, and only WARNS
+# about names it could not resolve (renamed/removed, or needing an apt
+# component the image's sources don't enable -- this is how the debian images
+# shipped for weeks without CPU microcode). That warning lives only in
+# /var/log/cloud-init.log, which the end-of-bake `cloud-init clean --logs`
+# erases, so it has to be caught HERE while the log still exists (the
+# missing-command check above only catches a fully-aborted transaction; a
+# partial drop slips past it). Guarded on the log being present so derives
+# (chroot, no cloud-init) and FreeBSD (nuageinit) skip it.
+if [ -f /var/log/cloud-init.log ] \
+    && grep -q 'Failure when attempting to install packages' /var/log/cloud-init.log; then
+    nosi_die "cloud-init could not install one or more requested packages (filter warning in \
+/var/log/cloud-init.log). A name in the variant's packages: list is unavailable on this \
+distro/release -- renamed, dropped, or needs an apt component that isn't enabled. Grep the log \
+for 'Failed to install' to see the rejected names."
+fi
+
 nosi_info "step 06-package-presence ok"

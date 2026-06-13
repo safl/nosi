@@ -12,9 +12,9 @@
 #       useless without an SSH key. Debian / Ubuntu cloud images ship
 #       with it on; the drop-in is redundant there but harmless.
 #   PermitRootLogin no
-#       Defense in depth on top of step 22's `passwd -l root` (cloud-init
-#       runcmd). If something rotates the root password later, sshd
-#       still won't accept root logins.
+#       Defense in depth on top of step 31-root-lock's `passwd -l root`
+#       (and the cloud-init runcmd). If something rotates the root
+#       password later, sshd still won't accept root logins.
 #
 # Enablement: openssh-server's postinst enables ssh.service on
 # Debian/Ubuntu, and Fedora Cloud enables sshd.service via preset, so in

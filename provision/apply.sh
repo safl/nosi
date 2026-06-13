@@ -16,9 +16,10 @@
 #                stamp, tool installs, ssh, daemon-prune, ...). Identical
 #                logic across shapes -- the part that would be pure
 #                replication if every shape baked from scratch.
-#   SHAPE_STEPS  the per-shape delta (Sway desktop, WSL GUI tools, docker
-#                tooling). Each self-gates on NOSI_SHAPE, so the set is
-#                safe to run wholesale: only the matching one does work.
+#   SHAPE_STEPS  the per-shape delta (Sway desktop, WSL GUI tools, LXC
+#                container, Proxmox VE host; docker has no step). Each
+#                self-gates on NOSI_SHAPE, so the set is safe to run
+#                wholesale: only the matching one does work.
 #                These steps OWN their package installs (via
 #                nosi_pkg_install), so the shape is fully defined here
 #                rather than half here / half in cloud-init.
