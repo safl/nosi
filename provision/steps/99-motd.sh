@@ -19,8 +19,9 @@
 # not a script edit.
 #
 # Inputs (env vars, optional):
-#   NOSI_SHAPE              "headless" (default), "desktop", "wsl".
-#                           Surfaces in the banner header.
+#   NOSI_SHAPE              the shape name (headless (default) / desktop /
+#                           wsl / docker / lxc / proxmox). Surfaces in the
+#                           banner header.
 #   NOSI_DEFAULT_HOSTNAME   Hostname nosi shipped with. Surfaces in the
 #                           Reconfigure hint. Defaults to
 #                           nosi-${NOSI_DISTRO}.

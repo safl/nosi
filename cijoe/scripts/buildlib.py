@@ -3,8 +3,10 @@ Helpers shared by the cijoe build scripts
 =========================================
 
 Library module, not a runnable step (same convention as ``imgshrink``).
-These existed as identical copy-pasted privates in four scripts; they live
-here once so a fix lands everywhere.
+These replaced near-identical copy-pasted privates across the build
+scripts; centralizing them means a fix lands everywhere they're imported.
+(``rpi_image_build`` keeps its own ``_default_image_name`` with a Pi
+default + fixed arm64, rather than importing this one.)
 
 Retargetable: False
 """

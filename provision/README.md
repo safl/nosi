@@ -149,7 +149,7 @@ no-ops there.
 ## Use as a WSL2 distribution
 
 The `wsl`-shape variant (today: `ubuntu-2604-wsl`) is derived from the
-`ubuntu-2604-headless` base: `derive_publish` chroots into a copy of
+`ubuntu-2604-headless` base: `derive_pack` chroots into a copy of
 the baked headless rootfs, runs the wsl shape step (adds meld / gitk /
 git-gui), strips kernel/grub/firmware/cloud-init, and tar-gzips the
 result. The `.tar.gz` is the only artifact.

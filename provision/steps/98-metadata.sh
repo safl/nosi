@@ -160,7 +160,10 @@ meta = {
         "username": "odus",
         "uid": 1000,
         "default_password": "odus.321",
-        "default_password_state": "expired (chage -d 0); first interactive login forces rotation",
+        # Matches step 29-rotate-password: the default is NOT force-expired
+        # (the old `chage -d 0` was removed); it just works, and the motd
+        # warns at every interactive login until the operator rotates it.
+        "default_password_state": "active (default, not force-rotated; motd warns until changed)",
         "root_locked": True,
         "ssh": {
             "password_auth": True,

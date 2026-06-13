@@ -66,7 +66,28 @@ def test_describe_unknown_variant_fails_loudly(registry):
 def test_catalog_lists_only_flashable(registry):
     out = gen_catalog._render_catalog(registry)
     for name, spec in registry.items():
+        # The unique per-image marker is the oras src `.../<name>:latest`,
+        # not a bare name substring and not `[images.<name>]` (the renderer
+        # emits `[[images]]` table-arrays, so that bracket form never appears
+        # and asserting its absence proved nothing).
+        ref = f"/{name}:latest"
         if spec["flashable"]:
-            assert name in out, f"flashable {name} missing from catalog.toml"
+            assert ref in out, f"flashable {name} missing from catalog.toml"
         else:
-            assert f"[images.{name}]" not in out, f"non-flashable {name} leaked into catalog.toml"
+            assert ref not in out, f"non-flashable {name} leaked into catalog.toml"
+
+
+def test_catalog_parses_and_every_image_is_complete(registry):
+    """Parse the rendered TOML and assert each image carries the four fields
+    bty needs, so a renderer regression fails here, not in bty."""
+    import tomllib
+
+    doc = tomllib.loads(gen_catalog._render_catalog(registry))
+    assert doc.get("version") == 1
+    flashable = [n for n, s in registry.items() if s["flashable"]]
+    assert len(doc.get("images", [])) == len(flashable)
+    for img in doc["images"]:
+        for field in ("name", "src", "format", "description"):
+            assert img.get(field), f"{img.get('name', '?')}: missing {field}"
+        assert img["src"].startswith("oras://")
+        assert img["description"].strip()

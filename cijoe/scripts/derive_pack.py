@@ -337,10 +337,15 @@ def _provision_and_package(cijoe, work, mnt, variant, output, strip, disk_dir) -
         # inventory, and it survives the strip). build.yml reads this for
         # the derived artifact's ORAS annotations rather than the base's.
         meta_dst = disk_dir / f"nosi-{variant}.metadata.json"
-        cijoe.run_local(
+        err, _ = cijoe.run_local(
             f"sudo cp {rootfs}/etc/nosi-metadata.json {meta_dst} && "
             f"sudo chown $(id -u):$(id -g) {meta_dst}"
         )
+        if err:
+            # build.yml reads this for the derived artifact's ORAS provenance
+            # layer; shipping without it silently is worse than failing here.
+            log.error(f"derive '{variant}': failed exporting metadata.json")
+            return err
 
         # tar/oci read the live mount; drop binds first so the rootfs view
         # is static (volatile /sys etc. trip tar's "file changed" check).
@@ -428,7 +433,10 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
         err, _ = cijoe.run_local(f"{_gzip_cmd()} -9 -c {tar_path} > {gz_path}")
         if err:
             return err
-        cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+        err, _ = cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+        if err:
+            log.error(f"derive '{variant}': failed writing {gz_path}.sha256")
+            return err
         tar_path.unlink(missing_ok=True)
         log.info(f"derive '{variant}': wrote {gz_path}")
         return 0
@@ -460,7 +468,10 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
         if err:
             log.error("zstd compression of CT tarball failed")
             return err
-        cijoe.run_local(f"sha256sum {zst_path} > {zst_path}.sha256")
+        err, _ = cijoe.run_local(f"sha256sum {zst_path} > {zst_path}.sha256")
+        if err:
+            log.error(f"derive '{variant}': failed writing {zst_path}.sha256")
+            return err
         tar_path.unlink(missing_ok=True)
         log.info(f"derive '{variant}': wrote {zst_path} (Proxmox CT / Incus template)")
         return 0
@@ -535,7 +546,10 @@ def _package_img(cijoe, work, variant, disk_dir) -> int:
     err, _ = cijoe.run_local(f"{_gzip_cmd()} -9 -c {raw_path} > {gz_path}")
     if err:
         return err
-    cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+    err, _ = cijoe.run_local(f"sha256sum {gz_path} > {gz_path}.sha256")
+    if err:
+        log.error(f"derive '{variant}': failed writing {gz_path}.sha256")
+        return err
     raw_path.unlink(missing_ok=True)
     log.info(f"derive '{variant}': wrote {gz_path}")
     return 0

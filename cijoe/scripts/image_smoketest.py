@@ -106,7 +106,7 @@ def main(args, cijoe):
         return errno.ENOENT
 
     variant = cijoe.getconf("nosi", {}).get("variant", "")
-    shape = variant.rsplit("-", 1)[-1]  # headless / desktop / wsl
+    shape = variant.rsplit("-", 1)[-1]  # headless / desktop / wsl / docker / lxc / proxmox
     distro = variant.split("-", 1)[0] if "-" in variant else ""
 
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
@@ -687,22 +687,11 @@ def _run_assertions(
         lambda rc, out: (rc == 0 and bool(out), out or "(missing apply-ok sentinel)"),
     )
 
-    # ---- no packages silently dropped at bake time -------------------------
-    # cloud-init pre-filters the packages: list against the archive, installs
-    # what it can, and only WARNS about the rest -- which is how the debian
-    # images shipped without CPU microcode for weeks (sources lacked the
-    # non-free-firmware component) with every bake green. The bake's
-    # cloud-init log rides along in the image; the filter warning's absence
-    # proves every requested package actually landed.
-    check(
-        "bake installed every requested package (no cloud-init filter warning)",
-        "sudo grep -hc 'Failure when attempting to install packages' "
-        "/var/log/cloud-init.log 2>/dev/null || true",
-        lambda rc, out: (
-            out.strip() in ("", "0"),
-            f"filter warnings in bake log: {out.strip() or '0'}",
-        ),
-    )
+    # NOTE: the "no packages silently dropped" tripwire is NOT here. cloud-init
+    # records a dropped-package warning only in /var/log/cloud-init.log, and the
+    # end-of-bake `cloud-init clean --logs` erases that log, so by smoketest time
+    # it is always gone. The check lives in provision/steps/06-package-presence.sh
+    # instead, which runs mid-bake while the log still exists.
 
     # ---- build identity ---------------------------------------------------
     check(

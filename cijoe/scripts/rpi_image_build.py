@@ -30,8 +30,8 @@ of the baked headless ``.img``, running ``apply.sh <variant> --shape-only``
 so only the shape step (50-desktop-stack's apt Sway branch) runs.
 
 Output is a raw ``.img`` per image at its ``disk.path`` (NOT gzipped here, so
-``rpi_image_smoketest`` can loop-mount it before ``img_gz_pack`` -- with
-``publish.from_raw`` -- compresses it).
+``rpi_image_smoketest`` can loop-mount it before ``rpi_image_pack``
+compresses it to ``.img.gz``).
 
 Runs natively on an arm64 host/runner (no qemu-user emulation); on an x86 host
 it needs binfmt + qemu-user-static registered so the chroot's arm64 binaries
@@ -264,10 +264,15 @@ def _bake_one(
         # Export the baked metadata.json for the ORAS annotations (mirrors the
         # x86 smoketest / derive_pack exporting nosi-<variant>.metadata.json).
         meta_dst = dst_img.with_suffix(".metadata.json")
-        cijoe.run_local(
+        err, _ = cijoe.run_local(
             f"sudo cp {mnt}/etc/nosi-metadata.json {meta_dst} && "
             f"sudo chown $(id -u):$(id -g) {meta_dst}"
         )
+        if err:
+            # The ORAS push reads this sidecar for the artifact's provenance
+            # layer; better to fail than publish a Pi image without it.
+            log.error("failed exporting nosi-metadata.json for the Pi artifact")
+            return err
 
         _finalize_image(cijoe, mnt)
         return 0

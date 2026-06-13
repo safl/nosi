@@ -128,11 +128,13 @@ jobs:
           pipx install cijoe
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      # Four discrete cijoe phases as separate GHA steps so each has its
-      # own duration in the run summary and a failure pinpoints the phase.
-      # Smoketest runs SECOND (right after Bake): if the bake is bad we
-      # fail before spending minutes packing and deriving from a broken
-      # base. Pack and Derive only run on a smoketest-passed image.
+      # Discrete cijoe phases as separate GHA steps (Bake, Smoketest, Pack
+      # .img.gz, Pack derived shapes, and on the debian leg a Proxmox
+      # boot-test) so each has its own duration in the run summary and a
+      # failure pinpoints the phase. Smoketest runs SECOND (right after
+      # Bake): if the bake is bad we fail before spending minutes packing
+      # and deriving from a broken base. Pack, Derive, and the proxmox
+      # boot-test only run on a smoketest-passed image.
       #
       # `--tag <name>` per invocation prefixes the archive directory cijoe
       # writes to on workflow end. Without it, two cijoe runs that finish

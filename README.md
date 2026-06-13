@@ -29,17 +29,20 @@ required.
 
 ## Scope
 
-Four shapes today, with **`headless`** as the base the others derive
+Six shapes today, with **`headless`** as the base the others derive
 from: **`headless`** (C / C++ / Python / Rust / Zig systems work on
 bare metal / VM / cloud), **`desktop`** (headless plus a Sway tiling
 Wayland stack for personal laptop / workstation use), **`wsl`**
 (headless plus GUI dev tools rendered through WSLg, published as a
-`.tar.gz` for `wsl --import`), and **`docker`** (the headless base
+`.tar.gz` for `wsl --import`), **`docker`** (the headless base
 stripped and packaged as an OCI image, no extra tools since cijoe is
 already in the base; a CI bootstrap host that launches qemu guests via
-cijoe, or a dev base for a project's `make docker`). desktop
-/ wsl / docker are built by deriving from the baked headless rootfs
-rather than re-baking. Optional tooling (agentic AI CLIs, GPU vendor
+cijoe, or a dev base for a project's `make docker`), **`lxc`** (the
+headless base as an LXC system-container template, a `.tar.zst` rootfs
+for Proxmox CT / Incus), and **`proxmox`** (the headless Debian base
+turned into a Proxmox VE host, bootable `.img.gz`). desktop / wsl /
+docker / lxc / proxmox are built by deriving from the baked headless
+rootfs rather than re-baking. Optional tooling (agentic AI CLIs, GPU vendor
 stacks, ...) is post-flash via `nosi-addon` or via cijoe workflows
 under `cijoe/workflows/`. **`freebsd-<N>-headless`** variants run the
 same shared provision chain (delivered to FreeBSD's nuageinit as a
