@@ -22,6 +22,7 @@ flasher; it is not required.
 
 overview
 quickstart
+desktop
 ```
 
 ```{toctree}
