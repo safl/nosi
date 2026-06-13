@@ -29,13 +29,10 @@
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
 NOSI_SHAPE="${NOSI_SHAPE:-headless}"
-# proxmox is the one shape whose hostname is load-bearing (it names the PVE
-# node), so its default is the shape, not the distro; step 60 bakes the
-# matching /etc/hostname.
-if [ -z "${NOSI_DEFAULT_HOSTNAME:-}" ] && [ "$NOSI_SHAPE" = "proxmox" ]; then
-    NOSI_DEFAULT_HOSTNAME="nosi-proxmox"
-fi
-NOSI_DEFAULT_HOSTNAME="${NOSI_DEFAULT_HOSTNAME:-nosi-${NOSI_DISTRO}}"
+# The baked default hostname is nosi-<variant> (set by 05-nosi-release); show
+# that as the Reconfigure hint's default. Falls back to nosi-<distro> if the
+# variant is somehow unset (operator re-run with no env).
+NOSI_DEFAULT_HOSTNAME="${NOSI_DEFAULT_HOSTNAME:-nosi-${NOSI_VARIANT:-${NOSI_DISTRO}}}"
 
 nosi_info "step 99-motd (shape=$NOSI_SHAPE, default-hostname=$NOSI_DEFAULT_HOSTNAME)"
 nosi_require_root
