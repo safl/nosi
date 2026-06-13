@@ -95,7 +95,7 @@ URLS="https://www.google.com/generate_204 https://www.cloudflare.com/cdn-cgi/tra
 for url in $URLS; do
     hdr=$(curl -sS -I --max-time 10 "$url" 2>/dev/null \
         | tr -d "\r" \
-        | awk '"'"'BEGIN{IGNORECASE=1} /^date:/ {sub(/^[Dd]ate:[[:space:]]*/, ""); print; exit}'"'"')
+        | grep -i "^date:" | head -n1 | sed "s/^[Dd]ate:[[:space:]]*//")
     [ -z "$hdr" ] && continue
     target=$(date -u -d "$hdr" +%s 2>/dev/null || true)
     [ -z "$target" ] && continue

@@ -19,10 +19,14 @@
 
 nosi_info "step 06-package-presence"
 
-# Commands that must exist after cloud-init's package install on every
-# shape / variant. Each maps to a package name in every userdata
-# packages: list. Keeping the list small so the check is fast and so
-# legitimate per-shape additions aren't a maintenance burden.
+# Commands that must exist after the baseline package install on every
+# base variant: the language + VCS basics, the build toolchain (gcc /
+# clang / make / cmake / meson / ninja), and the x86 qemu the docker base
+# derives from. Each maps to a package in every base userdata packages:
+# list (cloud-init for the cloud variants, packages-rpios-headless.txt
+# for the Pi), so a silently-dropped one is caught here rather than
+# cascading into a confusing later-step failure (dnf5 aborts the whole
+# transaction on one bad name, so a single typo drops everything).
 #
 # Fedora ships `pkg-config` from `pkgconf-pkg-config`; apt distros from
 # the `pkg-config` package. Both expose `pkg-config` on PATH, so the
@@ -54,7 +58,25 @@ pkg)
         gcc
         pkg-config
         wg
+        cmake
+        meson
+        clang
+        qemu-img
     )
+    # ninja's binary name differs by packaging: the ninja-build package
+    # installs `ninja` on Debian / Ubuntu / Raspberry Pi OS but
+    # `ninja-build` on Fedora.
+    if [ "$NOSI_PKGMGR" = dnf ]; then
+        must_have+=(ninja-build)
+    else
+        must_have+=(ninja)
+    fi
+    # qemu-system-x86_64 is the x86 system emulator the docker base relies
+    # on (apply.sh: "cijoe + qemu are in the base"). arm64 (Raspberry Pi OS)
+    # ships qemu-system-arm instead, so only assert the x86 binary on x86.
+    if [ "$(uname -m)" = x86_64 ]; then
+        must_have+=(qemu-system-x86_64)
+    fi
     ;;
 esac
 
