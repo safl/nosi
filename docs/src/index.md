@@ -1,4 +1,4 @@
-# Niche Operating System Images
+# Nic(h)e Operating System Images
 
 ```{only} html
 [![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)

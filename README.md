@@ -9,7 +9,7 @@
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![release](https://img.shields.io/badge/release-rolling-orange.svg)](https://safl.dk/nosi/release.html)
 
-**nosi** = **N**iche **O**perating **S**ystem **I**mages.
+**nosi** = **N**ic(h)e **O**perating **S**ystem **I**mages.
 *(Pronounced "nosy" -- I can't help putting these images on every machine I touch.)*
 
 Automated, rolling builds of headless and desktop system images for bare metal
