@@ -128,7 +128,7 @@ layer) are still on the roadmap.
 
 The currently-published variants, their distros, baked tool versions,
 default credentials, and pull/flash recipes live in the
-[catalog](_generated/catalog.md). The catalog page is regenerated on
+[catalog](catalog/index.md). The catalog page is regenerated on
 every docs build from the ORAS metadata layer each image publishes
 to GHCR, so it reflects the bytes actually on disk rather than
 hand-curated prose that can drift.
@@ -157,7 +157,7 @@ install` to keep llvm out of the image.
 
 Per-variant use cases live in the `org.opencontainers.image.description`
 ORAS annotation on each published artifact and are surfaced on the
-[catalog](_generated/catalog.md). That keeps the docs and the
+[catalog](catalog/index.md). That keeps the docs and the
 shippable artifact aligned: when a variant is added, retired, or its
 purpose shifts, the description on the artifact is updated and the
 docs follow on the next regen. (The `docker` shape, an OCI image
