@@ -62,6 +62,7 @@ pkg)
         meson
         clang
         qemu-img
+        qemu-system-aarch64
     )
     # ninja's binary name differs by packaging: the ninja-build package
     # installs `ninja` on Debian / Ubuntu / Raspberry Pi OS but
@@ -71,9 +72,12 @@ pkg)
     else
         must_have+=(ninja)
     fi
-    # qemu-system-x86_64 is the x86 system emulator the docker base relies
-    # on (apply.sh: "cijoe + qemu are in the base"). arm64 (Raspberry Pi OS)
-    # ships qemu-system-arm instead, so only assert the x86 binary on x86.
+    # qemu emulators. Every image can boot an arm64 guest, so
+    # qemu-system-aarch64 is required everywhere (provided by Debian's
+    # combined qemu-system-arm package, Fedora's qemu-system-aarch64, and
+    # already present on the arm64 Pi). x86 images additionally run x86
+    # guests -- the docker base relies on this ("cijoe + qemu are in the
+    # base") -- so qemu-system-x86_64 is asserted only on x86.
     if [ "$(uname -m)" = x86_64 ]; then
         must_have+=(qemu-system-x86_64)
     fi

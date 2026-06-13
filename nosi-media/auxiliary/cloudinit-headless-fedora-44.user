@@ -154,6 +154,10 @@ packages:
   - edk2-ovmf
   - qemu-img
   - qemu-system-x86-core
+  # full-system arm64 too, so an x86 box can boot a Pi / arm64 guest under
+  # cijoe. Fedora splits the system emulators per target, so the aarch64
+  # one is its own package (unlike Debian's combined qemu-system-arm).
+  - qemu-system-aarch64
   # Cross-arch user-mode emulation: the static qemu-<arch> interpreters +
   # binfmt registrations so the kernel transparently runs foreign-arch
   # binaries (arm64 in an x86 chroot, `podman --platform`, etc.). Fedora

@@ -171,6 +171,10 @@ packages:
   - amd64-microcode
   - ovmf
   - qemu-system-x86
+  # full-system arm/arm64 too, so an x86 box can boot a Pi / arm64 guest
+  # under cijoe (the qemu-system-arm package ships both qemu-system-arm and
+  # qemu-system-aarch64). User-mode cross-arch (binaries, chroots) is below.
+  - qemu-system-arm
   - qemu-utils
   # Cross-arch user-mode emulation: the static qemu-<arch> interpreters +
   # binfmt registrations so the kernel transparently runs foreign-arch
