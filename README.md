@@ -4,7 +4,7 @@
 
 # **N**ic(h)e **O**perating **S**ystem **I**mages
 
-*(Pronounced "nosy" -- I can't help putting these images on every machine I touch.)*
+*(Pronounced "nosy", because I can't help putting these images on every machine I touch.)*
 
 [![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)
 [![docs](https://github.com/safl/nosi/actions/workflows/docs.yml/badge.svg)](https://safl.dk/nosi)
