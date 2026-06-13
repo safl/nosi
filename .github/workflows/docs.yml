@@ -1,17 +1,17 @@
 name: Docs
 
 on:
-  # Docs are downstream of build-images: catalog.py pulls each variant's
-  # ORAS manifest and renders the use-case description + tool inventory
-  # from the just-published artifacts. Triggering on workflow_run after
-  # build-images completes guarantees the docs always reflect the latest
-  # push -- the previous push-in-parallel trigger had a race where the
-  # docs job could finish before build-images' oras push step, leaving
-  # the catalog rendered against the prior :latest.
+  # workflow_run (after build-images): catalog renders against the new
+  # :latest. push on docs/**: deploy docs-only changes, which build-images
+  # skips via paths-ignore (catalog stays on the current :latest).
   workflow_run:
     workflows: ["build-images"]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
 
@@ -90,14 +90,13 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    # Deploy only when this docs build was triggered by a successful
-    # build-images run on main. Excludes pull_request builds (no deploy
-    # for PRs) and workflow_dispatch builds (manual dispatches stay as
-    # artifacts only -- if you want them on Pages, push to main).
+    # Deploy on main only: a docs/** push, or a green build-images run.
+    # PR / workflow_dispatch builds stay artifacts-only.
     if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-24.04
     permissions:
