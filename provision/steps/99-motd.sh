@@ -206,6 +206,7 @@ ${pve_block}
     iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
     devbind                                           bind/unbind PCI device to a driver
     hugepages                                         inspect / reserve hugepages
+    nosi-selfcheck                                     verify the box matches a healthy nosi image
   Reconfigure:
     sudo systemd-firstboot --force --prompt           interactive locale/keymap/timezone/hostname
     sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
