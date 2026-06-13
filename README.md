@@ -2,15 +2,14 @@
   <img src="docs/src/_static/nosi.png" alt="nosi" width="360">
 </p>
 
-# nosi
+# **N**ic(h)e **O**perating **S**ystem **I**mages
+
+*(Pronounced "nosy" -- I can't help putting these images on every machine I touch.)*
 
 [![build](https://github.com/safl/nosi/actions/workflows/build.yml/badge.svg)](https://github.com/safl/nosi/actions/workflows/build.yml)
 [![docs](https://github.com/safl/nosi/actions/workflows/docs.yml/badge.svg)](https://safl.dk/nosi)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![release](https://img.shields.io/badge/release-rolling-orange.svg)](https://safl.dk/nosi/release.html)
-
-**nosi** = **N**ic(h)e **O**perating **S**ystem **I**mages.
-*(Pronounced "nosy" -- I can't help putting these images on every machine I touch.)*
 
 Automated, rolling builds of headless and desktop system images for bare metal
 and virtual machines (QEMU, WSL2, Proxmox), plus container images (OCI, LXC),
