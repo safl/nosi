@@ -3,7 +3,22 @@ name: build-images
 on:
   push:
     branches: [main]
+    # Docs-only changes (the Sphinx site, README, license) do not affect the
+    # baked images, so skip the whole fleet bake + GHCR republish for them.
+    # paths-ignore skips a run only when EVERY changed file matches, so a
+    # commit that also touches provision / cijoe / variants.yml / etc. still
+    # builds. The docs site is deployed by docs.yml independently. Schedule
+    # and workflow_dispatch ignore path filters, so the weekly full rebuild
+    # and manual runs always build everything.
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'LICENSE'
   workflow_dispatch:
   schedule:
     # Weekly rebuild to pick up upstream package updates even when nosi hasn't
