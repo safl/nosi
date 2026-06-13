@@ -1,17 +1,19 @@
-"""Fetch nosi image metadata from GHCR and render docs/src/_generated/catalog.md.
+"""Fetch nosi image metadata from GHCR and render the docs/src/catalog/ tree.
 
 The bake writes /etc/nosi-metadata.json inside the VM; the smoketest
 scp's it out; the GHA push attaches it as an ORAS layer on each
 ghcr.io/safl/nosi/<variant>:<rolling> tag (and the :latest alias).
 
 This module pulls the metadata layer for every published variant and
-renders a single beautified catalog page so the docs stop maintaining
-parallel descriptions of variants/distros/tools/packages: the ORAS
-artifact is the source of truth.
+renders a beautified catalog: a landing page (catalog/index.md) with a
+summary table plus one page per variant (catalog/<name>/index.md) so the
+docs stop maintaining parallel descriptions of
+variants/distros/tools/packages: the ORAS artifact is the source of
+truth.
 
 Failure modes are tolerated. If oras isn't installed, the network is
 down, or a variant has never been published yet, the per-variant
-section renders a "(not yet published)" placeholder rather than
+page renders a "(not yet published)" placeholder rather than
 breaking the docs build.
 
 Caching is intentionally not implemented; each docs build pulls fresh
@@ -65,27 +67,35 @@ class VariantSnapshot:
 
 
 def fetch_and_render(docs_root: Path) -> Path:
-    """Pull metadata for every variant, render docs/src/_generated/catalog.md.
+    """Pull metadata for every variant, render the docs/src/catalog/ tree.
 
-    Returns the path to the generated file. Idempotent and side-effect-
-    free apart from the network pulls and the one file written.
+    Writes catalog/index.md (intro + summary table + a toctree) plus one
+    catalog/<name>/index.md detail page per variant. Returns the path to
+    the index page. Idempotent and side-effect-free apart from the network
+    pulls and the files written.
     """
-    out_dir = docs_root / "src" / "_generated"
+    out_dir = docs_root / "src" / "catalog"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / "catalog.md"
 
     variants = known_variants(docs_root.resolve().parent)
     snapshots = [_fetch_variant(name, ref) for name, ref in variants]
-    rendered = _render(snapshots)
-    out.write_text(rendered)
+
+    for s in snapshots:
+        variant_dir = out_dir / s.name
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "index.md").write_text(_render_variant_page(s))
+
+    index = out_dir / "index.md"
+    index.write_text(_render_index(snapshots))
+
     ok = sum(1 for s in snapshots if s.metadata is not None)
     log.info(
         "nosi catalog: %d / %d variants rendered from GHCR -> %s",
         ok,
         len(snapshots),
-        out,
+        index,
     )
-    return out
+    return index
 
 
 METADATA_MEDIA_TYPE = "application/vnd.nosi.metadata.v1+json"
@@ -153,9 +163,16 @@ def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
     return snap
 
 
-def _render(snapshots: Iterable[VariantSnapshot]) -> str:
+# Furo reads the page-level hide-toc field from MyST front matter; setting
+# it drops the right-hand "on this page" sidebar on the catalog pages.
+_FRONT_MATTER = "---\nhide-toc: true\n---\n"
+
+
+def _render_index(snapshots: Iterable[VariantSnapshot]) -> str:
     snaps = list(snapshots)
     lines = [
+        _FRONT_MATTER.rstrip("\n"),
+        "",
         "# Catalog",
         "",
         "Every nosi image published to "
@@ -171,31 +188,31 @@ def _render(snapshots: Iterable[VariantSnapshot]) -> str:
     ]
     for s in snaps:
         if s.metadata is None:
-            lines.append(f"| `{s.name}` | _(not yet published)_ | | | | |")
+            lines.append(f"| [`{s.name}`]({s.name}/index.md) | _(not yet published)_ | | | | |")
             continue
         m = s.metadata
         n = m.get("nosi", {}) or {}
         d = m.get("distro", {}) or {}
         k = m.get("kernel", {}) or {}
         lines.append(
-            f"| `{s.name}` "
+            f"| [`{s.name}`]({s.name}/index.md) "
             f"| {d.get('pretty_name') or '?'} "
             f"| {n.get('shape') or '?'} "
             f"| {k.get('release') or '?'} "
             f"| `{n.get('version') or '?'}` "
             f"| {n.get('built') or '?'} |"
         )
-    lines.append("")
-    for s in snaps:
-        lines.append(_render_variant_section(s))
-        lines.append("")
+    lines.extend(["", "```{toctree}", ":maxdepth: 1", ""])
+    lines.extend(f"{s.name}/index" for s in snaps)
+    lines.append("```")
     return "\n".join(lines) + "\n"
 
 
-def _render_variant_section(s: VariantSnapshot) -> str:
+def _render_variant_page(s: VariantSnapshot) -> str:
     if s.metadata is None:
         return (
-            f"## `{s.name}`\n\n"
+            f"{_FRONT_MATTER}\n"
+            f"# `{s.name}`\n\n"
             f"_Not yet published. The pull ref `{s.ref}` is reserved._ "
             f"Catalog fetch error: `{s.error or 'unknown'}`.\n"
         )
@@ -208,7 +225,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
     pkgs = m.get("packages", {}) or {}
 
     arch = m.get("architecture") or "?"
-    parts: list[str] = [f"## `{s.name}`", ""]
+    parts: list[str] = [_FRONT_MATTER.rstrip("\n"), "", f"# `{s.name}`", ""]
     if s.description:
         # Per-variant use-case prose from the ORAS manifest annotation.
         # First paragraph of the variant section so "what is this for?"
@@ -223,7 +240,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
             f"**Version:** `{n.get('version') or '?'}`  ",
             f"**Built:** {n.get('built') or '?'}",
             "",
-            "### Pull and flash",
+            "## Pull and flash",
             "",
             "```",
             f"oras pull {s.ref}",
@@ -231,7 +248,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
             "    | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress",
             "```",
             "",
-            "### Default credentials",
+            "## Default credentials",
             "",
             f"- **Username:** `{op.get('username') or 'odus'}` (uid {op.get('uid') or 1000})",
             f"- **Password:** `{op.get('default_password') or 'odus.321'}`",
@@ -256,7 +273,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
         tdict = tools.get(key) or {}
         if not tdict:
             continue
-        parts.append(f"### {label}")
+        parts.append(f"## {label}")
         parts.append("")
         parts.append("| Tool | Version |")
         parts.append("|---|---|")
@@ -267,7 +284,7 @@ def _render_variant_section(s: VariantSnapshot) -> str:
     manual = pkgs.get("manually_installed") or []
     if manual:
         parts.append(
-            f"### Installed packages ({pkgs.get('count') or len(manual)} via "
+            f"## Installed packages ({pkgs.get('count') or len(manual)} via "
             f"`{pkgs.get('manager') or '?'}`)"
         )
         parts.append("")

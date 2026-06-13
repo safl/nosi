@@ -28,7 +28,7 @@ quickstart
 :maxdepth: 2
 :caption: Catalog
 
-_generated/catalog
+catalog/index
 ```
 
 ```{toctree}

@@ -32,7 +32,7 @@ def _refresh_catalog(root: Path) -> None:
 
     Called automatically before every html/pdf build so the catalog
     reflects the latest published images. Non-fatal: a network failure
-    or missing oras CLI leaves the previous _generated/catalog.md in
+    or missing oras CLI leaves the previous catalog/ pages in
     place (or renders a placeholder for variants that fail to fetch).
     """
     logging.basicConfig(level=logging.INFO, format="%(message)s")
