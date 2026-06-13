@@ -32,7 +32,12 @@ html_theme = "furo"
 # logo already includes the "nosi" wordmark and the index.md H1 carries
 # the long-form name on the landing page.
 html_title = ""
-html_logo = "_static/nosi.png"
+# Sidebar header logo: a 480px-wide downscale of the ~2 MB source (nosi.png),
+# which Furo renders at ~200px. Pointing html_logo at the original made every
+# page pull the full-resolution image; nosi-logo.png is ~12x smaller and still
+# retina-crisp at the rendered size. The full-res nosi.png stays for the README
+# hero and as the source to regenerate this from.
+html_logo = "_static/nosi-logo.png"
 # Browser-tab icon: a 180px square crop of the floppy-disk logo. Pointing
 # this at nosi.png directly would make every page pull the ~2 MB original.
 html_favicon = "_static/favicon.png"
