@@ -121,6 +121,24 @@ if id odus >/dev/null 2>&1; then
     usermod -aG video,input odus || true
 fi
 
+# ---- greetd greeter account -----------------------------------------
+# greetd runs its greeter as an unprivileged user (config.toml's
+# `user = "greeter"` below). Fedora's greetd rpm creates `greeter`, but
+# Debian / Raspberry Pi OS's apt package instead names it `_greetd` and
+# only creates it from a maintainer script that does NOT fire inside the
+# chroot bake -- so on the apt desktop no `greeter` user exists and
+# greetd crash-loops at boot with "configured default session user
+# 'greeter' not found", hitting the start limit and dropping the box to
+# a text login with no desktop. Ensure the account the config names
+# exists, with the video/input groups a Wayland greeter needs. Guarded
+# so it is a no-op where the distro already provides `greeter`.
+if ! id greeter >/dev/null 2>&1; then
+    useradd --system --user-group --no-create-home \
+        --home-dir /var/lib/greetd --shell /usr/sbin/nologin greeter
+fi
+usermod -aG video,input greeter 2>/dev/null || true
+install -d -o greeter -g greeter -m 0755 /var/lib/greetd /var/cache/greetd
+
 # ---- JetBrainsMono Nerd Font ----------------------------------------
 # waybar / foot / fuzzel / mako all use the Nerd Font glyphs (battery
 # / audio / wifi icons). Not packaged on Fedora 44 mainline (and the

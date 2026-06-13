@@ -154,6 +154,19 @@ if [ "$shape" = desktop ] && [ "$have_systemd" -eq 1 ]; then
     else
         FAIL "display-manager.service not enabled"
     fi
+    # `is-enabled` does NOT catch greetd crash-looping because the
+    # greeter user its config names is absent -- the box then hits the
+    # start limit and drops to a text login (the apt/dnf packages create
+    # _greetd / a sysusers user, not necessarily the configured one, and
+    # that creation may not fire in the derive chroot). Verify the user
+    # greetd is configured to run as actually exists.
+    greeter_user=$(sed -n 's/^user *= *"\(.*\)".*/\1/p' /etc/greetd/config.toml 2>/dev/null | head -1)
+    greeter_user=${greeter_user:-greeter}
+    if getent passwd "$greeter_user" >/dev/null 2>&1; then
+        PASS "greetd greeter user '$greeter_user' exists"
+    else
+        FAIL "greetd greeter user '$greeter_user' missing (greetd will crash-loop)"
+    fi
 fi
 
 if [ -f /etc/nosi/default-password-active ]; then
