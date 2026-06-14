@@ -157,17 +157,25 @@ if [ ! -d "$NERD_FONT_DEST" ]; then
 fi
 
 # ---- greetd ---------------------------------------------------------
-# Launch tuigreet on vt1, default to sway. --remember +
+# Launch tuigreet on vt7, default to sway. --remember +
 # --remember-user-session save the chosen user + session command to
 # /var/cache/greetd/state.toml so the operator's last selection
 # carries across reboots. --asterisks shows password masking instead
 # of nothing. Greeting line keeps it on-brand.
+#
+# vt = 7 (NOT 1): tty1 is the kernel + systemd console (cmdline carries
+# console=tty1), so a greeter on vt1 gets scribbled over by late-boot
+# "[ OK ] Started ..." lines and kernel chatter -- a torn greeter. tty7
+# is the conventional display-manager VT (the packaged greetd.service
+# already Conflicts=getty@tty7), so the greeter renders clean there and
+# tty1 keeps its normal boot console + login.
+#
 # Heredoc is unquoted so ${GREETER_CMD} (set per-distro above) expands; the
 # rest of the file carries no shell metacharacters, so expansion is safe.
 install -d -m 0755 /etc/greetd
 cat > /etc/greetd/config.toml <<EOF
 [terminal]
-vt = 1
+vt = 7
 
 [default_session]
 command = "${GREETER_CMD}"
@@ -865,14 +873,10 @@ nosi_info "enabling greetd.service + graphical.target"
 systemctl enable greetd.service
 systemctl set-default graphical.target
 
-# greetd owns vt1 (``[terminal] vt = 1`` above). The stock getty on
-# tty1 grabs the same VT, so tuigreet and agetty both read the keyboard
-# and split keystrokes -- typing "odus" shows "ods" with garbled output,
-# as if a second login were running (it is). Mask getty@tty1 so greetd
-# is the sole consumer of vt1; tty2-tty6 keep their autovt gettys as
-# fallback shells (Ctrl+Alt+F2..F6).
-nosi_info "masking getty@tty1 so greetd alone owns vt1"
-systemctl mask getty@tty1.service
+# Note: the greeter runs on vt7 (see the greetd config above), away from
+# the kernel/systemd console on tty1, so getty@tty1 is left alone -- tty1
+# keeps its normal console + login. greetd.service already
+# Conflicts=getty@tty7, so the greeter VT has no competing getty.
 
 # ---- enable CUPS + Avahi for printing ------------------------------
 # cups.socket starts CUPS on first print attempt (lazy activation, no
