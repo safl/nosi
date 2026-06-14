@@ -230,6 +230,9 @@ titlebar_padding 1
 focus_follows_mouse no
 
 # Autostart
+# Apply HiDPI output scaling first so waybar + dialogs size correctly on
+# a 4K/QHD panel (sway has no built-in DPI awareness; see nosi-autoscale).
+exec nosi-autoscale
 exec nm-applet --indicator
 exec waybar
 exec mako
@@ -399,6 +402,32 @@ $1 == "bindsym" {
 ' "$CFG" | fuzzel --dmenu --lines 15 --width 80 --prompt 'binding > ' >/dev/null || true
 EOF
 chmod 0755 /usr/local/bin/nosi-keys
+
+# ---- nosi-autoscale: conventional HiDPI output scaling -------------
+# sway has no built-in DPI awareness -- every output defaults to scale
+# 1, so a 4K panel renders the bar + dialogs microscopically. Pick the
+# conventional desktop scale from each output's resolution (what
+# GNOME/KDE/macOS do by default): 4K -> 200%, QHD -> 150%, else 100%.
+# Run at sway startup (exec nosi-autoscale); re-run by hand after
+# hotplugging a different-DPI display. Fully best-effort: a missing
+# swaymsg/jq or a parse hiccup is a silent no-op, never a broken login.
+cat > /usr/local/bin/nosi-autoscale <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+command -v swaymsg >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+swaymsg -t get_outputs -r \
+    | jq -r '.[] | "\(.name)\t\(.current_mode.width // 0)"' \
+    | while IFS=$'\t' read -r name width; do
+        if   [ "${width:-0}" -ge 3840 ]; then scale=2
+        elif [ "${width:-0}" -ge 2560 ]; then scale=1.5
+        else                                   scale=1
+        fi
+        swaymsg output "$name" scale "$scale" >/dev/null 2>&1 || true
+    done
+EOF
+chmod 0755 /usr/local/bin/nosi-autoscale
 
 # ---- Sway cheatsheet -----------------------------------------------
 # Plain markdown -- less doesn't render the syntax but the # / ** /
