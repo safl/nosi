@@ -534,15 +534,16 @@ cat > /etc/skel/.config/waybar/config <<'EOF'
     "margin-top":    6,
     "margin-left":   12,
     "margin-right":  12,
-    "modules-left":   ["sway/workspaces", "sway/mode", "sway/window"],
-    "modules-center": ["clock"],
+    "modules-left":   ["sway/workspaces", "sway/mode"],
+    "modules-center": [],
     "modules-right":  [
         "idle_inhibitor",
         "custom/power-profile",
         "pulseaudio",
         "network",
         "battery",
-        "tray"
+        "tray",
+        "clock"
     ],
 
     "sway/workspaces": {
