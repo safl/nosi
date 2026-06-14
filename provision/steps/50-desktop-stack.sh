@@ -836,6 +836,15 @@ nosi_info "enabling greetd.service + graphical.target"
 systemctl enable greetd.service
 systemctl set-default graphical.target
 
+# greetd owns vt1 (``[terminal] vt = 1`` above). The stock getty on
+# tty1 grabs the same VT, so tuigreet and agetty both read the keyboard
+# and split keystrokes -- typing "odus" shows "ods" with garbled output,
+# as if a second login were running (it is). Mask getty@tty1 so greetd
+# is the sole consumer of vt1; tty2-tty6 keep their autovt gettys as
+# fallback shells (Ctrl+Alt+F2..F6).
+nosi_info "masking getty@tty1 so greetd alone owns vt1"
+systemctl mask getty@tty1.service
+
 # ---- enable CUPS + Avahi for printing ------------------------------
 # cups.socket starts CUPS on first print attempt (lazy activation, no
 # always-on daemon). avahi-daemon enables mDNS so network printers
@@ -843,5 +852,16 @@ systemctl set-default graphical.target
 # AirPrint discovery flows through this.
 nosi_info "enabling cups.socket + avahi-daemon.service"
 systemctl enable cups.socket avahi-daemon.service
+
+# ---- unmask polkit (26-daemon-prune masked it on the headless base) -
+# The headless prune masks polkit.service (nothing on a headless box
+# needs an interactive authorization agent). The desktop does: lxpolkit
+# and the xdg-desktop-portals authenticate privileged actions (network,
+# mount, power, printer admin) through org.freedesktop.PolicyKit1. Left
+# masked, lxpolkit pops "Unit polkit.service is masked" on every login.
+# polkit is D-Bus activated, so unmasking is enough -- it starts on
+# demand; no explicit enable (the unit is static).
+nosi_info "unmasking polkit.service (desktop needs the authorization agent)"
+systemctl unmask polkit.service
 
 nosi_info "step 50-desktop-stack done"
