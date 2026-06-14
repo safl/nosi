@@ -206,6 +206,9 @@ output * bg #1e1e2e solid_color
 # Input
 input * {
     xkb_layout us
+    # Caps Lock becomes another Control (no Caps Lock). Standard
+    # CLI-operator remap; applies to every keyboard.
+    xkb_options ctrl:nocaps
     natural_scroll enabled
     tap enabled
 }
@@ -219,7 +222,9 @@ smart_borders on
 smart_gaps on
 default_border pixel 2
 default_floating_border pixel 2
-titlebar_padding 0
+# titlebar_padding must be >= 1 (sway rejects 0 with "errors in your
+# config file"); harmless with pixel borders, which draw no titlebar.
+titlebar_padding 1
 
 # Focus follows the click, not the mouse motion.
 focus_follows_mouse no
