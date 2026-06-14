@@ -183,6 +183,28 @@ user = "greeter"
 EOF
 chmod 0644 /etc/greetd/config.toml
 
+# ---- greetd PAM ----------------------------------------------------
+# greetd authenticates through the ``greetd`` PAM service. Debian / RPi
+# OS's apt package ships /etc/pam.d/greetd, so the greeter works there.
+# Fedora's greetd rpm ships NO PAM file, so PAM falls through to
+# /etc/pam.d/other (deny) and EVERY greeter login fails with an
+# authentication error -- even with the right password (the account is
+# fine; only the greeter's auth path is broken). Provide one when it is
+# missing: include the system login stack (both distros ship
+# /etc/pam.d/login), so the greeter authenticates exactly like a console
+# login. Create-if-missing leaves a distro-provided file untouched.
+if [ ! -f /etc/pam.d/greetd ]; then
+    nosi_info "writing /etc/pam.d/greetd (Fedora's greetd rpm ships none)"
+    cat > /etc/pam.d/greetd <<'PAM'
+#%PAM-1.0
+auth       include      login
+account    include      login
+password   include      login
+session    include      login
+PAM
+    chmod 0644 /etc/pam.d/greetd
+fi
+
 # ---- Sway config ----------------------------------------------------
 install -d -m 0755 /etc/skel/.config/sway
 cat > /etc/skel/.config/sway/config <<'EOF'
