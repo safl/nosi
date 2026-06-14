@@ -204,4 +204,21 @@ for u in "${ssh_units[@]}"; do
     fi
 done
 
+# ---- firewall: allow SSH (Fedora ships firewalld; Debian doesn't) ----
+# Fedora's base carries firewalld enabled by default. The cloud zone
+# usually permits ssh already, but a more restrictive default zone
+# silently blocks ``ssh`` even though sshd is up and listening. Add the
+# ssh service to the permanent config so port 22 is reachable regardless
+# of the zone default. ``--permanent`` edits the on-disk zone XML without
+# a running daemon (works in the chroot bake); guarded on firewall-cmd so
+# it is a no-op on Debian/Ubuntu/RPi OS, and idempotent where ssh is
+# already allowed.
+if command -v firewall-cmd >/dev/null 2>&1; then
+    if firewall-cmd --permanent --add-service=ssh >/dev/null 2>&1; then
+        nosi_info "firewalld: ssh service allowed (permanent)"
+    else
+        nosi_warn "firewalld present but adding ssh service failed (non-fatal)"
+    fi
+fi
+
 nosi_info "step 28-ssh-config done"
