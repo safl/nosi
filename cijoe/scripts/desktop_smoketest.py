@@ -40,6 +40,7 @@ import contextlib
 import errno
 import logging as log
 import os
+import re
 import shutil
 import time
 from argparse import ArgumentParser
@@ -56,19 +57,21 @@ from image_smoketest import (
 # and a TCG fallback (no KVM) is slower still, so allow generous time.
 BOOT_TIMEOUT = 420
 
-# Serial markers. Either greetd's unit starting or the graphical target being
-# reached proves the box booted into its login. The panic markers are the
-# regression we are hunting: a host-only initramfs that cannot mount root on
-# this controller prints one of these instead.
+# Serial markers, matched against an ANSI-stripped, lower-cased copy of the
+# console: systemd colorizes unit names (`Started \x1b[...mgreetd.service`), so
+# a plain substring of the un-stripped text never matches across the escape
+# codes. Either greetd's unit starting or the graphical target being reached
+# proves the box booted into its login. The panic markers are the regression we
+# are hunting: a host-only initramfs that cannot mount root on this controller
+# prints one of these instead.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 GREETER_MARKERS = (
-    "Started greetd.service",
-    "Reached target Graphical Interface",
+    "started greetd.service",
     "reached target graphical",
 )
 PANIC_MARKERS = (
-    "Kernel panic",
-    "Unable to mount root",
-    "VFS: Unable to mount root",
+    "kernel panic",
+    "unable to mount root",
 )
 
 
@@ -199,9 +202,10 @@ def _await_greeter(serial: Path, variant: str, disk_if: str, timeout: int) -> in
     boot are small and this runs at a 5s cadence."""
     end = time.monotonic() + timeout
     while True:
-        text = ""
+        raw = ""
         with contextlib.suppress(OSError):
-            text = serial.read_text(errors="replace")
+            raw = serial.read_text(errors="replace")
+        text = _ANSI_RE.sub("", raw).lower()
 
         panic = next((m for m in PANIC_MARKERS if m in text), None)
         if panic:
