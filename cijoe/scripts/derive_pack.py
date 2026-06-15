@@ -182,9 +182,32 @@ def add_args(parser: ArgumentParser):
         help="Override the base system-imaging image to derive from. "
         "Defaults to nosi-<variant>-x86_64 (variant from [nosi]).",
     )
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default=None,
+        help="Build only this one derived variant (default: every derive in the "
+        "base's list, serially). build.yml fans the derives out one variant per "
+        "process so they run in parallel, each on its own --nbd-dev.",
+    )
+    parser.add_argument(
+        "--nbd-dev",
+        type=str,
+        default=None,
+        help="NBD device for this process's qemu-nbd mount (default /dev/nbd0). "
+        "Parallel derive processes must each use a distinct device.",
+    )
 
 
 def main(args, cijoe):
+    # Each derive process owns one NBD device. With --variant fan-out every
+    # process builds a single shape on its own device, so they run in parallel
+    # without colliding on /dev/nbd0. Set the module global once here; the
+    # qemu-nbd / lsblk helpers below read it.
+    global NBD_DEV
+    if getattr(args, "nbd_dev", None):
+        NBD_DEV = args.nbd_dev
+
     image_name = args.image_name or _default_image_name(cijoe)
     images = cijoe.getconf("system-imaging.images", {})
     image = images.get(image_name)
@@ -199,6 +222,12 @@ def main(args, cijoe):
             "(expected for a base that has no derived shapes)."
         )
         return 0
+
+    if getattr(args, "variant", None):
+        derives = [e for e in derives if e["variant"] == args.variant]
+        if not derives:
+            log.error(f"--variant {args.variant!r} is not a derive of '{image_name}'")
+            return errno.EINVAL
 
     qcow2_path = Path(image["disk"]["path"])
     if not qcow2_path.exists():

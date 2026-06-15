@@ -173,9 +173,43 @@ jobs:
             -c configs/${{ matrix.variant }}.toml img_gz_pack
 
       - name: Pack derived shapes
+        # Fan the base's derived shapes out to one cijoe process per variant,
+        # each on its own /dev/nbdN, so they build in parallel instead of
+        # serially. The serial derive phase dominated the heavy legs (~30 min
+        # on debian/ubuntu-2604 with three derives each); running them at once
+        # roughly thirds it. Separate processes (not threads) keep cijoe's
+        # output handling and the qemu-nbd state per-derive clean. Each derive's
+        # output is captured to its own log and replayed under a collapsible
+        # group after the wait, so parallel logs stay readable. Bases with no
+        # derives (ubuntu-2404 / freebsd) no-op. Exits non-zero if any failed.
+        env:
+          IMG: ${{ matrix.variant }}
         run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-derive \
-            -c configs/${{ matrix.variant }}.toml derive_pack
+          set -uo pipefail
+          cd cijoe
+          mapfile -t variants < <(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "$IMG" "$GITHUB_WORKSPACE")
+          if [ "${#variants[@]}" -eq 0 ]; then
+            echo "no derived shapes for ${IMG}"
+            exit 0
+          fi
+          echo "fanning out ${#variants[@]} derive(s) in parallel: ${variants[*]}"
+          sudo modprobe nbd max_part=8
+          pids=(); vs=(); i=0
+          for v in "${variants[@]}"; do
+            ( cijoe tasks/build.yaml --monitor --tag "pack-${v}" \
+                -c "configs/${IMG}.toml" derive_pack \
+                --variant "${v}" --nbd-dev "/dev/nbd${i}" ) >"derive-${v}.log" 2>&1 &
+            pids+=("$!"); vs+=("${v}"); i=$((i + 1))
+          done
+          rc=0
+          for j in "${!pids[@]}"; do
+            if wait "${pids[$j]}"; then status=OK; else status=FAILED; rc=1; fi
+            echo "::group::derive ${vs[$j]} (${status})"
+            cat "derive-${vs[$j]}.log" || true
+            echo "::endgroup::"
+          done
+          if [ "$rc" -ne 0 ]; then echo "::error::one or more derives failed"; fi
+          exit $rc
 
       - name: Proxmox boot-test
         # Only the debian base derives a proxmox host. Boots the derived image
