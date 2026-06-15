@@ -130,6 +130,14 @@ def _render_catalog(variants: dict[str, dict]) -> str:
             f'name = "nosi {name} ({arch}, rolling)"',
             f'src = "oras://{ORAS_NAMESPACE}/{name}:latest"',
             'format = "img.gz"',
+            # Emitted as a structured field (not just baked into the
+            # human-readable name above) so bty's catalog parser picks
+            # it up authoritatively. bty.images.detect_arch_from_name
+            # would catch most of these from the variant name as a
+            # fallback, but a structured field removes the heuristic
+            # round-trip and lets bty show the canonical value
+            # (matching ``uname -m``) directly in its Arch column.
+            f'arch = "{arch}"',
             f'description = "{_toml_escape(desc)}"',
         ]
     return "\n".join(lines) + "\n"

@@ -87,7 +87,26 @@ def test_catalog_parses_and_every_image_is_complete(registry):
     flashable = [n for n, s in registry.items() if s["flashable"]]
     assert len(doc.get("images", [])) == len(flashable)
     for img in doc["images"]:
-        for field in ("name", "src", "format", "description"):
+        for field in ("name", "src", "format", "arch", "description"):
             assert img.get(field), f"{img.get('name', '?')}: missing {field}"
         assert img["src"].startswith("oras://")
         assert img["description"].strip()
+
+
+def test_arch_field_matches_registry(registry):
+    """Each emitted entry's ``arch`` field equals what variants.yml
+    declares (or ``x86_64`` when the variant omits the key). Catches
+    a renderer drift where ``arch`` is hard-coded or lost."""
+    import tomllib
+
+    doc = tomllib.loads(gen_catalog._render_catalog(registry))
+    by_variant = {
+        img["src"].rsplit("/", 1)[1].split(":", 1)[0]: img["arch"] for img in doc["images"]
+    }
+    for name, spec in registry.items():
+        if not spec.get("flashable"):
+            continue
+        expected = str(spec.get("arch", "x86_64"))
+        assert by_variant[name] == expected, (
+            f"{name}: catalog arch {by_variant[name]!r} != registry {expected!r}"
+        )
