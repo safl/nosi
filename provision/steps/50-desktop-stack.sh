@@ -112,6 +112,33 @@ apt)
     ;;
 esac
 
+# ---- desktop networking: hand the link to NetworkManager ------------
+# The headless base (step 08) sets the netplan renderer to systemd-networkd:
+# fine for a server, but on a desktop it leaves NetworkManager managing
+# nothing. nmtui and the applet show no connection, and a WireGuard / VPN
+# connection can't be created because the device is "unmanaged". A desktop
+# operator expects NM to own networking. Fedora and Raspberry Pi OS desktops
+# are already NM-managed, so this is the apt + netplan (Debian/Ubuntu) case:
+# flip the renderer to NetworkManager (no ethernets block, so NM manages every
+# device with its default auto-DHCP), stand systemd-networkd down so the two
+# don't fight over the NIC, and make sure NM is enabled. Config-only and
+# takes effect on the next boot, like step 08.
+if [ "${NOSI_PKGMGR:-}" = "apt" ] && command -v netplan >/dev/null 2>&1; then
+    nosi_info "desktop: handing networking to NetworkManager (was networkd)"
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/50-desktop-stack.sh
+# Desktop networking via NetworkManager so nmtui / the applet / WireGuard work.
+# No ethernets block: NM manages every device and DHCPs wired NICs by default.
+network:
+  version: 2
+  renderer: NetworkManager
+' /etc/netplan/50-nosi.yaml 0600
+    systemctl disable systemd-networkd.service systemd-networkd.socket 2>/dev/null || true
+    systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
+    systemctl enable NetworkManager.service 2>/dev/null || true
+    netplan generate 2>/dev/null || nosi_warn "netplan generate (NetworkManager renderer) failed"
+fi
+
 # ---- desktop seat access --------------------------------------------
 # The headless base puts odus in wheel + kvm only. The desktop shape
 # needs `video` (DRM render nodes) and `input` (evdev: lid / keyboard /
@@ -264,7 +291,7 @@ focus_follows_mouse no
 # a 4K/QHD panel (sway has no built-in DPI awareness; see nosi-autoscale).
 exec nosi-autoscale
 exec nm-applet --indicator
-exec waybar
+exec nosi-waybar
 exec mako
 exec lxpolkit
 exec wl-paste --watch cliphist store
@@ -458,6 +485,26 @@ swaymsg -t get_outputs -r \
     done
 EOF
 chmod 0755 /usr/local/bin/nosi-autoscale
+
+# ---- nosi-waybar: hide the battery module on machines with no battery ----
+# waybar's built-in battery module renders an empty pill on a desktop / NUC
+# that has no battery. Rather than fork the config per shape (one image boots
+# on both laptops and desktops), this wrapper drops the "battery" entry from
+# modules-right at launch when /sys/class/power_supply has no BAT*, and runs
+# waybar unchanged on laptops. Exec'd from sway in place of `waybar`.
+cat > /usr/local/bin/nosi-waybar <<'EOF'
+#!/bin/sh
+# Launch waybar, dropping the battery module when the machine has no battery.
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config"
+if [ ! -f "$cfg" ] || ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+    exec waybar
+fi
+# No battery: serve a copy of the config with the "battery", line removed.
+tmp="${XDG_RUNTIME_DIR:-/tmp}/nosi-waybar-config"
+sed '/^[[:space:]]*"battery",[[:space:]]*$/d' "$cfg" > "$tmp"
+exec waybar -c "$tmp"
+EOF
+chmod 0755 /usr/local/bin/nosi-waybar
 
 # ---- Sway cheatsheet -----------------------------------------------
 # Plain markdown -- less doesn't render the syntax but the # / ** /
