@@ -172,66 +172,11 @@ jobs:
           cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-img \
             -c configs/${{ matrix.variant }}.toml img_gz_pack
 
-      - name: Pack derived shapes
-        # Fan the base's derived shapes out to one cijoe process per variant,
-        # each on its own /dev/nbdN, so they build in parallel instead of
-        # serially. The serial derive phase dominated the heavy legs (~30 min
-        # on debian/ubuntu-2604 with three derives each); running them at once
-        # roughly thirds it. Separate processes (not threads) keep cijoe's
-        # output handling and the qemu-nbd state per-derive clean. Each derive's
-        # output is captured to its own log and replayed under a collapsible
-        # group after the wait, so parallel logs stay readable. Bases with no
-        # derives (ubuntu-2404 / freebsd) no-op. Exits non-zero if any failed.
-        env:
-          IMG: ${{ matrix.variant }}
-        run: |
-          set -uo pipefail
-          cd cijoe
-          mapfile -t variants < <(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "$IMG" "$GITHUB_WORKSPACE")
-          if [ "${#variants[@]}" -eq 0 ]; then
-            echo "no derived shapes for ${IMG}"
-            exit 0
-          fi
-          echo "fanning out ${#variants[@]} derive(s) in parallel: ${variants[*]}"
-          sudo modprobe nbd max_part=8
-          pids=(); vs=(); i=0
-          for v in "${variants[@]}"; do
-            ( cijoe tasks/build.yaml --monitor --tag "pack-${v}" \
-                -c "configs/${IMG}.toml" derive_pack \
-                --variant "${v}" --nbd-dev "/dev/nbd${i}" ) >"derive-${v}.log" 2>&1 &
-            pids+=("$!"); vs+=("${v}"); i=$((i + 1))
-          done
-          rc=0
-          for j in "${!pids[@]}"; do
-            if wait "${pids[$j]}"; then status=OK; else status=FAILED; rc=1; fi
-            echo "::group::derive ${vs[$j]} (${status})"
-            cat "derive-${vs[$j]}.log" || true
-            echo "::endgroup::"
-          done
-          if [ "$rc" -ne 0 ]; then echo "::error::one or more derives failed"; fi
-          exit $rc
-
-      - name: Proxmox boot-test
-        # Only the debian base derives a proxmox host. Boots the derived image
-        # in QEMU and asserts the PVE stack comes up on first boot (pmxcfs +
-        # pvedaemon + pveproxy, web UI on :8006) -- the chroot bake can't prove
-        # that, so this is the gate that does.
-        if: matrix.variant == 'debian-13-headless'
-        run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor --tag proxmox-smoketest \
-            -c configs/debian-13-headless.toml proxmox_smoketest
-
-      - name: Desktop boot-test
-        # The debian and fedora bases each derive a desktop shape. derive_pack
-        # re-provisions in a chroot (rebuilding the initramfs), so the build
-        # alone never boots it, which is how a host-only initramfs shipped and
-        # kernel-panicked on real hardware. Boots the derived image in QEMU on
-        # an NVMe controller (absent from a virtio-profiled host-only initramfs)
-        # and asserts the greeter comes up, closing that blind spot.
-        if: matrix.variant == 'debian-13-headless' || matrix.variant == 'fedora-44-headless'
-        run: |
-          cd cijoe && cijoe tasks/build.yaml --monitor --tag desktop-smoketest \
-            -c configs/${{ matrix.variant }}.toml desktop_smoketest
+      # The derived shapes (desktop / wsl / docker / lxc / proxmox) are NOT
+      # built here. The baked headless qcow2 uploaded below is the stable hand-
+      # off point; the `derive` job downloads it and builds each shape in its
+      # own runner-isolated job, with its own cijoe report. So this job ends at
+      # the base: bake, smoketest, pack, upload, publish-base.
 
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
@@ -292,6 +237,21 @@ jobs:
             cijoe/cijoe-output/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload base qcow2 for the derive jobs
+        # A dedicated single-file artifact (clean root, no nested paths) is the
+        # hand-off to the `derive` jobs, which download it and build each shape.
+        # Only the bases that have derives need it; freebsd / ubuntu-2404 don't.
+        if: >-
+          matrix.variant == 'debian-13-headless' ||
+          matrix.variant == 'ubuntu-2604-headless' ||
+          matrix.variant == 'fedora-44-headless'
+        uses: actions/upload-artifact@v7
+        with:
+          name: base-qcow2-${{ matrix.variant }}
+          path: ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.qcow2
+          if-no-files-found: error
+          retention-days: 1
 
       # ----- publish (push-to-main, schedule, manual) -----
 
@@ -354,17 +314,13 @@ jobs:
           sha256sum "${report}" > "${report}.sha256"
           ls -lh "${report}"
 
-      - name: Publish base + derived shapes to GHCR
-        # One step pushes the headless base AND every shape derive_pack
-        # produced for it. Disk-image (.img.gz) + wsl-rootfs (.tar.gz) go
-        # via oras (each its own repo ghcr.io/<repo>/<variant>, so bty's
-        # flashable catalog stays scoped to real disk images). The docker
-        # shape is a real OCI image (docker import in derive_pack), so
-        # it's `docker push`ed for `docker pull` / GHA `container:` use.
-        # Annotations come from each artifact's OWN metadata.json (the base
-        # smoketest extracted the base's; derive_pack exported each
-        # derived one), description from descriptions/<variant>.md via
-        # gen_catalog --describe.
+      - name: Publish base to GHCR
+        # Push the headless base .img.gz via oras (its own repo
+        # ghcr.io/<repo>/<variant>, so bty's flashable catalog stays scoped to
+        # real disk images). Annotations come from the base's own metadata.json
+        # (the smoketest extracted it), description from descriptions/<variant>.md
+        # via gen_catalog --describe. Derived shapes are published by the
+        # `derive` job.
         if: env.PUBLISH == 'true'
         env:
           REPO: ${{ github.repository }}
@@ -383,74 +339,14 @@ jobs:
           # contract in .github/scripts/oras-push.sh.
           source "$GITHUB_WORKSPACE/.github/scripts/oras-push.sh"
 
-          # Base headless: flashable .img.gz disk-image.
+          # Base headless: flashable .img.gz disk-image. The derived shapes are
+          # published by the `derive` job, each pushing its own one shape.
           oras_push "ghcr.io/${REPO}/${IMG}:${ROLLING}" \
               application/vnd.nosi.disk-image.v1+gzip \
               application/vnd.nosi.disk-image.layer.v1+gzip \
               "nosi-${IMG}-x86_64.img.gz" \
               "nosi-${IMG}-x86_64.metadata.json" \
               "$($gc --describe "${IMG}")"
-
-          # Derived shapes, read from the base's [[...derive]] list. Bases
-          # without derivations (debian / ubuntu-2404 / freebsd) emit no
-          # rows and the loop is a no-op.
-          derives=$(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"],e["output"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "${IMG}" "$GITHUB_WORKSPACE")
-          while read -r v output; do
-              [ -z "$v" ] && continue
-              case "$output" in
-              tar)
-                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
-                      application/vnd.nosi.wsl-rootfs.v1+gzip \
-                      application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
-                      "nosi-${v}.tar.gz" \
-                      "nosi-${v}.metadata.json" \
-                      "$($gc --describe-wsl "${v}")"
-                  ;;
-              img)
-                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
-                      application/vnd.nosi.disk-image.v1+gzip \
-                      application/vnd.nosi.disk-image.layer.v1+gzip \
-                      "nosi-${v}-x86_64.img.gz" \
-                      "nosi-${v}.metadata.json" \
-                      "$($gc --describe "${v}")"
-                  ;;
-              oci)
-                  # Real OCI image (docker import in derive_pack): docker
-                  # push so consumers `docker pull` / use as a GHA container:.
-                  # Title set as a LABEL at import; the catalog carries the
-                  # use-case prose.
-                  docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:${ROLLING}"
-                  docker tag "nosi-${v}:latest" "ghcr.io/${REPO}/${v}:latest"
-                  # Retried for the same GHCR wobbles as oras push/tag.
-                  for tag in "${ROLLING}" latest; do
-                      attempts=0
-                      until docker push "ghcr.io/${REPO}/${v}:${tag}"; do
-                          attempts=$((attempts + 1))
-                          if [ $attempts -ge 5 ]; then
-                              echo "::error::docker push ${v}:${tag} failed after $attempts attempts"
-                              exit 1
-                          fi
-                          echo "::warning::docker push ${v}:${tag} attempt $attempts failed; retrying"
-                          sleep $((attempts * 10))
-                      done
-                  done
-                  ;;
-              lxc)
-                  # LXC system-container template (Proxmox CT / Incus): zstd
-                  # rootfs tarball.
-                  oras_push "ghcr.io/${REPO}/${v}:${ROLLING}" \
-                      application/vnd.nosi.lxc-rootfs.v1+zstd \
-                      application/vnd.nosi.lxc-rootfs.layer.v1+zstd \
-                      "nosi-${v}.tar.zst" \
-                      "nosi-${v}.metadata.json" \
-                      "$($gc --describe "${v}")"
-                  ;;
-              *)
-                  echo "::error::unknown derive output '$output' for $v"
-                  exit 1
-                  ;;
-              esac
-          done <<< "$derives"
 
       - name: Write build summary
         if: env.PUBLISH == 'true'
@@ -493,34 +389,208 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # Append a block per derived shape this leg published.
-          derives=$(python3 -c 'import sys,tomllib; b,ws=sys.argv[1],sys.argv[2]; d=tomllib.load(open(f"{ws}/cijoe/configs/{b}.toml","rb")); [print(e["variant"],e["output"]) for e in d["system-imaging"]["images"][f"nosi-{b}-x86_64"].get("derive",[])]' "${IMG}" "$GITHUB_WORKSPACE")
-          while read -r v output; do
-              [ -z "$v" ] && continue
-              {
-                echo
-                echo "### \`${v}\` (${ROLLING}, derived from ${IMG})"
-                echo
-                echo "| Pull ref | \`ghcr.io/${REPO}/${v}:${ROLLING}\` (alias \`:latest\`) |"
-                echo "|---|---|"
-                case "$output" in
-                tar)
-                    echo
-                    echo "WSL2 rootfs -- pull the layer blob and \`wsl --import\` it." ;;
-                img)
-                    echo
-                    echo "Flashable .img.gz -- same \`gunzip | dd\` flow as the base." ;;
-                oci)
-                    echo
-                    echo "OCI image -- use as a GHA job container or a dev base:"
-                    echo '```yaml'
-                    echo "container:"
-                    echo "  image: ghcr.io/${REPO}/${v}:latest"
-                    echo "  options: --privileged"
-                    echo '```' ;;
-                esac
-              } >> "$GITHUB_STEP_SUMMARY"
-          done <<< "$derives"
+  derive:
+    # One job per derived shape. Each downloads the baked headless qcow2 (the
+    # stable hand-off the `build` job uploaded), builds exactly that one shape
+    # with derive_pack, boot-tests it where applicable, and uploads its own
+    # cijoe report. Runner-isolated: no shared disk / NBD contention, and a
+    # single shape failing never touches the others. `needs: build` waits for
+    # the bases; the derives then run in parallel.
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: debian-13-desktop,   base: debian-13-headless,   output: img, test: desktop }
+          - { variant: debian-13-lxc,       base: debian-13-headless,   output: lxc, test: none }
+          - { variant: debian-13-proxmox,   base: debian-13-headless,   output: img, test: proxmox }
+          - { variant: ubuntu-2604-wsl,     base: ubuntu-2604-headless, output: tar, test: none }
+          - { variant: ubuntu-2604-docker,  base: ubuntu-2604-headless, output: oci, test: none }
+          - { variant: ubuntu-2604-lxc,     base: ubuntu-2604-headless, output: lxc, test: none }
+          - { variant: fedora-44-desktop,   base: fedora-44-headless,   output: img, test: desktop }
+          - { variant: fedora-44-lxc,       base: fedora-44-headless,   output: lxc, test: none }
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Reclaim runner disk space on /
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      - name: Install build dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*azure*
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils genisoimage pigz pipx cpu-checker \
+            xz-utils sshpass e2fsprogs btrfs-progs gdisk zstd \
+            systemd-container python3-yaml jq
+
+      - name: Stage build artifacts on the large /mnt disk
+        run: |
+          sudo mkdir -p /mnt/system_imaging
+          sudo chown "$(id -un):$(id -gn)" /mnt/system_imaging
+          ln -s /mnt/system_imaging "$HOME/system_imaging"
+
+      - name: Enable KVM access for the runner
+        # The desktop / proxmox boot-tests QEMU-boot the derived image.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install cijoe
+        run: |
+          pipx install cijoe
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download baked base qcow2
+        uses: actions/download-artifact@v7
+        with:
+          name: base-qcow2-${{ matrix.base }}
+          path: ${{ github.workspace }}/.base-qcow2
+
+      - name: Place base qcow2 where derive_pack expects it
+        run: |
+          mkdir -p "$HOME/system_imaging/disk"
+          mv "$GITHUB_WORKSPACE/.base-qcow2/nosi-${{ matrix.base }}-x86_64.qcow2" \
+             "$HOME/system_imaging/disk/"
+          ls -lh "$HOME/system_imaging/disk/"
+
+      - name: Build derived shape
+        env:
+          NOSI_DERIVE_VARIANT: ${{ matrix.variant }}
+        run: |
+          sudo modprobe nbd max_part=8
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag "derive-${{ matrix.variant }}" \
+            -c configs/${{ matrix.base }}.toml derive_pack
+
+      - name: Boot-test (desktop)
+        # Boots the derived desktop on NVMe and reads the greeter / panic verdict
+        # off the serial console. The bake never boots the desktop derive, which
+        # is how a host-only initramfs kernel-panicked on real hardware.
+        if: matrix.test == 'desktop'
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag desktop-smoketest \
+            -c configs/${{ matrix.base }}.toml desktop_smoketest
+
+      - name: Boot-test (proxmox)
+        # Boots the derived PVE host and asserts the stack comes up on first boot.
+        if: matrix.test == 'proxmox'
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag proxmox-smoketest \
+            -c configs/${{ matrix.base }}.toml proxmox_smoketest
+
+      - name: Show built artifact size
+        if: always()
+        run: |
+          ls -lh "$HOME/system_imaging/disk/" 2>/dev/null | grep -E "${{ matrix.variant }}" || true
+          docker images 'nosi-*' 2>/dev/null || true
+
+      - name: Upload derived artifact + cijoe report (always)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nosi-${{ matrix.variant }}
+          path: |
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}-x86_64.img.gz.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}.tar.gz
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}.tar.gz.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}.tar.zst
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}.tar.zst.sha256
+            ~/system_imaging/disk/nosi-${{ matrix.variant }}.metadata.json
+            cijoe/cijoe-output/
+          if-no-files-found: warn
+          retention-days: 14
+
+      # ----- publish the one shape (push-to-main / schedule / manual) -----
+
+      - name: Compute rolling tag
+        if: env.PUBLISH == 'true'
+        id: tag
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "rolling=$(date -u +'%Y.%m.%d')-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up oras
+        if: env.PUBLISH == 'true'
+        uses: oras-project/setup-oras@v2
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          for i in 1 2 3 4 5; do
+              printf '%s' "$GHCR_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin \
+              && printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin \
+              && break
+              if [ "$i" = 5 ]; then echo "::error::ghcr login failed after 5 attempts"; exit 1; fi
+              echo "::warning::ghcr login attempt $i failed; retrying"
+              sleep $((i * 10))
+          done
+
+      - name: Publish derived shape to GHCR
+        if: env.PUBLISH == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          V: ${{ matrix.variant }}
+          OUTPUT: ${{ matrix.output }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          cd "$HOME/system_imaging/disk"
+          report="nosi-${V}.cijoe-report.zip"
+          (cd "$GITHUB_WORKSPACE/cijoe/cijoe-output" && zip -qr "$HOME/system_imaging/disk/${report}" .)
+          sha256sum "${report}" > "${report}.sha256"
+          gc="python3 $GITHUB_WORKSPACE/tools/gen_catalog.py"
+          source "$GITHUB_WORKSPACE/.github/scripts/oras-push.sh"
+          case "$OUTPUT" in
+          img)
+              oras_push "ghcr.io/${REPO}/${V}:${ROLLING}" \
+                  application/vnd.nosi.disk-image.v1+gzip \
+                  application/vnd.nosi.disk-image.layer.v1+gzip \
+                  "nosi-${V}-x86_64.img.gz" "nosi-${V}.metadata.json" \
+                  "$($gc --describe "${V}")" ;;
+          tar)
+              oras_push "ghcr.io/${REPO}/${V}:${ROLLING}" \
+                  application/vnd.nosi.wsl-rootfs.v1+gzip \
+                  application/vnd.nosi.wsl-rootfs.layer.v1+gzip \
+                  "nosi-${V}.tar.gz" "nosi-${V}.metadata.json" \
+                  "$($gc --describe-wsl "${V}")" ;;
+          lxc)
+              oras_push "ghcr.io/${REPO}/${V}:${ROLLING}" \
+                  application/vnd.nosi.lxc-rootfs.v1+zstd \
+                  application/vnd.nosi.lxc-rootfs.layer.v1+zstd \
+                  "nosi-${V}.tar.zst" "nosi-${V}.metadata.json" \
+                  "$($gc --describe "${V}")" ;;
+          oci)
+              # Real OCI image (docker import in derive_pack): docker push.
+              docker tag "nosi-${V}:latest" "ghcr.io/${REPO}/${V}:${ROLLING}"
+              docker tag "nosi-${V}:latest" "ghcr.io/${REPO}/${V}:latest"
+              for tag in "${ROLLING}" latest; do
+                  attempts=0
+                  until docker push "ghcr.io/${REPO}/${V}:${tag}"; do
+                      attempts=$((attempts + 1))
+                      if [ $attempts -ge 5 ]; then
+                          echo "::error::docker push ${V}:${tag} failed after $attempts attempts"; exit 1
+                      fi
+                      echo "::warning::docker push ${V}:${tag} attempt $attempts failed; retrying"
+                      sleep $((attempts * 10))
+                  done
+              done ;;
+          *) echo "::error::unknown derive output ${OUTPUT} for ${V}"; exit 1 ;;
+          esac
 
   build-rpi:
     # Raspberry Pi OS (arm64) for Pi 4 + Pi 5. Not a QEMU bake: Raspberry Pi
@@ -707,12 +777,13 @@ jobs:
     # Cut a GitHub release carrying the bty-compatible catalog.toml so an
     # operator can point bty at it:
     #   bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog.toml
-    # Runs once (not per-variant) AFTER every variant built + pushed, so the
-    # catalog only advertises images that actually shipped. needs: [build,
-    # build-rpi] means one failed leg (x86 or Pi) blocks the catalog --
-    # deliberate: the catalog should not point at an image whose build broke.
+    # Runs once (not per-variant) AFTER every base + derived shape + the Pi
+    # built and pushed, so the catalog only advertises images that actually
+    # shipped. needs: [build, derive, build-rpi] means one failed leg (a base,
+    # any derived shape, or the Pi) blocks the catalog -- deliberate: the
+    # catalog should not point at an image whose build broke.
     # PRs don't publish (same gate as the per-variant GHCR push).
-    needs: [build, build-rpi]
+    needs: [build, derive, build-rpi]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
