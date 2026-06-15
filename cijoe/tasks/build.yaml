@@ -47,3 +47,6 @@ steps:
 
 - name: proxmox_smoketest
   uses: proxmox_smoketest
+
+- name: desktop_smoketest
+  uses: desktop_smoketest
