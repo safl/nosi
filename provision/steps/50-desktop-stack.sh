@@ -732,13 +732,14 @@ cat > /etc/skel/.config/waybar/config <<'EOF'
 EOF
 
 cat > /etc/skel/.config/waybar/style.css <<'EOF'
-/* Catppuccin Mocha-ish palette, kept minimal so the bar looks calm
-   against most wallpapers. */
+/* Catppuccin Mocha, "separated pills": a transparent bar where each module
+   is its own rounded, accent-coloured pill with a gap between them, so the
+   wallpaper shows through. */
 
 * {
     font-family: "JetBrainsMono Nerd Font", "Symbols Nerd Font", monospace;
     font-size:   13px;
-    font-weight: 500;
+    font-weight: 600;
     border:      none;
     border-radius: 0;
     min-height:  0;
@@ -746,92 +747,92 @@ cat > /etc/skel/.config/waybar/style.css <<'EOF'
     margin:      0;
 }
 
+/* Transparent floating bar: pills sit on the wallpaper, not on a solid bar. */
 window#waybar {
-    background-color: rgba(24, 24, 37, 0.88);   /* base */
-    color:            #cdd6f4;                  /* text */
-    border-radius:    14px;
-    border:           1px solid rgba(180, 190, 254, 0.10);
+    background: transparent;
+    color:      #cdd6f4;                         /* text */
 }
 
-#workspaces {
-    margin: 0 4px;
+/* Shared pill shape for every module group. Per-module backgrounds below
+   override the dark default with an accent. */
+#workspaces,
+#mode,
+#idle_inhibitor,
+#custom-power-profile,
+#pulseaudio,
+#network,
+#battery,
+#tray,
+#clock {
+    margin:        6px 3px;
+    padding:       2px 14px;
+    border-radius: 14px;
+    background:    rgba(49, 50, 68, 0.75);       /* surface0, translucent */
+    color:         #cdd6f4;
 }
+
+/* Workspaces: each its own dark pill; the focused one goes lavender. */
+#workspaces { padding: 2px 4px; background: transparent; }
 #workspaces button {
-    padding:    2px 12px;
-    margin:     4px 2px;
-    color:      #6c7086;
-    background: transparent;
+    padding:    2px 10px;
+    margin:     0 2px;
+    color:      #cdd6f4;
+    background: rgba(49, 50, 68, 0.75);
     border-radius: 12px;
     transition: background 120ms ease, color 120ms ease;
 }
 #workspaces button:hover {
-    background: rgba(180, 190, 254, 0.10);
+    background: rgba(180, 190, 254, 0.25);
     color:      #cdd6f4;
     box-shadow: none;
 }
 #workspaces button.focused,
 #workspaces button.active {
     color:      #1e1e2e;
-    background: #b4befe;                        /* lavender */
+    background: #b4befe;                         /* lavender */
 }
 #workspaces button.urgent {
     color:      #1e1e2e;
-    background: #f38ba8;                        /* red */
+    background: #f38ba8;                         /* red */
 }
 
-#window {
-    padding: 0 12px;
-    color:   #a6adc8;                           /* subtext0 */
-    font-weight: 400;
-}
+#mode { color: #1e1e2e; background: #fab387; }   /* peach */
 
-#mode {
-    padding: 0 12px;
-    color:   #1e1e2e;
-    background: #fab387;                        /* peach */
-    border-radius: 12px;
-    margin:  4px 4px;
-}
+/* Colourful accent pills (dark text), the cluster on the right. */
+#custom-power-profile             { color: #1e1e2e; background: #94e2d5; }   /* teal */
+#pulseaudio                       { color: #1e1e2e; background: #cba6f7; }   /* mauve */
+#pulseaudio.muted                 { color: #6c7086; background: rgba(49, 50, 68, 0.75); }
+#network                          { color: #1e1e2e; background: #89b4fa; }   /* blue */
+#network.disconnected             { color: #f38ba8; background: rgba(49, 50, 68, 0.75); }
 
-#clock {
-    padding: 0 14px;
-    color:   #cdd6f4;
-    font-weight: 600;
-}
-
-#idle_inhibitor,
-#custom-power-profile,
-#pulseaudio,
-#network,
 #battery,
-#tray {
-    padding: 2px 12px;
-    margin:  4px 2px;
-    border-radius: 12px;
-    background: rgba(49, 50, 68, 0.55);          /* surface0 */
-    color:      #cdd6f4;
-}
-
-#idle_inhibitor.activated         { color: #fab387; background: rgba(250, 179, 135, 0.18); }
-#custom-power-profile             { color: #94e2d5; }                  /* teal */
-#pulseaudio.muted                 { color: #6c7086; }
-#network.disconnected             { color: #f38ba8; }
 #battery.charging,
-#battery.plugged                  { color: #a6e3a1; }                  /* green */
-#battery.warning:not(.charging)   { color: #fab387; }
+#battery.plugged                  { color: #1e1e2e; background: #a6e3a1; }   /* green */
+#battery.warning:not(.charging)   { color: #1e1e2e; background: #fab387; }   /* peach */
 #battery.critical:not(.charging)  {
-    color: #f38ba8;
-    background: rgba(243, 139, 168, 0.18);
+    color: #1e1e2e;
+    background: #f38ba8;                         /* red */
     animation: blink 1s steps(2) infinite;
 }
 @keyframes blink {
-    50% { background: rgba(243, 139, 168, 0.05); }
+    50% { background: rgba(243, 139, 168, 0.45); }
+}
+
+#idle_inhibitor              { color: #a6adc8; }
+#idle_inhibitor.activated    { color: #1e1e2e; background: #fab387; }
+
+/* Clock: the prominent right-most pill (lavender, like the reference's). */
+#clock {
+    color:       #1e1e2e;
+    background:   #b4befe;                        /* lavender */
+    font-weight: 700;
+    padding:     2px 16px;
 }
 
 #tray > .passive   { -gtk-icon-effect: dim; }
 #tray > .needs-attention {
     -gtk-icon-effect: highlight;
-    background: rgba(243, 139, 168, 0.18);
+    background: rgba(243, 139, 168, 0.30);
 }
 EOF
 
