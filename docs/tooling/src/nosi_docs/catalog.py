@@ -40,20 +40,22 @@ log = logging.getLogger(__name__)
 GHCR_PREFIX = "ghcr.io/safl/nosi"
 
 
-def known_variants(repo_root: Path) -> tuple[tuple[str, str], ...]:
-    """(name, ref) for every variant nosi publishes as an ORAS artifact
-    carrying the vnd.nosi.metadata.v1+json layer this page reads.
+def known_variants(repo_root: Path) -> tuple[tuple[str, str, str], ...]:
+    """(name, ref, shape) for every variant nosi publishes to GHCR.
 
     Derived from variants.yml -- the same registry that drives the build
     annotations and gen_catalog -- instead of a hand-maintained list here,
-    which had already drifted seven variants behind the fleet once. The
-    `docker` shape is excluded: it's a `docker import` OCI image without
-    the metadata layer, documented in prose (overview.md) instead."""
+    which had already drifted seven variants behind the fleet once.
+
+    The `docker` shape is included so the catalog covers every offering, but
+    it is rendered differently: it is a `docker import` OCI image without the
+    vnd.nosi.metadata.v1+json layer the other shapes carry, so its page is
+    built from local sources (variants.yml + descriptions/<name>.md) and shows
+    a `docker pull` flow rather than the oras-pull + dd flash flow."""
     data = yaml.safe_load((repo_root / "variants.yml").read_text())
     return tuple(
-        (name, f"{GHCR_PREFIX}/{name}:latest")
+        (name, f"{GHCR_PREFIX}/{name}:latest", spec.get("shape") or "?")
         for name, spec in data["variants"].items()
-        if spec.get("shape") != "docker"
     )
 
 
@@ -61,6 +63,7 @@ def known_variants(repo_root: Path) -> tuple[tuple[str, str], ...]:
 class VariantSnapshot:
     name: str
     ref: str
+    shape: str = "?"
     metadata: dict | None = None
     error: str | None = None
     description: str | None = None  # from org.opencontainers.image.description
@@ -77,8 +80,9 @@ def fetch_and_render(docs_root: Path) -> Path:
     out_dir = docs_root / "src" / "catalog"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    variants = known_variants(docs_root.resolve().parent)
-    snapshots = [_fetch_variant(name, ref) for name, ref in variants]
+    repo_root = docs_root.resolve().parent
+    variants = known_variants(repo_root)
+    snapshots = [_fetch_variant(name, ref, shape, repo_root) for name, ref, shape in variants]
 
     for s in snapshots:
         variant_dir = out_dir / s.name
@@ -101,15 +105,35 @@ def fetch_and_render(docs_root: Path) -> Path:
 METADATA_MEDIA_TYPE = "application/vnd.nosi.metadata.v1+json"
 
 
-def _fetch_variant(name: str, ref: str) -> VariantSnapshot:
+def _local_description(repo_root: Path, name: str) -> str | None:
+    """The variant's use-case prose from descriptions/<name>.md (the same file
+    gen_catalog --describe feeds into the ORAS description annotation). Read
+    locally for the docker shape, which carries no annotation to read back."""
+    path = repo_root / "descriptions" / f"{name}.md"
+    try:
+        text = path.read_text().strip()
+    except OSError:
+        return None
+    return text or None
+
+
+def _fetch_variant(name: str, ref: str, shape: str, repo_root: Path) -> VariantSnapshot:
     """Fetch <ref>'s manifest, locate the metadata.v1+json layer, fetch the blob.
 
     Avoids the multi-GiB disk-image layer entirely (oras pull pre-1.3
     has no per-mediaType filter so a naive `oras pull` would download
     everything). manifest-fetch + blob-fetch hits only the bytes the
     catalog actually needs (~few KB per variant).
+
+    The docker shape is a plain OCI image with no nosi metadata layer to fetch,
+    so it is rendered from local sources instead: its description comes from
+    descriptions/<name>.md and its page shows a `docker pull` flow. No network
+    call, so it always renders.
     """
-    snap = VariantSnapshot(name=name, ref=ref)
+    snap = VariantSnapshot(name=name, ref=ref, shape=shape)
+    if shape == "docker":
+        snap.description = _local_description(repo_root, name)
+        return snap
     if shutil.which("oras") is None:
         snap.error = "oras CLI not found on PATH"
         return snap
@@ -177,9 +201,11 @@ def _render_index(snapshots: Iterable[VariantSnapshot]) -> str:
         "",
         "Every nosi image published to "
         "[GHCR](https://github.com/safl/nosi/pkgs/container/nosi), listed here "
-        "automatically from the ORAS metadata layer that ships alongside each "
-        ".img.gz. The fields below are read directly from the baked image at "
-        "publish time; this page is regenerated on every docs build.",
+        "automatically. For the disk-image and rootfs shapes the fields below "
+        "are read from the ORAS metadata layer that ships alongside each "
+        "artifact; the docker shape is a plain OCI image (`docker pull`) so its "
+        "page is built from its in-repo description. This page is regenerated "
+        "on every docs build.",
         "",
         "## Summary",
         "",
@@ -187,6 +213,14 @@ def _render_index(snapshots: Iterable[VariantSnapshot]) -> str:
         "|---|---|---|---|---|---|",
     ]
     for s in snaps:
+        if s.shape == "docker":
+            # OCI image: no metadata layer, and no kernel (stripped). The page
+            # carries the description + `docker pull` flow.
+            lines.append(
+                f"| [`{s.name}`]({s.name}/index.md) | _OCI image_ | docker "
+                "| _none (stripped)_ | _see image_ | _rolling_ |"
+            )
+            continue
         if s.metadata is None:
             lines.append(f"| [`{s.name}`]({s.name}/index.md) | _(not yet published)_ | | | | |")
             continue
@@ -208,7 +242,51 @@ def _render_index(snapshots: Iterable[VariantSnapshot]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_docker_page(s: VariantSnapshot) -> str:
+    """Page for the docker shape: a plain OCI image, so a `docker pull` + run
+    flow rather than the oras-pull + dd flash the disk-image shapes render."""
+    parts: list[str] = [_FRONT_MATTER.rstrip("\n"), "", f"# `{s.name}`", ""]
+    if s.description:
+        parts.extend([s.description, ""])
+    parts.extend(
+        [
+            "**Shape:** `docker` (OCI image)  ",
+            "**Architecture:** `x86_64`  ",
+            "**Kernel:** _none: kernel / boot / cloud-init stripped_  ",
+            "**Tag:** rolling `:latest` (plus a dated rolling tag per build)",
+            "",
+            "## Pull and run",
+            "",
+            "```",
+            f"docker pull {s.ref}",
+            "```",
+            "",
+            "Use it as a GitHub Actions job container:",
+            "",
+            "```yaml",
+            "jobs:",
+            "  build:",
+            f"    container: {s.ref}",
+            "```",
+            "",
+            "Or launch a guest with the bundled qemu + cijoe (nested KVM needs "
+            "`--privileged` or a passed-through `/dev/kvm`):",
+            "",
+            "```",
+            f"docker run --rm -it --privileged {s.ref}",
+            "```",
+            "",
+            "The tooling matches the headless base it derives from; see that "
+            "variant's page for the full tool and package inventory.",
+            "",
+        ]
+    )
+    return "\n".join(parts)
+
+
 def _render_variant_page(s: VariantSnapshot) -> str:
+    if s.shape == "docker":
+        return _render_docker_page(s)
     if s.metadata is None:
         return (
             f"{_FRONT_MATTER}\n"
