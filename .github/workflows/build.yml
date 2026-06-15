@@ -187,6 +187,18 @@ jobs:
           cd cijoe && cijoe tasks/build.yaml --monitor --tag proxmox-smoketest \
             -c configs/debian-13-headless.toml proxmox_smoketest
 
+      - name: Desktop boot-test
+        # The debian and fedora bases each derive a desktop shape. derive_pack
+        # re-provisions in a chroot (rebuilding the initramfs), so the build
+        # alone never boots it, which is how a host-only initramfs shipped and
+        # kernel-panicked on real hardware. Boots the derived image in QEMU on
+        # an NVMe controller (absent from a virtio-profiled host-only initramfs)
+        # and asserts the greeter comes up, closing that blind spot.
+        if: matrix.variant == 'debian-13-headless' || matrix.variant == 'fedora-44-headless'
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag desktop-smoketest \
+            -c configs/${{ matrix.variant }}.toml desktop_smoketest
+
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
         # fails -- so the base qcow2 + .img.gz and every derived artifact
