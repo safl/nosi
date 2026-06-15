@@ -416,7 +416,16 @@ def _chroot_provision(cijoe, mnt, variant, strip) -> int:
 
 
 def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
-    """Tar the mounted rootfs; gzip it (wsl) or docker-import it (docker)."""
+    """Tar the mounted rootfs; gzip it (wsl) or docker-import it (docker).
+
+    Every shape routed here is stripped, so it must satisfy the rootfs contract
+    (clean of kernel/bootloader/cloud-init, operator + metadata intact). Assert
+    that first, so a broken strip fails the build before any artifact is packed
+    (and so the wsl shape, which has no runtime check, is still validated)."""
+    rc = _assert_rootfs_contract(cijoe, mnt, variant)
+    if rc:
+        return rc
+
     if output == "tar":
         tar_path = disk_dir / f"nosi-{variant}.tar"
         gz_path = disk_dir / f"nosi-{variant}.tar.gz"
@@ -504,6 +513,52 @@ def _package_rootfs(cijoe, mnt, variant, output, disk_dir) -> int:
         log.error(f"container smoketest failed for {tag} (cijoe/qemu missing?)")
         return err
     log.info(f"derive '{variant}': imported + smoketested OCI image {tag}")
+    return 0
+
+
+# Filesystem-contract assertion shared by every stripped shape (wsl / lxc /
+# docker). Runs on the host against the mounted rootfs, so it is cheap (no
+# container runtime) and catches what the per-shape runtime check cannot: a
+# strip that silently failed to remove the kernel / modules / bootloader /
+# cloud-init (a missed purge glob or a renamed package ships a bloated, wrong
+# rootfs), and a derive that lost the operator account or the metadata file.
+# `cd "$1"` then relative paths so a check can never escape the rootfs; $1 is
+# the mount passed as an argv, not interpolated into the script body.
+_ROOTFS_CONTRACT_CHECK = r"""
+set -u
+rc=0
+fail() { echo "CONTRACT FAIL: $1"; rc=1; }
+cd "$1" || { echo "CONTRACT FAIL: cannot cd into rootfs"; exit 2; }
+# Strip worked: no kernel, modules, bootloader or cloud-init. These are
+# meaningless without our own kernel and are exactly what bloats / breaks a
+# container or WSL rootfs. rm -rf leaves the dirs but empties them, so test
+# for emptiness rather than absence.
+[ -z "$(ls -A boot 2>/dev/null)" ] || fail "/boot not empty (kernel/bootloader not stripped)"
+[ -z "$(ls -A lib/modules 2>/dev/null)" ] || fail "/lib/modules not empty (modules not stripped)"
+[ -z "$(ls -A usr/lib/modules 2>/dev/null)" ] || fail "/usr/lib/modules not empty"
+[ ! -e etc/cloud ] || fail "/etc/cloud present (cloud-init not stripped)"
+[ ! -e var/lib/cloud ] || fail "/var/lib/cloud present (cloud-init state not stripped)"
+[ ! -e usr/local/bin/tailscale ] || fail "tailscale present (belongs to the host, not a container)"
+# Contract intact: the metadata file, the operator account, and the upstream
+# tools must all survive the strip.
+[ -f etc/nosi-metadata.json ] || fail "/etc/nosi-metadata.json missing"
+grep -q '^odus:' etc/passwd || fail "operator 'odus' missing from /etc/passwd"
+[ -x usr/local/bin/hx ] || fail "/usr/local/bin/hx missing or not executable"
+exit $rc
+"""
+
+
+def _assert_rootfs_contract(cijoe, mnt, variant) -> int:
+    """Assert the stripped rootfs is container-clean and still carries the nosi
+    contract, before it is tarred / imported. Shared by wsl / lxc / docker so a
+    strip regression or a dropped operator/metadata fails the build rather than
+    shipping a broken rootfs. Complements (does not replace) the per-shape
+    runtime check, which proves the rootfs executes but not that it is clean."""
+    err, _ = cijoe.run_local(f"sudo sh -c {_q(_ROOTFS_CONTRACT_CHECK)} nosi-contract {mnt}")
+    if err:
+        log.error(f"derive '{variant}': rootfs contract check failed (see CONTRACT FAIL lines)")
+        return err
+    log.info(f"derive '{variant}': rootfs contract check passed (stripped clean, contract intact)")
     return 0
 
 
