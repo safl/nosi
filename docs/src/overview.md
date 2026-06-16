@@ -1,7 +1,8 @@
 # Overview
 
-`nosi` builds headless and desktop system images for bare metal and virtual
-machines (qemu, WSL2), plus container images, pre-loaded with an opinionated
+`nosi` builds headless and desktop system images for bare metal (x86_64,
+Raspberry Pi 4/5) and virtual machines (qemu, WSL2, Proxmox), plus container
+images, pre-loaded with an opinionated
 toolset for development work. The disk-image shapes ship as a vanilla
 `.img.gz` flashable with any standard tool; nothing about the format ties an
 image to a specific deployment workflow.

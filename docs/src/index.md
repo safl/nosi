@@ -7,7 +7,8 @@
 ```
 
 Automated, rolling builds of headless and desktop system images for bare metal
-and virtual machines (QEMU, WSL2, Proxmox), plus container images (OCI, LXC),
+(x86_64, Raspberry Pi 4/5) and virtual machines (QEMU, WSL2, Proxmox), plus
+container images (OCI, LXC),
 pre-loaded with an opinionated toolset for systems-development work in C, C++,
 Python, Rust, and Zig. Flash the `.img.gz` with `dd` (or any tool that handles
 gzip-compressed disk images) and you have a ready-to-SSH dev box. The companion
