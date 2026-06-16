@@ -968,4 +968,21 @@ systemctl enable cups.socket avahi-daemon.service
 nosi_info "unmasking polkit.service (desktop needs the authorization agent)"
 systemctl unmask polkit.service
 
+# ---- Fedora: SELinux relabel on first boot --------------------------
+# The desktop derive installs its packages in a chroot (derive_pack), where
+# SELinux is not running. The new files (sway, greetd, the rest of the stack)
+# land with wrong or missing labels, and greetd's policy module even fails to
+# load in the chroot. On the flashed image's first boot SELinux is enforcing,
+# so confined services started against those mislabeled files fail: sshd and
+# power-profiles-daemon were both observed "Failed to start". The headless base
+# is fine because a real boot labels it; only the chrooted derive is affected.
+# Schedule a full relabel on the first boot: selinux-autorelabel.service
+# consumes /.autorelabel, relabels the filesystem, and reboots once, after
+# which every file carries its correct context and the services come up.
+# dnf/Fedora only; apt desktops have no SELinux to relabel.
+if [ "${NOSI_PKGMGR:-}" = dnf ]; then
+    nosi_info "desktop (fedora): scheduling a first-boot SELinux autorelabel"
+    : > /.autorelabel
+fi
+
 nosi_info "step 50-desktop-stack done"
