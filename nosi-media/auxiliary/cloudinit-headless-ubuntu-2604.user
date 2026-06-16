@@ -124,6 +124,7 @@ packages:
   - clangd               # C/C++ LSP
   - cmake                # ubiquitous C/C++ build orchestrator
   - cppcheck             # standalone C/C++ static analyzer
+  - dwarves              # pahole: struct layout / padding from DWARF (kernel/BPF)
   - gdb
   - lldb                 # helix DAP debugger backend (lldb-dap binary)
   - make

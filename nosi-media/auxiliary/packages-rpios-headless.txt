@@ -73,6 +73,7 @@ clang-tools
 clangd
 cmake
 cppcheck
+dwarves
 gdb
 lldb
 make

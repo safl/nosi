@@ -58,6 +58,7 @@ packages:
   - ccache               # transparent compiler cache; wraps gcc/clang
   - cmake                # ubiquitous C/C++ build orchestrator
   - cppcheck             # standalone C/C++ static analyzer
+  - dwarves              # pahole: struct layout / padding from DWARF (kernel/BPF)
   - gmake                # gnu make; FreeBSD's `make` is bsdmake
   - meson
   - ninja
