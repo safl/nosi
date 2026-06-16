@@ -75,6 +75,16 @@ PANIC_MARKERS = (
     "kernel panic",
     "unable to mount root",
 )
+# sshd must come up. The Fedora desktop's chroot-mislabeled SELinux made it
+# "Failed to start sshd.service" on first boot (fixed by the first-boot relabel
+# in 50-desktop-stack); fail the boot-test if that regression reappears, so a
+# green run is real proof sshd starts, not just that the greeter did. Covers
+# Fedora's sshd.service and Debian's ssh.service unit names.
+SSHD_FAIL_MARKERS = (
+    "failed to start sshd.service",
+    "failed to start ssh.service",
+    "failed to start openssh",
+)
 
 
 def add_args(parser: ArgumentParser):
@@ -198,10 +208,11 @@ def _boot_desktop(cijoe, overlay: Path, pidfile: Path, serial: Path, disk_if: st
 
 
 def _await_greeter(serial: Path, variant: str, disk_if: str, timeout: int) -> int:
-    """Poll the serial log until the greeter is up (PASS), a kernel panic is
-    seen (FAIL: the initramfs could not mount root on this controller), or the
-    timeout elapses (FAIL). Reads the whole file each pass; serial logs for a
-    boot are small and this runs at a 5s cadence."""
+    """Poll the serial log until the greeter is up (PASS), or fail on a kernel
+    panic (the initramfs could not mount root on this controller), an sshd
+    start failure (the SELinux-relabel regression), or the timeout. Reads the
+    whole file each pass; serial logs for a boot are small and this runs at a
+    5s cadence."""
     end = time.monotonic() + timeout
     while True:
         raw = ""
@@ -214,6 +225,14 @@ def _await_greeter(serial: Path, variant: str, disk_if: str, timeout: int) -> in
             log.error(
                 f"[FAIL] {variant}: kernel panic on {disk_if} boot ({panic!r}); "
                 "a host-only initramfs cannot mount root on this controller"
+            )
+            return errno.EIO
+
+        sshd_fail = next((m for m in SSHD_FAIL_MARKERS if m in text), None)
+        if sshd_fail:
+            log.error(
+                f"[FAIL] {variant}: sshd failed to start on {disk_if} boot "
+                f"({sshd_fail!r}); the SELinux relabel did not fix the ssh labels"
             )
             return errno.EIO
 
