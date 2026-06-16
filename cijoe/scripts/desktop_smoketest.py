@@ -54,8 +54,10 @@ from image_smoketest import (
 )
 
 # A desktop first boot reaches the greeter a bit slower than the headless base,
-# and a TCG fallback (no KVM) is slower still, so allow generous time.
-BOOT_TIMEOUT = 420
+# a TCG fallback (no KVM) is slower still, and the Fedora desktop does a
+# one-time SELinux relabel + reboot on first boot (see 50-desktop-stack), so
+# allow generous time for two boots.
+BOOT_TIMEOUT = 600
 
 # Serial markers, matched against an ANSI-stripped, lower-cased copy of the
 # console: systemd colorizes unit names (`Started \x1b[...mgreetd.service`), so
