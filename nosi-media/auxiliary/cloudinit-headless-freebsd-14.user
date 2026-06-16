@@ -80,6 +80,7 @@ packages:
   - git-delta
   - git-lfs
   - htop
+  - ipmitool             # IPMI / BMC: lights-out mgmt, sensors, SEL on servers
   - jq
   - ripgrep
   # vpn: if_wg (WireGuard) is in the base kernel; tailscaled installs

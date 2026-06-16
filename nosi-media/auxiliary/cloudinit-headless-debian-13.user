@@ -173,6 +173,7 @@ packages:
   # hardware & storage
   - dmidecode
   - hdparm
+  - ipmitool            # IPMI / BMC: lights-out mgmt, sensors, SEL on servers
   - lshw
   - nvme-cli
   - pciutils
