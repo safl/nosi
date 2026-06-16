@@ -43,7 +43,7 @@ pkg)
         git git-lfs curl wget jq python3
         bash gmake cmake ninja meson pkgconf pahole
         hx zellij btop rg fd fzf direnv gh delta
-        wg
+        wg ipmitool
     )
     ;;
 *)
@@ -62,6 +62,7 @@ pkg)
         meson
         clang
         pahole
+        ipmitool
         qemu-img
         qemu-system-aarch64
     )

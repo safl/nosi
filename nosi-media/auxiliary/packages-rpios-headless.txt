@@ -97,6 +97,7 @@ skopeo
 # hardware & storage
 dmidecode
 hdparm
+ipmitool
 lshw
 nvme-cli
 pciutils
