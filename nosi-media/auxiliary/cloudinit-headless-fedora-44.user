@@ -117,6 +117,7 @@ packages:
   - clang-tools-extra    # clangd (C/C++ LSP), clang-format, clang-tidy
   - cmake                # ubiquitous C/C++ build orchestrator
   - cppcheck             # standalone C/C++ static analyzer
+  - dwarves              # pahole: struct layout / padding from DWARF (kernel/BPF)
   - gcc
   - gcc-c++
   - gdb

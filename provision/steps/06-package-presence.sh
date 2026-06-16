@@ -41,7 +41,7 @@ case "$NOSI_PKGMGR" in
 pkg)
     must_have=(
         git git-lfs curl wget jq python3
-        bash gmake cmake ninja meson pkgconf
+        bash gmake cmake ninja meson pkgconf pahole
         hx zellij btop rg fd fzf direnv gh delta
         wg
     )
@@ -61,6 +61,7 @@ pkg)
         cmake
         meson
         clang
+        pahole
         qemu-img
         qemu-system-aarch64
     )
