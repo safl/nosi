@@ -6,28 +6,29 @@
 # to "which image-build is this?" is one `cat` away:
 #
 #     $ cat /etc/nosi-release
-#     NOSI_VERSION=2026.05.26-4afcc92
+#     NOSI_VERSION=2026.W25
 #     NOSI_SHAPE=headless
 #     NOSI_VARIANT=ubuntu-2604-headless
 #     NOSI_DISTRO=ubuntu
 #     NOSI_DISTRO_VERSION=26.04
-#     NOSI_BUILT=2026-05-26T14:08:33Z
+#     NOSI_BUILT=2026-06-19T05:00:00Z
 #
 # The motd renderer (step 99, runs last) picks up VERSION + VARIANT from
 # this file so the login banner header reads, e.g.,
 #
-#     nosi headless (ubuntu-2604-headless, 2026.05.26-c2cba6b)   Ubuntu 26.04 LTS ...
+#     nosi headless (ubuntu-2604-headless, 2026.W25)   Ubuntu 26.04 LTS ...
 #
 # Version source (preference order):
 #   1. $NOSI_VERSION env var (operator override on a Hetzner-VM re-run)
 #   2. /opt/nosi/.nosi-version (written by cijoe/scripts/userdata_render.py
-#      at bake time, format YYYY.MM.DD-<7-char-sha>, matches the rolling
-#      tag in .github/workflows/build.yml)
-#   3. git describe on /opt/nosi if it's a git checkout (Hetzner-VM re-run)
+#      at bake time, format YYYY.WNN, matches the ISO-week rolling tag
+#      in .github/workflows/build.yml)
+#   3. date -u +'%G.W%V' on /opt/nosi if it's a git checkout (Hetzner-VM
+#      re-run, same format as #2)
 #   4. literal "unknown"
 #
 # Build timestamp is captured at apply-time, which on the bake path is
-# cloud-init runcmd time -- close enough to "when this image was baked"
+# cloud-init runcmd time, close enough to "when this image was baked"
 # for operator diagnostics. Idempotent: re-running on a system whose
 # build identity hasn't changed leaves the file (and its mtime) alone.
 
@@ -41,13 +42,11 @@ if [ -n "${NOSI_VERSION:-}" ]; then
     version="$NOSI_VERSION"
 elif [ -r /opt/nosi/.nosi-version ]; then
     version="$(head -n1 /opt/nosi/.nosi-version | tr -d '[:space:]')"
-elif [ -d /opt/nosi/.git ] && command -v git >/dev/null 2>&1; then
-    sha="$(git -C /opt/nosi rev-parse --short=7 HEAD 2>/dev/null || true)"
-    if [ -n "$sha" ]; then
-        version="$(date -u +%Y.%m.%d)-${sha}"
-    else
-        version="unknown"
-    fi
+elif [ -d /opt/nosi/.git ]; then
+    # Match userdata_render.py + build.yml: ISO-week tag, time-derived,
+    # no git short-sha appended.
+    version="$(date -u +'%G.W%V' 2>/dev/null || true)"
+    [ -n "$version" ] || version="unknown"
 else
     version="unknown"
 fi

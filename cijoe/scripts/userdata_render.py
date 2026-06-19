@@ -40,7 +40,6 @@ import gzip
 import io
 import logging as log
 import os
-import subprocess
 import tarfile
 from argparse import ArgumentParser
 from datetime import UTC, datetime
@@ -54,30 +53,33 @@ def _resolve_version(repo_root: Path) -> str:
     """Return the build identifier for this bake.
 
     Preference order:
-      1. ``NOSI_VERSION`` env var (the CI workflow can pin it).
-      2. ``YYYY.MM.DD-<shortsha>`` from ``git -C repo_root``, matching the
-         rolling-tag format produced by ``.github/workflows/build.yml``.
-      3. literal ``"unknown"`` (no git checkout, e.g. shipped tarball).
+      1. ``NOSI_VERSION`` env var (the CI workflow pins this to the
+         ISO-week rolling tag from .github/workflows/build.yml).
+      2. ``YYYY.WNN`` (ISO 8601 year + zero-padded ISO week) derived
+         from the current UTC time, matching what build.yml computes
+         via ``date -u +'%G.W%V'``. Used on a local bake where
+         ``NOSI_VERSION`` was not set.
+      3. literal ``"unknown"`` (no clock available; should not happen
+         on a real bake host).
 
     Captured here on the host so the baked image carries a stable
     identifier that survives ``cloud-init clean`` and is readable by
-    provision/steps/33-nosi-release.sh from /opt/nosi/.nosi-version.
+    provision/steps/05-nosi-release.sh from /opt/nosi/.nosi-version.
+
+    Note: a git short-sha is intentionally NOT appended any more.
+    Within a single ISO week multiple bakes share the W-tag (matching
+    the release policy: clobber within the week, durable across
+    weeks). For a per-commit identifier, set ``NOSI_VERSION`` from
+    the caller.
     """
     env_ver = os.environ.get("NOSI_VERSION")
     if env_ver:
         return env_ver.strip()
 
-    try:
-        sha = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "--short=7", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        date_tag = datetime.now(UTC).strftime("%Y.%m.%d")
-        return f"{date_tag}-{sha}"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
+    # repo_root is accepted for API stability with prior versions, but the
+    # ISO-week tag is purely time-derived now, so no git call is needed.
+    del repo_root
+    return datetime.now(UTC).strftime("%G.W%V")
 
 
 def add_args(parser: ArgumentParser):
@@ -169,8 +171,8 @@ def render(src: Path, provision_root: Path) -> str:
     Three markers are honoured, all optional and independent:
 
       * ``__NOSI_VERSION__`` is replaced inline anywhere in the template
-        with the build identifier (rolling-tag format from git, or the
-        ``NOSI_VERSION`` env var). Always substituted.
+        with the build identifier (ISO-week tag from the runner's clock,
+        or the ``NOSI_VERSION`` env var). Always substituted.
 
       * a single-quoted ``'__NOSI_PROVISION_TARBALL__'`` token (an echo
         argument in a ``runcmd`` item) is replaced with a one-line base64

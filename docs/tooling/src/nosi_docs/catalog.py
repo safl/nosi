@@ -2,7 +2,7 @@
 
 The bake writes /etc/nosi-metadata.json inside the VM; the smoketest
 scp's it out; the GHA push attaches it as an ORAS layer on each
-ghcr.io/safl/nosi/<variant>:<rolling> tag (and the :latest alias).
+ghcr.io/safl/nosi/<variant>:<iso-week-tag> (and the :latest alias).
 
 This module pulls the metadata layer for every published variant and
 renders a beautified catalog: a landing page (catalog/index.md) with a
@@ -253,7 +253,7 @@ def _render_docker_page(s: VariantSnapshot) -> str:
             "**Shape:** `docker` (OCI image)  ",
             "**Architecture:** `x86_64`  ",
             "**Kernel:** _none: kernel / boot / cloud-init stripped_  ",
-            "**Tag:** rolling `:latest` (plus a dated rolling tag per build)",
+            "**Tag:** rolling `:latest` (plus an ISO-week tag `:YYYY.WNN` per release)",
             "",
             "## Pull and run",
             "",

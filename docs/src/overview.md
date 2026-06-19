@@ -207,7 +207,7 @@ cijoe/
   scripts/derive_pack.py            # base qcow2 -> chroot --shape-only -> .img.gz / .tar.gz / .tar.zst / OCI
 variants.yml                        # per-variant metadata (shape, flashable, arch)
 descriptions/                       # one use-case blurb per variant (<name>.md)
-tools/gen_catalog.py                # variants.yml + descriptions/ -> catalog.toml
+tools/gen_catalog.py                # variants.yml + descriptions/ -> catalog.toml + catalog-latest.toml
 nosi-media/
   auxiliary/
     cloudinit-metadata.meta             # shared NoCloud meta-data

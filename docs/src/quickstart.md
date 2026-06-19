@@ -69,12 +69,13 @@ oras blob fetch --output - "${REPO}@${DIGEST}" \
     | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
-Same idea works against the rolling immutable tag (`YYYY.MM.DD-<sha>`)
+Same idea works against the weekly tag (`YYYY.WNN`, e.g. `2026.W25`)
 instead of `:latest` if you want a pinned reference; bty consumes by
 blob digest exactly because the digest is the only truly stable name.
 
-`oras repo tags ghcr.io/safl/nosi/<variant>` enumerates the rolling
-tags for a variant. See [](release.md) for the rolling-release model.
+`oras repo tags ghcr.io/safl/nosi/<variant>` enumerates the ISO-week
+tags for a variant. See [](release.md) for the weekly-release model
+and the within-week clobber semantics.
 
 ## Import a WSL2 rootfs (`ubuntu-2604-wsl`)
 
