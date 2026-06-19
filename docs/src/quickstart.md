@@ -81,8 +81,8 @@ tags for a variant. See [](release.md) for the rolling-release model.
 `ubuntu-2604-wsl` publishes a WSL2 rootfs tarball to its own GHCR
 repo (`ubuntu-2604-wsl`).
 
-With [`oras`](https://oras.land) on Windows -- install via `winget`
-(Microsoft's official package manager, present on Windows 10/11 out of
+With [`oras`](https://oras.land) on Windows (install via `winget`,
+Microsoft's official package manager, present on Windows 10/11 out of
 the box):
 
 ```powershell
@@ -103,7 +103,7 @@ The imported distro boots with `systemd=true` and default user `odus`
 (matching the flashable variant). The first boot regenerates SSH host
 keys and the machine-id; `nosi-motd.service` writes the banner. GUI
 tools (`meld`, `gitk`, `git-gui`) render via WSLg as native Windows
-windows -- no compositor in the rootfs.
+windows; no compositor lives in the rootfs.
 
 ## Create a Proxmox CT from an LXC template (`<distro>-lxc`)
 

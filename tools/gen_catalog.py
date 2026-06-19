@@ -6,26 +6,31 @@ shape / flashable / arch) and ``descriptions/<name>.md`` (one file per variant
 holding its use-case prose; ``descriptions/<name>.wsl.md`` for the wsl shape's
 separate rootfs blurb):
 
-1. ``--describe <variant>`` / ``--describe-wsl <variant>`` -- print one
+1. ``--describe <variant>`` / ``--describe-wsl <variant>``: print one
    variant's use-case prose. ``.github/workflows/build.yml`` calls these
    in its ORAS push steps so the ``org.opencontainers.image.description``
    annotation comes from the registry rather than an inline bash case.
 
-2. no flag (optional output path) -- emit a ``catalog.toml`` listing
-   every ``flashable: true`` variant as an ``oras://`` rolling-tag entry.
-   Published as a GitHub release asset; operators point bty at it:
+2. ``--ref-tag <tag> [output]``: emit a ``catalog.toml`` listing every
+   ``flashable: true`` variant as an ``oras://`` entry pinned to
+   ``:<ref-tag>``. The build workflow generates BOTH files per release
+   and uploads them as assets:
 
-       bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog.toml
+       gen_catalog.py --ref-tag "${ROLLING}" catalog.toml         # pinned
+       gen_catalog.py --ref-tag latest      catalog-latest.toml   # rolling
 
-The catalog is schema v1 (``bty.catalog``). Refs are rolling ``:latest``
-tags -- not pre-resolved to digests -- so an operator running the same
-URL months apart picks up whatever nosi rebuilt since, with the layer
-digest verified at flash time. The wsl rootfs is deliberately excluded
-(``flashable: false``): it is imported via ``wsl --import``, not flashed
-to a block device, so it has no place in a flashable catalog.
+   Operators point bty at one of:
+
+       https://github.com/safl/nosi/releases/download/<ROLLING>/catalog.toml
+       https://github.com/safl/nosi/releases/latest/download/catalog.toml
+       https://github.com/safl/nosi/releases/latest/download/catalog-latest.toml
+
+The catalog is schema v1 (``bty.catalog``). The wsl rootfs is deliberately
+excluded (``flashable: false``): it is imported via ``wsl --import``, not
+flashed to a block device, so it has no place in a flashable catalog.
 
 Unknown / mis-registered variants fail loud (non-zero exit, message on
-stderr) rather than emitting a placeholder -- a baked-but-unregistered
+stderr) rather than emitting a placeholder. A baked-but-unregistered
 variant should break the push, not ship a generic description.
 """
 
@@ -100,24 +105,69 @@ def _toml_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _render_catalog(variants: dict[str, dict]) -> str:
-    lines = [
-        "version = 1",
-        "",
-        "# nosi image catalog -- bty-compatible (schema v1). Generated from",
-        "# variants.yml by tools/gen_catalog.py and published as a GitHub",
-        "# release asset:",
-        "#",
-        "#   https://github.com/safl/nosi/releases/latest/download/catalog.toml",
-        "#",
-        "# Point bty at it:",
-        "#",
-        "#   bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog.toml",
-        "#",
-        "# Refs are rolling oras :latest tags; the layer digest is verified",
-        "# at flash time. The wsl rootfs is intentionally absent -- it is",
-        "# imported via `wsl --import`, not flashed to a block device.",
-    ]
+def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
+    """Render a catalog.toml. ``ref_tag`` is the oras tag baked into
+    every image's ``src`` (e.g. ``latest`` for the rolling escape
+    hatch, or a dated release tag like ``2026.06.16-7cf3895`` for a
+    frozen, content-pinned catalog).
+
+    The build workflow generates BOTH per release: ``catalog.toml``
+    with ``ref_tag=<rolling>`` (pinned to the release's dated tag) and
+    ``catalog-latest.toml`` with ``ref_tag=latest`` (always rolls).
+    Operators wanting reproducible flashes use ``catalog.toml`` (any
+    release); operators wanting whatever ghcr currently serves use
+    ``catalog-latest.toml``.
+    """
+    is_rolling = ref_tag == "latest"
+    label = "rolling" if is_rolling else ref_tag
+    if is_rolling:
+        header = [
+            "# nosi image catalog, bty-compatible (schema v1). Generated from",
+            "# variants.yml by tools/gen_catalog.py and published as a GitHub",
+            "# release asset:",
+            "#",
+            "#   https://github.com/safl/nosi/releases/latest/download/catalog-latest.toml",
+            "#",
+            "# Point bty at it:",
+            "#",
+            "#   bty --catalog https://github.com/safl/nosi/releases/latest/download/catalog-latest.toml",
+            "#",
+            "# Refs are rolling oras :latest tags; the layer digest is verified",
+            "# at flash time. The wsl rootfs is intentionally absent (it is",
+            "# imported via `wsl --import`, not flashed to a block device).",
+            "#",
+            "# For content-pinned flashes (same bytes every time), use the",
+            "# sibling catalog.toml from the same release: it carries refs",
+            "# pinned to the release's ISO-week tag.",
+        ]
+    else:
+        header = [
+            "# nosi image catalog, bty-compatible (schema v1). Generated from",
+            "# variants.yml by tools/gen_catalog.py and published as a GitHub",
+            f"# release asset, pinned to oras tag :{ref_tag}.",
+            "#",
+            "# Pinned form (this file):",
+            f"#   https://github.com/safl/nosi/releases/download/{ref_tag}/catalog.toml",
+            "#",
+            "# Or always-latest pointer (auto-bumps with each release;",
+            "# refs inside are pinned to whatever tag was current at",
+            "# fetch time):",
+            "#   https://github.com/safl/nosi/releases/latest/download/catalog.toml",
+            "#",
+            "# Point bty at it:",
+            "#",
+            f"#   bty --catalog https://github.com/safl/nosi/releases/download/{ref_tag}/catalog.toml",
+            "#",
+            "# Refs are pinned to a specific build, so an operator running",
+            "# the same URL months apart picks up identical bytes (the layer",
+            "# digest is still verified at flash time as a tamper check). The",
+            "# wsl rootfs is intentionally absent (it is imported via",
+            "# `wsl --import`, not flashed to a block device).",
+            "#",
+            "# For a rolling oras :latest catalog (always whatever ghcr",
+            "# currently serves), use catalog-latest.toml from this release.",
+        ]
+    lines = ["version = 1", "", *header]
     for name in variants:  # insertion order == registry order
         entry = variants[name]
         if not entry.get("flashable"):
@@ -127,8 +177,8 @@ def _render_catalog(variants: dict[str, dict]) -> str:
         lines += [
             "",
             "[[images]]",
-            f'name = "nosi {name} ({arch}, rolling)"',
-            f'src = "oras://{ORAS_NAMESPACE}/{name}:latest"',
+            f'name = "nosi {name} ({arch}, {label})"',
+            f'src = "oras://{ORAS_NAMESPACE}/{name}:{ref_tag}"',
             'format = "img.gz"',
             # Emitted as a structured field (not just baked into the
             # human-readable name above) so bty's catalog parser picks
@@ -151,6 +201,15 @@ def main(argv: list[str]) -> int:
         "--describe-wsl", metavar="VARIANT", help="print the variant's wsl_description"
     )
     parser.add_argument(
+        "--ref-tag",
+        default="latest",
+        help=(
+            "oras tag baked into each image's src (default: 'latest' for the"
+            " rolling catalog; pass the release's dated tag like"
+            " '2026.06.16-7cf3895' for a content-pinned catalog)"
+        ),
+    )
+    parser.add_argument(
         "output",
         nargs="?",
         help="catalog.toml output path (default: stdout) when no --describe* flag is given",
@@ -166,7 +225,7 @@ def main(argv: list[str]) -> int:
         print(_describe(variants, args.describe_wsl, key="wsl_description"))
         return 0
 
-    rendered = _render_catalog(variants)
+    rendered = _render_catalog(variants, ref_tag=args.ref_tag)
     # Parse-back round-trip so a malformed render fails here, not in a
     # consumer. tomllib is stdlib on 3.11+.
     import tomllib

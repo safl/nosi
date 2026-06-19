@@ -43,9 +43,9 @@ GHCR_PREFIX = "ghcr.io/safl/nosi"
 def known_variants(repo_root: Path) -> tuple[tuple[str, str, str], ...]:
     """(name, ref, shape) for every variant nosi publishes to GHCR.
 
-    Derived from variants.yml -- the same registry that drives the build
-    annotations and gen_catalog -- instead of a hand-maintained list here,
-    which had already drifted seven variants behind the fleet once.
+    Derived from variants.yml, the same registry that drives the build
+    annotations and gen_catalog. A single source of truth keeps this list
+    in lockstep with the fleet.
 
     The `docker` shape is included so the catalog covers every offering, but
     it is rendered differently: it is a `docker import` OCI image without the
@@ -138,7 +138,7 @@ def _fetch_variant(name: str, ref: str, shape: str, repo_root: Path) -> VariantS
         snap.error = "oras CLI not found on PATH"
         return snap
     try:
-        # 1. Manifest fetch -- gives us the layer index + media types.
+        # 1. Manifest fetch: gives us the layer index + media types.
         mres = subprocess.run(
             ["oras", "manifest", "fetch", ref],
             check=True,
@@ -162,7 +162,7 @@ def _fetch_variant(name: str, ref: str, shape: str, repo_root: Path) -> VariantS
         if digest is None:
             snap.error = f"no {METADATA_MEDIA_TYPE} layer in manifest"
             return snap
-        # 2. Blob fetch -- the metadata.json bytes themselves.
+        # 2. Blob fetch: the metadata.json bytes themselves.
         # The repo part of the ref is everything before the tag; oras
         # blob fetch wants <repo>@<digest>.
         repo = ref.rsplit(":", 1)[0] if ":" in ref.rsplit("/", 1)[-1] else ref
@@ -175,7 +175,7 @@ def _fetch_variant(name: str, ref: str, shape: str, repo_root: Path) -> VariantS
         )
         snap.metadata = json.loads(bres.stdout)
     except subprocess.TimeoutExpired as exc:
-        # A slow GHCR fetch must not kill the whole catalog build -- record it
+        # A slow GHCR fetch must not kill the whole catalog build; record it
         # as this variant's error and let the rest render, same as any other
         # per-variant fetch failure below.
         snap.error = f"oras fetch of {ref} timed out after {exc.timeout:.0f}s"

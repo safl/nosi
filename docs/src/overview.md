@@ -9,7 +9,7 @@ image to a specific deployment workflow.
 
 ## Shapes
 
-Every nosi variant is **the nosi flavor of `<upstream>`** -- the
+Every nosi variant is **the nosi flavor of `<upstream>`**: the
 opinionated layer nosi puts on top of a stock cloud image. The
 suffix in the variant name describes the **shape** the system takes:
 how it's deployed, what kind of hardware or environment it's for.
@@ -43,7 +43,7 @@ are **derived** from it (see [the layered model](#the-layered-model)):
   a `.tar.gz` consumable by `wsl --import`.
 - **`docker`** : the headless base (qemu + cijoe already in it),
   kernel / boot / cloud-init stripped and packaged as an OCI image via
-  `docker import` -- so this shape is purely a packaging derivation, no
+  `docker import`, so this shape is purely a packaging derivation, no
   extra tools. A CI bootstrap host: a Linux environment that launches
   qemu guests via cijoe (nested KVM on GitHub Actions when the job runs
   `--privileged` / passes `/dev/kvm`, or real device passthrough on
