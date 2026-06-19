@@ -180,7 +180,7 @@ jobs:
 
       - name: Show built-image sizes
         # Runs on every event (including PRs) and even if a later step
-        # fails -- so the base qcow2 + .img.gz and every derived artifact
+        # fails, so the base qcow2 + .img.gz and every derived artifact
         # (.tar.gz for wsl, derived .img.gz for desktop) are visible before
         # the upload + GHCR-push. The docker shape lands in the local docker
         # daemon rather than a file, so it's reported via `docker images`.
@@ -193,8 +193,8 @@ jobs:
           {
             echo "### \`${IMG}\` built-image sizes"
             echo
-            # "Flashed" is the decompressed (raw) size -- what `dd` actually
-            # writes -- measured by streaming the .img.gz through wc, so the
+            # "Flashed" is the decompressed (raw) size, what `dd` actually
+            # writes, measured by streaming the .img.gz through wc, so the
             # shrink-to-fit is visible and a silent regression (raw back to the
             # full bake disk) can't hide behind gzip squashing the zeros.
             echo "| File | Size | Flashed (raw) | Bytes |"
@@ -258,16 +258,14 @@ jobs:
       - name: Compute rolling tag
         if: env.PUBLISH == 'true'
         id: tag
-        env:
-          SHA: ${{ github.sha }}
         run: |
-          # Use GHA-provided SHA rather than `git rev-parse`: cijoe ran parts
-          # of the build as root, which trips git's safe.directory check
-          # ("dubious ownership in /__w/nosi/nosi") when the rolling-tag step
-          # then runs as the runner user.
-          date_tag=$(date -u +'%Y.%m.%d')
-          short=${SHA:0:7}
-          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+          # ISO-week tag (YYYY.WNN): %G is the ISO 8601 year (which can
+          # differ from the calendar year for a few days around year-end),
+          # %V is the zero-padded ISO week 01-53. Multiple pushes within
+          # the same week reuse the same tag and clobber prior bytes on
+          # both ghcr and the GitHub release; intentional, per the
+          # "weekly cadence, clobber within the week" policy.
+          echo "rolling=$(date -u +'%G.W%V')" >> "$GITHUB_OUTPUT"
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
@@ -516,9 +514,9 @@ jobs:
       - name: Compute rolling tag
         if: env.PUBLISH == 'true'
         id: tag
-        env:
-          SHA: ${{ github.sha }}
-        run: echo "rolling=$(date -u +'%Y.%m.%d')-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+        # ISO-week tag; see the comment on the build job's identical step
+        # for the cadence policy.
+        run: echo "rolling=$(date -u +'%G.W%V')" >> "$GITHUB_OUTPUT"
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
@@ -596,8 +594,8 @@ jobs:
     # Raspberry Pi OS (arm64) for Pi 4 + Pi 5. Not a QEMU bake: Raspberry Pi
     # OS does not boot in a generic QEMU `virt` machine, so the image is
     # customized in place via loop-mount + chroot (rpi_image_build). Runs on
-    # an arm64 hosted runner so the chroot is NATIVE -- no qemu-user
-    # emulation. One leg emits the headless base AND the desktop derive (the
+    # an arm64 hosted runner so the chroot is NATIVE (no qemu-user
+    # emulation). One leg emits the headless base AND the desktop derive (the
     # build/smoketest/pack scripts each process base + derives in one go).
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -705,12 +703,9 @@ jobs:
       - name: Compute rolling tag
         if: env.PUBLISH == 'true'
         id: tag
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          date_tag=$(date -u +'%Y.%m.%d')
-          short=${SHA:0:7}
-          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+        # ISO-week tag; see the comment on the x86 build job's identical
+        # step for the cadence policy.
+        run: echo "rolling=$(date -u +'%G.W%V')" >> "$GITHUB_OUTPUT"
 
       - name: Set up oras
         if: env.PUBLISH == 'true'
@@ -780,7 +775,7 @@ jobs:
     # Runs once (not per-variant) AFTER every base + derived shape + the Pi
     # built and pushed, so the catalog only advertises images that actually
     # shipped. needs: [build, derive, build-rpi] means one failed leg (a base,
-    # any derived shape, or the Pi) blocks the catalog -- deliberate: the
+    # any derived shape, or the Pi) blocks the catalog. Deliberate: the
     # catalog should not point at an image whose build broke.
     # PRs don't publish (same gate as the per-variant GHCR push).
     needs: [build, derive, build-rpi]
@@ -800,28 +795,59 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-yaml
 
-      - name: Generate catalog.toml from variants.yml
-        run: python3 tools/gen_catalog.py catalog.toml
-
       - name: Compute rolling tag
         id: tag
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          # Same scheme as the build job's rolling tag (date + short sha),
-          # recomputed here so this job doesn't depend on a matrix output.
-          date_tag=$(date -u +'%Y.%m.%d')
-          short=${SHA:0:7}
-          echo "rolling=${date_tag}-${short}" >> "$GITHUB_OUTPUT"
+        # Same ISO-week scheme as the build / derive / Pi jobs, recomputed
+        # here so this job doesn't depend on a matrix output. See the
+        # x86 build job's identical step for the cadence policy.
+        run: echo "rolling=$(date -u +'%G.W%V')" >> "$GITHUB_OUTPUT"
 
-      - name: Publish catalog.toml as a rolling release asset
+      - name: Generate catalog.toml (pinned to this release's dated tag) and catalog-latest.toml (rolling :latest)
+        env:
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+        run: |
+          # Two catalogs per release, both uploaded as assets:
+          #   catalog.toml         : refs pinned to :${ROLLING}; same bytes
+          #                          every flash for as long as the ghcr tag
+          #                          exists. This is the default an operator
+          #                          wants if they care about reproducibility.
+          #   catalog-latest.toml  : refs as :latest; rolling escape hatch
+          #                          for operators who want "whatever ghcr
+          #                          currently serves" without pinning their
+          #                          catalog URL.
+          # Both files are uploaded to EVERY release, so the URL/file pair
+          # decides the policy:
+          #   releases/<tag>/download/catalog.toml          -> frozen at <tag>
+          #   releases/latest/download/catalog.toml         -> rolls forward;
+          #                                                    each fetch is
+          #                                                    internally
+          #                                                    pinned
+          #   releases/<tag>/download/catalog-latest.toml   -> always :latest
+          #   releases/latest/download/catalog-latest.toml  -> always :latest
+          python3 tools/gen_catalog.py --ref-tag "${ROLLING}" catalog.toml
+          python3 tools/gen_catalog.py --ref-tag latest      catalog-latest.toml
+
+      - name: Publish catalog.toml + catalog-latest.toml as rolling release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           ROLLING: ${{ steps.tag.outputs.rolling }}
         run: |
           set -eu
-          notes="Rolling nosi image catalog (schema v1). Flash nosi images with bty: bty --catalog https://github.com/${REPO}/releases/latest/download/catalog.toml -- refs are oras :latest tags, the layer digest is verified at flash time."
+          # Build release notes via printf so each line stays properly
+          # indented inside this YAML literal-scalar block (a column-1
+          # ``*`` would otherwise look like a YAML alias to the parser).
+          notes=$(printf '%s\n' \
+              "nosi image catalog (schema v1). Two flavours:" \
+              "" \
+              "* \`catalog.toml\`        : refs pinned to \`:${ROLLING}\`; reproducible flashes" \
+              "* \`catalog-latest.toml\` : refs as \`:latest\`; rolling escape hatch" \
+              "" \
+              "Flash with bty:" \
+              "\`\`\`" \
+              "bty --catalog https://github.com/${REPO}/releases/latest/download/catalog.toml" \
+              "\`\`\`" \
+              "The layer digest is verified at flash time regardless of tag policy.")
           # Idempotent: a re-dispatch on the same commit reuses the tag, so
           # create-or-clobber. --latest makes releases/latest/download/
           # resolve to this asset. Retried because the GitHub API has the
@@ -829,9 +855,9 @@ jobs:
           # safe (worst case the asset is clobbered with identical bytes).
           publish_catalog() {
               if gh release view "${ROLLING}" >/dev/null 2>&1; then
-                  gh release upload "${ROLLING}" catalog.toml --clobber
+                  gh release upload "${ROLLING}" catalog.toml catalog-latest.toml --clobber
               else
-                  gh release create "${ROLLING}" catalog.toml \
+                  gh release create "${ROLLING}" catalog.toml catalog-latest.toml \
                       --latest \
                       --title "nosi ${ROLLING}" \
                       --notes "${notes}"
