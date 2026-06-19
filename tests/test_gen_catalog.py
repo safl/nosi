@@ -63,18 +63,24 @@ def test_describe_unknown_variant_fails_loudly(registry):
         gen_catalog._describe(registry, "no-such-variant", key="description")
 
 
-def test_catalog_lists_only_flashable(registry):
-    out = gen_catalog._render_catalog(registry)
-    for name, spec in registry.items():
-        # The unique per-image marker is the oras src `.../<name>:latest`,
-        # not a bare name substring and not `[images.<name>]` (the renderer
-        # emits `[[images]]` table-arrays, so that bracket form never appears
-        # and asserting its absence proved nothing).
-        ref = f"/{name}:latest"
-        if spec["flashable"]:
-            assert ref in out, f"flashable {name} missing from catalog.toml"
-        else:
-            assert ref not in out, f"non-flashable {name} leaked into catalog.toml"
+def test_catalog_lists_only_flashable_for_each_ref_tag(registry):
+    """Both render modes (rolling ``:latest`` and a pinned ``:YYYY.WNN``)
+    must carry every flashable variant and omit every non-flashable one.
+    The unique per-image marker is the oras src ``.../<name>:<ref-tag>``,
+    not a bare name substring and not ``[images.<name>]``: the renderer
+    emits ``[[images]]`` table-arrays, so the bracket form never appears
+    and asserting its absence would prove nothing.
+    """
+    for ref_tag in ("latest", "2026.W25"):
+        out = gen_catalog._render_catalog(registry, ref_tag=ref_tag)
+        for name, spec in registry.items():
+            ref = f"/{name}:{ref_tag}"
+            if spec["flashable"]:
+                assert ref in out, f"flashable {name} missing from catalog (ref_tag={ref_tag})"
+            else:
+                assert ref not in out, (
+                    f"non-flashable {name} leaked into catalog (ref_tag={ref_tag})"
+                )
 
 
 def test_catalog_parses_and_every_image_is_complete(registry):
@@ -82,7 +88,7 @@ def test_catalog_parses_and_every_image_is_complete(registry):
     bty needs, so a renderer regression fails here, not in bty."""
     import tomllib
 
-    doc = tomllib.loads(gen_catalog._render_catalog(registry))
+    doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
     assert doc.get("version") == 1
     flashable = [n for n, s in registry.items() if s["flashable"]]
     assert len(doc.get("images", [])) == len(flashable)
@@ -99,7 +105,7 @@ def test_arch_field_matches_registry(registry):
     a renderer drift where ``arch`` is hard-coded or lost."""
     import tomllib
 
-    doc = tomllib.loads(gen_catalog._render_catalog(registry))
+    doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
     by_variant = {
         img["src"].rsplit("/", 1)[1].split(":", 1)[0]: img["arch"] for img in doc["images"]
     }
@@ -110,3 +116,19 @@ def test_arch_field_matches_registry(registry):
         assert by_variant[name] == expected, (
             f"{name}: catalog arch {by_variant[name]!r} != registry {expected!r}"
         )
+
+
+def test_pinned_catalog_refs_pin_to_ref_tag(registry):
+    """A ``ref_tag`` other than ``latest`` must show up in every emitted
+    oras src AND in each image's ``name`` label. Otherwise the dual-
+    catalog model (rolling vs frozen) silently degrades to two copies
+    of the same rolling catalog.
+    """
+    import tomllib
+
+    doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="2026.W25"))
+    for img in doc["images"]:
+        assert img["src"].endswith(":2026.W25"), (
+            f"{img['name']}: src {img['src']} not pinned to :2026.W25"
+        )
+        assert "2026.W25" in img["name"], f"{img['name']}: human-readable label missing the W-tag"
