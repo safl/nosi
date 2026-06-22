@@ -646,6 +646,15 @@ def _run_assertions(
             "test -f /usr/src/sys/conf/kern.pre.mk && test -d /usr/src/sys/dev && echo ok",
             lambda rc, out: (out == "ok", out or f"exit {rc}"),
         )
+        # ---- serial console for IPMI SOL (step 33) -----------------------
+        # loader.conf routes the console to comconsole (uart0 = COM1), the
+        # port a server BMC bridges for Serial-over-LAN. vidconsole stays
+        # first so the normal video path still prints.
+        check(
+            "loader.conf routes console to comconsole (IPMI SOL)",
+            "grep comconsole /boot/loader.conf || true",
+            lambda rc, out: ("comconsole" in out, out or "no comconsole in /boot/loader.conf"),
+        )
         # ---- apply.sh parity surface (Phase 2a) --------------------------
         # apply-ok is the whole-chain sentinel (last line of apply.sh, only
         # reached if every step succeeded under set -e); its absence means
@@ -848,6 +857,24 @@ def _run_assertions(
             "| grep -q '^enabled$' && echo ok",
             lambda rc, out: (out == "ok", out or "neither enabled"),
         )
+
+    # ---- serial console for IPMI SOL (step 33) ---------------------------
+    # The kernel cmdline carries console=ttyS0,115200n8 so boot output and a
+    # login land on COM1 -- the UART a server BMC bridges for IPMI
+    # Serial-over-LAN (and a plain serial cable). tty0 stays first so the
+    # normal video console still gets everything. systemd's getty generator
+    # auto-spawns serial-getty@ttyS0 once ttyS0 is a console, which is what
+    # carries the SOL login prompt.
+    check(
+        "console=ttyS0 on the kernel cmdline (IPMI SOL)",
+        "grep -q 'console=ttyS0' /proc/cmdline && echo ok",
+        lambda rc, out: (out == "ok", out or "no console=ttyS0 in /proc/cmdline"),
+    )
+    check(
+        "serial-getty@ttyS0 active (SOL login prompt)",
+        "systemctl is-active serial-getty@ttyS0.service",
+        lambda rc, out: (out.strip() == "active", out or f"exit {rc}"),
+    )
 
     # ---- ModemManager actually gone --------------------------------------
     # systemctl is-active prints "active" / "inactive" / "failed" to stdout
