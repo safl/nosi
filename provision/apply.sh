@@ -123,6 +123,7 @@ BASE_STEPS=(
     30-clock-from-http
     31-root-lock
     32-firstboot-inventory
+    33-serial-console
     45-nosi-addons
 )
 
@@ -150,8 +151,9 @@ FINAL_STEPS=(
 )
 
 # FreeBSD step set. Phase 2a landed the critical path (06/08/09/28);
-# Phase 2b adds the dev tooling + niceties (12/20/21/22) and the
-# clock/inventory steps (30/32), each with a FreeBSD branch. Still
+# Phase 2b adds the dev tooling + niceties (12/20/21/22), the
+# clock/inventory steps (30/32), and the serial console (33), each with
+# a FreeBSD branch. Still
 # Linux-only (no FreeBSD analogue): 10-r8125-dkms, 15-nouveau-blacklist,
 # 23-userspace-pci (vfio/sysfs), 24-podman-setup, 25-iommu-cmdline (grub),
 # 26-daemon-prune (systemd), 27-snapd-disable, 29-rotate-password,
@@ -172,6 +174,7 @@ FREEBSD_BASE_STEPS=(
     30-clock-from-http
     31-root-lock
     32-firstboot-inventory
+    33-serial-console
 )
 
 is_freebsd=0
