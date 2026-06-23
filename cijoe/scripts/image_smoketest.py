@@ -873,7 +873,9 @@ def _run_assertions(
     # Serial-over-LAN (and a plain serial cable). tty0 stays first so the
     # normal video console still gets everything. systemd's getty generator
     # auto-spawns serial-getty@ttyS0 once ttyS0 is a console, which is what
-    # carries the SOL login prompt.
+    # carries the SOL login prompt. QEMU q35 always provides ttyS0, so this
+    # certifies the image is wired right; a real box also needs its BMC to
+    # bridge COM1 to SOL, which the image cannot assert.
     check(
         "console=ttyS0 on the kernel cmdline (IPMI SOL)",
         "grep -q 'console=ttyS0' /proc/cmdline && echo ok",
