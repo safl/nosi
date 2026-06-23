@@ -190,12 +190,13 @@ fi
 # carries across reboots. --asterisks shows password masking instead
 # of nothing. Greeting line keeps it on-brand.
 #
-# vt = 7 (NOT 1): tty1 is the kernel + systemd console (cmdline carries
-# console=tty1), so a greeter on vt1 gets scribbled over by late-boot
-# "[ OK ] Started ..." lines and kernel chatter -- a torn greeter. tty7
-# is the conventional display-manager VT (the packaged greetd.service
-# already Conflicts=getty@tty7), so the greeter renders clean there and
-# tty1 keeps its normal boot console + login.
+# vt = 7 (NOT 1): the kernel + systemd console lands on the foreground VT
+# (the base cmdline carries console=tty0 console=ttyS0,115200n8), so a
+# greeter on vt1 gets scribbled over by late-boot "[ OK ] Started ..."
+# lines and kernel chatter, a torn greeter. tty7 is the conventional
+# display-manager VT (the packaged greetd.service already
+# Conflicts=getty@tty7), so the greeter renders clean there and tty1
+# keeps its normal boot console + login.
 #
 # Heredoc is unquoted so ${GREETER_CMD} (set per-distro above) expands; the
 # rest of the file carries no shell metacharacters, so expansion is safe.
@@ -945,8 +946,8 @@ systemctl enable greetd.service
 systemctl set-default graphical.target
 
 # Note: the greeter runs on vt7 (see the greetd config above), away from
-# the kernel/systemd console on tty1, so getty@tty1 is left alone -- tty1
-# keeps its normal console + login. greetd.service already
+# the foreground-VT kernel/systemd console, so getty@tty1 is left alone
+# and tty1 keeps its normal console + login. greetd.service already
 # Conflicts=getty@tty7, so the greeter VT has no competing getty.
 
 # ---- enable CUPS + Avahi for printing ------------------------------
