@@ -11,8 +11,10 @@ prove apply.sh ran end-to-end.
 
 What this covers vs. the x86 smoketest:
   * identity / sentinel / metadata files, operator account, tool binaries,
-    root-lock, sshd drop-in + the keygen oneshot being enabled -- all checked
-    from the filesystem, so a step that silently no-op'd is caught.
+    root-lock, sshd drop-in + the keygen oneshot being enabled, and the
+    serial-console firmware files (cmdline.txt / config.txt on the FAT
+    partition), all checked from the filesystem, so a step that silently
+    no-op'd is caught.
   * NOT covered: a live boot. There is no SSH/runtime assertion here, so a
     binary that is present-but-broken or a unit that fails only at boot is not
     caught. A real-Pi CI runner that flashes + boots is the follow-up that
@@ -31,6 +33,7 @@ import errno
 import json
 import logging as log
 import os
+import re
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -87,7 +90,7 @@ def _smoke_one(cijoe, repo_root: Path, image_name: str, image: dict, variant: st
         cleanup.append(f"sudo losetup -d {loopdev} 2>/dev/null || true")
         cijoe.run_local(f"sudo partprobe {loopdev} >/dev/null 2>&1 || true")
 
-        root_part, _ = _partitions(cijoe, loopdev)
+        root_part, boot_part = _partitions(cijoe, loopdev)
         if not root_part:
             log.error(f"{image_name}: no ext4 root partition found")
             return True
@@ -100,6 +103,14 @@ def _smoke_one(cijoe, repo_root: Path, image_name: str, image: dict, variant: st
         # cleanup runs in reverse: append rmdir before the umount it depends on.
         cleanup.append(f"sudo rmdir {mnt} 2>/dev/null || true")
         cleanup.append(f"sudo umount {mnt} 2>/dev/null || true")
+
+        # Mount the FAT firmware partition too: cmdline.txt / config.txt
+        # (step 33's serial console) live there, not on the rootfs. Appended
+        # last so the reverse-order cleanup unmounts it before the rootfs it
+        # nests under.
+        if boot_part:
+            cijoe.run_local(f"sudo mount -o ro {boot_part} {mnt}/boot/firmware")
+            cleanup.append(f"sudo umount {mnt}/boot/firmware 2>/dev/null || true")
 
         _run_checks(cijoe, mnt, variant, failures)
     finally:
@@ -193,6 +204,22 @@ def _run_checks(cijoe, mnt: Path, variant: str, failures: list[str]) -> None:
         failures.append("/usr/local/sbin/tailscaled missing (step 20)")
     if _exists(cijoe, mnt / "etc/systemd/system/multi-user.target.wants/tailscaled.service"):
         failures.append("tailscaled.service is enabled (must ship dormant)")
+
+    # ---- serial console (step 33) -----------------------------------------
+    # The Pi has no BMC, so this is the GPIO UART rather than IPMI SOL, but
+    # step 33 still runs in the Linux base list. Assert the firmware files it
+    # guarantees: a serial console on the cmdline and enable_uart pinning the
+    # UART clock. Both live on the FAT firmware partition (boot/firmware).
+    cmdline = _read(cijoe, mnt / "boot/firmware/cmdline.txt")
+    if cmdline is None:
+        failures.append("/boot/firmware/cmdline.txt unreadable (firmware partition not mounted?)")
+    elif not re.search(r"console=(serial0|ttyAMA0|ttyS0)", cmdline):
+        failures.append("/boot/firmware/cmdline.txt has no serial console (step 33)")
+    config = _read(cijoe, mnt / "boot/firmware/config.txt")
+    if config is None:
+        failures.append("/boot/firmware/config.txt unreadable")
+    elif not re.search(r"(?m)^enable_uart=1\b", config):
+        failures.append("/boot/firmware/config.txt missing enable_uart=1 (step 33)")
 
     # ---- arm64 guards held (x86-only steps must NOT have run) --------------
     if _exists(cijoe, mnt / "etc/modprobe.d/nosi-r8125.conf"):

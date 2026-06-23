@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/33-serial-console.sh
 #
-# Put the kernel console (boot messages + a login prompt) on the first
+# Put the kernel console (boot messages plus a login prompt) on the first
 # serial port so the box is reachable over a server BMC's IPMI
-# Serial-over-LAN, and over a plain serial cable. The video console is
-# kept as well, so a machine used the normal way still prints to screen.
+# Serial-over-LAN, and over a plain serial cable. The video console is kept
+# as well, so a machine used the normal way still prints to screen.
 #
-# Three boot stacks, three mechanisms -- this step is the one place that
+# Three boot stacks, three mechanisms, and this step is the one place that
 # knows all three:
 #
 #   apt/dnf (x86): grub cmdline  -> console=tty0 console=ttyS0,115200n8
@@ -17,9 +17,9 @@
 #                  the GPIO UART (no BMC on a Pi; read with a USB-TTL cable).
 #
 # Most x86 cloud bases already ship console=ttyS0, so on those this step
-# detects it and is a no-op. It exists to GUARANTEE the console across
-# every base (and to back the smoketest's hard assertion), not to assume
-# upstream keeps doing it.
+# detects it and is a no-op. It exists to GUARANTEE the console across every
+# base (and to back the smoketest's hard assertion), not to assume upstream
+# keeps doing it.
 #
 # Idempotent: each branch checks for an existing serial console before
 # writing, so a re-run changes nothing. Takes effect on the next boot.
@@ -35,11 +35,11 @@ if nosi_is_wsl; then
 fi
 
 # ---- Raspberry Pi: firmware partition, not grub ---------------------------
-# The Pi boot path has no grub; kernel args live in cmdline.txt and the
-# UART clock is pinned in config.txt. rpi_image_build mounts the FAT
-# firmware partition at /boot/firmware before running apply.sh, so these
-# files are present in the bake chroot. Detect the Pi by that file rather
-# than by arch, so a non-Pi arm64 box never half-writes a Pi config.
+# The Pi boot path has no grub; kernel args live in cmdline.txt and the UART
+# clock is pinned in config.txt. rpi_image_build mounts the FAT firmware
+# partition at /boot/firmware before running apply.sh, so these files are
+# present in the bake chroot. Detect the Pi by that file rather than by arch,
+# so a non-Pi arm64 box never half-writes a Pi config.
 if [ -f /boot/firmware/cmdline.txt ]; then
     nosi_require_root
 
@@ -75,79 +75,64 @@ fi
 
 nosi_require_root
 
-case "$NOSI_PKGMGR" in
-apt | dnf)
-    # ttyS0 is an x86 UART and the grub/grubby plumbing below is x86-only.
-    # Any non-Pi non-x86 box (none ship today) is left untouched.
-    case "$(uname -m)" in
-    x86_64 | amd64) : ;;
-    *)
-        nosi_info "non-x86 arch ($(uname -m)); skipping (serial console is x86 grub here)"
-        exit 0
-        ;;
-    esac
-
-    # Decide what is missing. Look across /etc/default/grub AND the
-    # /etc/default/grub.d snippets the cloud images drop their console
-    # settings into, so an already-present console=ttyS0 is never
-    # duplicated. tty0 keeps the video console; ttyS0 adds COM1.
-    GRUB=/etc/default/grub
-    has_serial() { grep -rqE 'console=ttyS0' "$GRUB" /etc/default/grub.d 2>/dev/null; }
-    has_video() { grep -rqE 'console=tty[01]([,"[:space:]]|$)' "$GRUB" /etc/default/grub.d 2>/dev/null; }
-    ;;
-pkg)
-    : # handled in its own branch below
-    ;;
+# Everything past here is x86: the Pi returned above and the nosi FreeBSD
+# images are x86_64. Guard anyway so a future non-x86 base (where ttyS0 /
+# comconsole = uart0 may not be the right device) skips rather than writing a
+# config that never applies.
+case "$(uname -m)" in
+x86_64 | amd64) : ;;
 *)
-    nosi_info "no serial-console plumbing for pkgmgr=$NOSI_PKGMGR; skipping"
+    nosi_info "non-x86 arch ($(uname -m)); skipping (x86 serial console only)"
     exit 0
     ;;
 esac
 
 case "$NOSI_PKGMGR" in
 apt)
+    GRUB=/etc/default/grub
     [ -f "$GRUB" ] || {
         nosi_warn "$GRUB missing; cannot set serial console"
         exit 0
     }
 
+    # Detection scans /etc/default/grub AND the /etc/default/grub.d snippets
+    # the cloud images drop their console settings into, so an already-present
+    # console=ttyS0 is never duplicated. tty0 keeps the video console.
+    has_serial() { grep -rqE 'console=ttyS0' "$GRUB" /etc/default/grub.d 2>/dev/null; }
+    has_video() { grep -rqE 'console=tty[01]([,"[:space:]]|$)' "$GRUB" /etc/default/grub.d 2>/dev/null; }
+
     want=""
     has_serial || want="console=ttyS0,115200n8"
     has_video || want="console=tty0${want:+ $want}"
-
-    if [ -z "$want" ]; then
+    [ -n "$want" ] || {
         nosi_info "serial console already on the grub cmdline; nothing to do"
         exit 0
-    fi
+    }
 
-    if grep -q '^GRUB_CMDLINE_LINUX=' "$GRUB"; then
-        sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${want}\"/" "$GRUB"
-    else
-        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$want" >> "$GRUB"
-    fi
     nosi_info "grub cmdline += ${want}"
-    update-grub
+    nosi_grub_cmdline_add "$want"
     ;;
 dnf)
+    # grubby --info=ALL emits one args= line per installed kernel. At bake
+    # time there is a single kernel, so the across-all-kernels grep is exact;
+    # the eventual update targets ALL kernels regardless.
     cur="$(grubby --info=ALL 2>/dev/null | grep -E '^args=' || true)"
     want=""
     printf '%s\n' "$cur" | grep -q 'console=ttyS0' || want="console=ttyS0,115200n8"
     printf '%s\n' "$cur" | grep -qE 'console=tty[01]([,"[:space:]]|$)' || want="console=tty0${want:+ $want}"
-
-    if [ -z "$want" ]; then
+    [ -n "$want" ] || {
         nosi_info "serial console already on the kernel args; nothing to do"
         exit 0
-    fi
+    }
     nosi_info "grubby args += ${want}"
     grubby --update-kernel=ALL --args="$want"
     ;;
 pkg)
     # FreeBSD: loader.conf is the cmdline equivalent. Dual console with
-    # vidconsole FIRST keeps video as the primary console (normal-use
-    # output) while comconsole (uart0 = COM1) mirrors to the serial line
-    # for IPMI SOL. Rewrite in place: drop any existing console= /
-    # comconsole_speed= lines, then append the canonical pair, so a re-run
-    # converges to the same file.
+    # vidconsole FIRST keeps video as the primary console (normal-use output)
+    # while comconsole (uart0 = COM1) mirrors to the serial line for IPMI SOL.
+    # Rewrite in place: drop any existing console= / comconsole_speed= lines,
+    # then append the canonical pair, so a re-run converges to the same file.
     LOADER=/boot/loader.conf
     touch "$LOADER"
     tmp="$(mktemp)"
@@ -162,13 +147,17 @@ pkg)
 
     # getty on the serial port. The stock FreeBSD /etc/ttys ttyu0 line uses
     # `onifconsole`, which spawns getty exactly when ttyu0 is an active
-    # console -- now true via loader.conf. Only rewrite the flags field if
-    # that line is not already onifconsole.
+    # console, now true via loader.conf. Only rewrite the flags field if that
+    # line is not already onifconsole.
     TTYS=/etc/ttys
     if [ -f "$TTYS" ] && ! grep -qE '^ttyu0[[:space:]].*onifconsole' "$TTYS"; then
         sed -i '' -E 's|^(ttyu0[[:space:]]+"[^"]*"[[:space:]]+[^[:space:]]+[[:space:]]+).*$|\1onifconsole secure|' "$TTYS"
         nosi_info "ttys: ttyu0 -> onifconsole"
     fi
+    ;;
+*)
+    nosi_info "no serial-console plumbing for pkgmgr=$NOSI_PKGMGR; skipping"
+    exit 0
     ;;
 esac
 

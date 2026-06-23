@@ -93,6 +93,26 @@ nosi_pkg_installed() {
     esac
 }
 
+# ---- grub kernel cmdline ---------------------------------------------------
+
+# Append a space-separated token string to GRUB_CMDLINE_LINUX in
+# /etc/default/grub, then regenerate grub. Handles both double- and
+# single-quoted values and leaves GRUB_CMDLINE_LINUX_DEFAULT untouched.
+# Deciding WHAT to add (idempotency) is the caller's job; this performs only
+# the shared append plus update-grub, so the brittle sed lives in exactly one
+# place rather than copied across the cmdline steps (iommu, serial console).
+# apt/grub systems only: the dnf path uses grubby, which has no such file.
+nosi_grub_cmdline_add() {
+    local grub=/etc/default/grub add="$*"
+    [ -n "$add" ] || return 0
+    if grep -q '^GRUB_CMDLINE_LINUX=' "$grub"; then
+        sed -i -E "s@^(GRUB_CMDLINE_LINUX=)([\"'])(.*)\2[[:space:]]*\$@\1\2\3 ${add}\2@" "$grub"
+    else
+        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$add" >> "$grub"
+    fi
+    update-grub
+}
+
 # ---- idempotency helpers ---------------------------------------------------
 
 # Write $1 contents to $2 with mode $3, but only if contents differ. Useful
