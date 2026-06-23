@@ -42,16 +42,15 @@ EXTRA="intel_iommu=on amd_iommu=on iommu=pt"
 
 case "$NOSI_PKGMGR" in
 apt)
-    if grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
-        for arg in $EXTRA; do
-            if ! grep -q "GRUB_CMDLINE_LINUX=.*\\b${arg}\\b" /etc/default/grub; then
-                sed -i "s/^GRUB_CMDLINE_LINUX=\"\(.*\)\"$/GRUB_CMDLINE_LINUX=\"\1 ${arg}\"/" /etc/default/grub
-            fi
-        done
-    else
-        printf '\nGRUB_CMDLINE_LINUX="%s"\n' "$EXTRA" >> /etc/default/grub
-    fi
-    update-grub
+    # Collect the args not already on the cmdline, then append in one shot
+    # via the shared helper (which also runs update-grub). Per-arg check keeps
+    # the re-run a no-op.
+    missing=""
+    for arg in $EXTRA; do
+        grep -qE "GRUB_CMDLINE_LINUX=.*\\b${arg}\\b" /etc/default/grub \
+            || missing="${missing:+$missing }${arg}"
+    done
+    nosi_grub_cmdline_add "$missing"
     ;;
 dnf)
     grubby --update-kernel=ALL --args="$EXTRA"

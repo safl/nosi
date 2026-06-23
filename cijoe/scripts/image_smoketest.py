@@ -655,6 +655,15 @@ def _run_assertions(
             "grep comconsole /boot/loader.conf || true",
             lambda rc, out: ("comconsole" in out, out or "no comconsole in /boot/loader.conf"),
         )
+        # Runtime proof the loader.conf change took effect: kern.console
+        # lists the active consoles, and comconsole registers as ttyu0
+        # (uart0 = COM1). This catches a loader.conf that is present but
+        # ineffective (e.g. a typo'd console= value).
+        check(
+            "ttyu0 is an active console at runtime (kern.console)",
+            "sysctl -n kern.console",
+            lambda rc, out: ("ttyu0" in out, out or f"exit {rc}"),
+        )
         # ---- apply.sh parity surface (Phase 2a) --------------------------
         # apply-ok is the whole-chain sentinel (last line of apply.sh, only
         # reached if every step succeeded under set -e); its absence means
@@ -860,7 +869,7 @@ def _run_assertions(
 
     # ---- serial console for IPMI SOL (step 33) ---------------------------
     # The kernel cmdline carries console=ttyS0,115200n8 so boot output and a
-    # login land on COM1 -- the UART a server BMC bridges for IPMI
+    # login land on COM1, the UART a server BMC bridges for IPMI
     # Serial-over-LAN (and a plain serial cable). tty0 stays first so the
     # normal video console still gets everything. systemd's getty generator
     # auto-spawns serial-getty@ttyS0 once ttyS0 is a console, which is what
