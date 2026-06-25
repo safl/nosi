@@ -37,7 +37,7 @@ provision/
     ├── 29-rotate-password.sh       # force first-login passwd change
     ├── 30-clock-from-http.sh
     ├── 32-firstboot-inventory.sh
-    ├── 33-serial-console.sh        # console=ttyS0 / comconsole / Pi serial0 for IPMI SOL
+    ├── 33-serial-console.sh        # console=ttyS0+ttyS1 / comconsole / Pi serial0 for IPMI SOL
     ├── 45-nosi-addons.sh           # install /opt/nosi/addons/ + /usr/local/bin/nosi-addon
     ├── 50-desktop-stack.sh         # desktop-shape only: greetd / sway / waybar configs
     ├── 98-metadata.sh              # /etc/nosi-metadata.json (tool versions, packages, identity)

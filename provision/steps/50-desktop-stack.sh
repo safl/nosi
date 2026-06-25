@@ -191,7 +191,7 @@ fi
 # of nothing. Greeting line keeps it on-brand.
 #
 # vt = 7 (NOT 1): the kernel + systemd console lands on the foreground VT
-# (the base cmdline carries console=tty0 console=ttyS0,115200n8), so a
+# (the base cmdline carries console=tty0 console=ttyS1 console=ttyS0), so a
 # greeter on vt1 gets scribbled over by late-boot "[ OK ] Started ..."
 # lines and kernel chatter, a torn greeter. tty7 is the conventional
 # display-manager VT (the packaged greetd.service already
