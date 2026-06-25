@@ -47,7 +47,10 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from image_smoketest import (
+    DEFAULT_PASSWORD,
     SSH_HOST_PORT,
+    SSH_USER,
+    _ssh_password,
     dump_serial,
     kill_qemu,
     make_overlay,
@@ -159,6 +162,9 @@ def main(args, cijoe):
         rc = _await_greeter(serial, variant, args.disk_if, BOOT_TIMEOUT)
         if rc:
             dump_serial(serial)
+            _dump_greeter_diagnostics(serial)
+            if rc == errno.ETIMEDOUT:
+                _dump_greeter_diagnostics_ssh()
     finally:
         kill_qemu(pidfile)
         if rc == 0:
@@ -207,6 +213,98 @@ def _boot_desktop(cijoe, overlay: Path, pidfile: Path, serial: Path, disk_if: st
         raise RuntimeError("qemu launch failed for desktop boot-test")
 
 
+def _dump_greeter_diagnostics(serial: Path) -> None:
+    """Greeter failed: surface the SELinux / greetd / relabel story from the
+    WHOLE serial log (dump_serial only shows the tail). The first-boot console
+    is not preserved as a CI artifact, so these grepped lines are the only
+    forensic record of whether the first-boot autorelabel ran and rebooted,
+    whether greetd.service or one of its dependencies failed, and whether the
+    kernel logged any AVC denials. Matched against an ANSI-stripped copy."""
+    raw = ""
+    with contextlib.suppress(OSError):
+        raw = serial.read_text(errors="replace")
+    lines = _ANSI_RE.sub("", raw).splitlines()
+    keys = (
+        "greetd",
+        "display-manager",
+        "graphical.target",
+        "graphical interface",
+        "autorelabel",
+        "relabel",
+        "selinux",
+        "avc:",
+        "denied",
+        "failed to start",
+        "dependency failed",
+        "start request repeated",
+        "start-limit",
+        "emergency",
+        "failed with result",
+        "condition",
+    )
+    hits = [ln.rstrip() for ln in lines if any(k in ln.lower() for k in keys)]
+    log.error(f"---- greeter diagnostics: greetd / SELinux / relabel ({len(hits)} matches) ----")
+    for ln in hits[-150:]:
+        log.error(f"  {ln}")
+    log.error("---- end greeter diagnostics ----")
+
+
+def _greeter_up_via_ssh() -> bool:
+    """Confirm the greeter directly over SSH. The serial console can be quiet
+    (depending on the console set, systemd's status and the greeter markers
+    never print there), yet greetd runs on the graphical VT and sshd is up by
+    multi-user. So ask the box: True only when greetd.service is active AND
+    graphical.target has been reached. Best-effort; any SSH error means "not
+    yet" and the caller keeps polling."""
+    try:
+        _rc, out = _ssh_password(
+            SSH_USER,
+            DEFAULT_PASSWORD,
+            "systemctl is-active greetd.service graphical.target 2>/dev/null",
+        )
+    except Exception:
+        return False
+    states = out.split()
+    return len(states) >= 2 and all(s == "active" for s in states[:2])
+
+
+def _dump_greeter_diagnostics_ssh() -> None:
+    """The greeter never confirmed and the serial console was quiet: pull the
+    real story over SSH (the box is up at multi-user with sshd running on a
+    timeout failure). Best-effort and read-only; each command is capped so a
+    chatty journal cannot flood the job log."""
+    probes = (
+        ("kernel cmdline", "cat /proc/cmdline"),
+        ("selinux mode", "getenforce; ls -l /.autorelabel 2>&1"),
+        ("failed units", "systemctl --failed --no-legend --plain 2>&1 | head -20"),
+        (
+            "greetd + display-manager",
+            "systemctl status greetd.service display-manager.service --no-pager -l 2>&1 | head -40",
+        ),
+        ("graphical.target", "systemctl is-active graphical.target 2>&1"),
+        ("greetd journal", "journalctl -b -u greetd.service --no-pager 2>&1 | tail -40"),
+        (
+            "selinux denials",
+            "journalctl -b --no-pager 2>&1 | grep -iE 'avc|selinux|denied' | tail -25",
+        ),
+        (
+            "autorelabel service",
+            "systemctl status selinux-autorelabel.service --no-pager 2>&1 | head -15",
+        ),
+        ("greeter labels", "ls -Zd /usr/bin/greetd /etc/greetd /var/lib/greetd 2>&1"),
+    )
+    log.error("---- greeter SSH diagnostics ----")
+    for label, cmd in probes:
+        try:
+            rc, out = _ssh_password(SSH_USER, DEFAULT_PASSWORD, cmd)
+        except Exception as exc:
+            rc, out = -1, f"(ssh error: {exc})"
+        log.error(f"  == {label} (rc={rc}) ==")
+        for ln in (out or "(empty)").splitlines()[:40]:
+            log.error(f"     {ln}")
+    log.error("---- end greeter SSH diagnostics ----")
+
+
 def _await_greeter(serial: Path, variant: str, disk_if: str, timeout: int) -> int:
     """Poll the serial log until the greeter is up (PASS), or fail on a kernel
     panic (the initramfs could not mount root on this controller), an sshd
@@ -237,7 +335,13 @@ def _await_greeter(serial: Path, variant: str, disk_if: str, timeout: int) -> in
             return errno.EIO
 
         if any(m in text for m in GREETER_MARKERS):
-            log.info(f"[PASS] {variant}: booted on {disk_if} and the greeter started")
+            log.info(f"[PASS] {variant}: booted on {disk_if}, greeter started (serial marker)")
+            return 0
+
+        # The serial marker can be absent on a quiet console even when the
+        # greeter is up on the graphical VT; confirm directly over SSH.
+        if _greeter_up_via_ssh():
+            log.info(f"[PASS] {variant}: booted on {disk_if}, greeter up (ssh confirm)")
             return 0
 
         if time.monotonic() >= end:
