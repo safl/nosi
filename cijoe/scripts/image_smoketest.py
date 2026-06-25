@@ -198,6 +198,21 @@ def main(args, cijoe):
     return rc
 
 
+def _last_console(cmdline: str) -> str | None:
+    """Return the device of the LAST console= token on a kernel cmdline.
+
+    The kernel makes the final console= the real /dev/console. Step 33 keeps
+    ttyS0 (COM1) last so single-UART boards and the QEMU smoketest stay on COM1
+    even though console=ttyS1 (COM2) also rides along. Strips the ,115200n8
+    options and returns e.g. "ttyS0", or None if no console= is present.
+    """
+    last = None
+    for tok in cmdline.split():
+        if tok.startswith("console="):
+            last = tok[len("console=") :].split(",", 1)[0]
+    return last
+
+
 def _read_sidecar_sha256(path: Path) -> str:
     """Return the hash from <path>.sha256, or empty string if missing."""
     sidecar = Path(f"{path}.sha256")
@@ -868,23 +883,44 @@ def _run_assertions(
         )
 
     # ---- serial console for IPMI SOL (step 33) ---------------------------
-    # The kernel cmdline carries console=ttyS0,115200n8 so boot output and a
-    # login land on COM1, the UART a server BMC bridges for IPMI
-    # Serial-over-LAN (and a plain serial cable). tty0 stays first so the
-    # normal video console still gets everything. systemd's getty generator
-    # auto-spawns serial-getty@ttyS0 once ttyS0 is a console, which is what
-    # carries the SOL login prompt. QEMU q35 always provides ttyS0, so this
-    # certifies the image is wired right; a real box also needs its BMC to
-    # bridge COM1 to SOL, which the image cannot assert.
+    # The kernel cmdline carries console=ttyS0 (COM1) AND console=ttyS1 (COM2)
+    # so boot output and a login reach whichever UART a server BMC bridges for
+    # IPMI Serial-over-LAN; BMCs disagree (Supermicro/Dell/HPE commonly use
+    # COM2). ttyS0 is kept last so COM1 stays /dev/console. tty0 stays first so
+    # the normal video console still gets everything. Step 33 enables BOTH
+    # serial-getty@ttyS0 and serial-getty@ttyS1 (systemd's generator auto-starts
+    # a login on only the single primary console). QEMU q35 provides COM1
+    # (ttyS0) but not a second UART, so the ttyS0 getty is asserted active while
+    # the ttyS1 getty is asserted ENABLED (its BindsTo=dev-ttyS1.device keeps it
+    # dormant here for lack of the port). A real box also needs its BMC to
+    # bridge the right COM to SOL, which the image cannot assert.
     check(
-        "console=ttyS0 on the kernel cmdline (IPMI SOL)",
+        "console=ttyS0 on the kernel cmdline (IPMI SOL / COM1)",
         "grep -q 'console=ttyS0' /proc/cmdline && echo ok",
         lambda rc, out: (out == "ok", out or "no console=ttyS0 in /proc/cmdline"),
     )
     check(
-        "serial-getty@ttyS0 active (SOL login prompt)",
+        "console=ttyS1 on the kernel cmdline (IPMI SOL / COM2)",
+        "grep -q 'console=ttyS1' /proc/cmdline && echo ok",
+        lambda rc, out: (out == "ok", out or "no console=ttyS1 in /proc/cmdline"),
+    )
+    check(
+        "ttyS0 is the last console= on the cmdline (/dev/console = COM1)",
+        "cat /proc/cmdline",
+        lambda rc, out: (
+            _last_console(out) == "ttyS0",
+            f"last console= is {_last_console(out)!r}, want 'ttyS0': {out}",
+        ),
+    )
+    check(
+        "serial-getty@ttyS0 active (SOL login prompt / COM1)",
         "systemctl is-active serial-getty@ttyS0.service",
         lambda rc, out: (out.strip() == "active", out or f"exit {rc}"),
+    )
+    check(
+        "serial-getty@ttyS1 enabled (SOL login prompt / COM2)",
+        "systemctl is-enabled serial-getty@ttyS1.service",
+        lambda rc, out: (out.strip() == "enabled", out or f"exit {rc}"),
     )
 
     # ---- ModemManager actually gone --------------------------------------

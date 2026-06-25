@@ -9,17 +9,23 @@
 # Three boot stacks, three mechanisms, and this step is the one place that
 # knows all three:
 #
-#   apt/dnf (x86): grub cmdline  -> console=tty0 console=ttyS0,115200n8
-#                  ttyS0 = COM1, the UART a BMC bridges for IPMI SOL.
+#   apt/dnf (x86): grub cmdline -> console=tty0 console=ttyS1 console=ttyS0
+#                  ttyS0 = COM1, ttyS1 = COM2. Both are wired because server
+#                  BMCs disagree on which UART they bridge to IPMI SOL
+#                  (Supermicro/Dell/HPE commonly use COM2). The kernel prints
+#                  boot messages to every console= device, so both ports see
+#                  output; ttyS0 is kept LAST so COM1 stays /dev/console (the
+#                  universally present port, which keeps single-UART boards and
+#                  the QEMU smoketest on COM1). An unwired port just sits idle.
 #   pkg (freebsd): /boot/loader.conf -> console="vidconsole,comconsole"
-#                  comconsole = uart0 = COM1; getty via /etc/ttys onifconsole.
+#                  comconsole = uart0 = COM1 (COM2-only BMCs additionally need
+#                  comconsole_port="0x2f8"); getty via /etc/ttys onifconsole.
 #   raspberry pi:  /boot/firmware/{cmdline,config}.txt -> console=serial0
 #                  the GPIO UART (no BMC on a Pi; read with a USB-TTL cable).
 #
-# Most x86 cloud bases already ship console=ttyS0, so on those this step
-# detects it and is a no-op. It exists to GUARANTEE the console across every
-# base (and to back the smoketest's hard assertion), not to assume upstream
-# keeps doing it.
+# Most x86 cloud bases already ship console=ttyS0 (COM1); this step adds the
+# COM2 port and guarantees the full set across every base, rather than assuming
+# upstream keeps doing it. It also backs the smoketest's hard assertion.
 #
 # Idempotent: each branch checks for an existing serial console before
 # writing, so a re-run changes nothing. Takes effect on the next boot.
@@ -87,6 +93,19 @@ x86_64 | amd64) : ;;
     ;;
 esac
 
+# A serial login prompt comes from serial-getty@<port>. systemd's getty
+# generator auto-starts one only on the single primary console, so with two
+# serial consoles on the cmdline the secondary port (e.g. the COM2 a BMC
+# bridges) would get kernel boot messages but no login. Enable both ports
+# explicitly. serial-getty@.service has BindsTo=dev-<port>.device, so the unit
+# for a port with no UART (a single-COM board, or no serial at all) stays
+# dormant rather than failed; this is the same dependency the generator itself
+# uses for the primary console.
+enable_serial_gettys() {
+    command -v systemctl >/dev/null 2>&1 || return 0
+    systemctl enable serial-getty@ttyS0.service serial-getty@ttyS1.service
+}
+
 case "$NOSI_PKGMGR" in
 apt)
     GRUB=/etc/default/grub
@@ -96,36 +115,50 @@ apt)
     }
 
     # Detection scans /etc/default/grub AND the /etc/default/grub.d snippets
-    # the cloud images drop their console settings into, so an already-present
-    # console=ttyS0 is never duplicated. tty0 keeps the video console.
-    has_serial() { grep -rqE 'console=ttyS0' "$GRUB" /etc/default/grub.d 2>/dev/null; }
-    has_video() { grep -rqE 'console=tty[01]([,"[:space:]]|$)' "$GRUB" /etc/default/grub.d 2>/dev/null; }
+    # the cloud images drop their console settings into, so a console already
+    # present is never duplicated. tty0 keeps the video console.
+    has() { grep -rqE "console=$1" "$GRUB" /etc/default/grub.d 2>/dev/null; }
 
     want=""
-    has_serial || want="console=ttyS0,115200n8"
-    has_video || want="console=tty0${want:+ $want}"
-    [ -n "$want" ] || {
-        nosi_info "serial console already on the grub cmdline; nothing to do"
-        exit 0
-    }
-
-    nosi_info "grub cmdline += ${want}"
-    nosi_grub_cmdline_add "$want"
+    has 'tty[01]([,"[:space:]]|$)' || want="console=tty0"
+    # Append ttyS1 (COM2) THEN ttyS0 (COM1). nosi_grub_cmdline_add appends to
+    # GRUB_CMDLINE_LINUX, so a base's own console=ttyS0 (typically in
+    # GRUB_CMDLINE_LINUX_DEFAULT, which trails) or this trailing ttyS0 ends up
+    # last => /dev/console = COM1. Gate the whole pair on ttyS1 so a re-run is a
+    # no-op; a redundant second console=ttyS0 is harmless (the kernel honours
+    # the last console= regardless).
+    has 'ttyS1' || want="${want:+$want }console=ttyS1,115200n8 console=ttyS0,115200n8"
+    if [ -n "$want" ]; then
+        nosi_info "grub cmdline += ${want}"
+        nosi_grub_cmdline_add "$want"
+    else
+        nosi_info "serial console already on the grub cmdline"
+    fi
+    enable_serial_gettys
     ;;
 dnf)
-    # grubby --info=ALL emits one args= line per installed kernel. At bake
-    # time there is a single kernel, so the across-all-kernels grep is exact;
-    # the eventual update targets ALL kernels regardless.
-    cur="$(grubby --info=ALL 2>/dev/null | grep -E '^args=' || true)"
-    want=""
-    printf '%s\n' "$cur" | grep -q 'console=ttyS0' || want="console=ttyS0,115200n8"
-    printf '%s\n' "$cur" | grep -qE 'console=tty[01]([,"[:space:]]|$)' || want="console=tty0${want:+ $want}"
-    [ -n "$want" ] || {
-        nosi_info "serial console already on the kernel args; nothing to do"
-        exit 0
-    }
-    nosi_info "grubby args += ${want}"
-    grubby --update-kernel=ALL --args="$want"
+    # grubby appends new --args at the END, so a plain add of console=ttyS1
+    # would make it /dev/console. Instead strip any existing tty0/ttyS0/ttyS1
+    # console tokens and re-add the canonical ordered set, so ttyS0 (COM1)
+    # always trails => /dev/console = COM1. Read the default kernel's args (the
+    # tokens are identical across kernels); the update targets ALL kernels.
+    cur="$(grubby --info=DEFAULT 2>/dev/null | sed -n 's/^args=//p' | tr -d '"' || true)"
+    if printf '%s\n' "$cur" | grep -q 'console=ttyS1'; then
+        nosi_info "serial console already on the kernel args"
+    else
+        rm_args=""
+        for tok in $cur; do
+            case "$tok" in
+            console=tty0 | console=tty1 | console=ttyS0 | console=ttyS0,* | console=ttyS1 | console=ttyS1,*)
+                rm_args="${rm_args:+$rm_args }$tok"
+                ;;
+            esac
+        done
+        [ -n "$rm_args" ] && grubby --update-kernel=ALL --remove-args="$rm_args"
+        grubby --update-kernel=ALL --args="console=tty0 console=ttyS1,115200n8 console=ttyS0,115200n8"
+        nosi_info "grubby console args set: tty0 + ttyS1 (COM2) + ttyS0 (COM1)"
+    fi
+    enable_serial_gettys
     ;;
 pkg)
     # FreeBSD: loader.conf is the cmdline equivalent. Dual console with
