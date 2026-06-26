@@ -61,10 +61,13 @@ if [ "$NOSI_DISTRO" = "freebsd" ]; then
 
   Default operator: odus / odus.321  (root locked, SSH password auth on)
   Reconfigure:
-    sudo passwd odus                                operator password
-    sudo sysrc hostname=NAME && sudo hostname NAME  hostname (default: ${NOSI_DEFAULT_HOSTNAME})
-    sudo service tailscaled enable && sudo service tailscaled start && sudo tailscale up
-                                                    join tailnet (tailscale ships dormant)
+    sudo passwd odus                                  # operator password (default: odus.321)
+    sudo passwd root                                  # set a root password (root ships locked)
+    sudo sysrc hostname=NAME                          # persist hostname (default: ${NOSI_DEFAULT_HOSTNAME})
+    sudo hostname NAME                                # apply the new hostname now
+    sudo service tailscaled enable                    # enable tailscaled (ships dormant)
+    sudo service tailscaled start                     # start it now
+    sudo tailscale up                                 # join the tailnet
 " /etc/motd.template 0644
     # Compose /etc/motd now; the authoritative path is rc.d/motd on the
     # next fresh boot, so this is best-effort.
@@ -113,17 +116,6 @@ if [ -r /etc/nosi-release ]; then
     [ -n "$v" ] && nosi_version="$v"
 fi
 
-ips=""
-while IFS= read -r line; do
-    iface="$(echo "$line" | awk '"'"'{print $2}'"'"')"
-    addr="$(echo "$line" | awk '"'"'{print $4}'"'"' | cut -d/ -f1)"
-    [ -z "$addr" ] && continue
-    ips="${ips}${ips:+, }${addr} (${iface})"
-done <<EOF
-$(ip -4 -o addr show scope global 2>/dev/null)
-EOF
-[ -z "$ips" ] && ips="(none)"
-
 iommu="$(iommu show 2>/dev/null | awk '"'"'/^mode:/ {print $2}'"'"')"
 [ -z "$iommu" ] && iommu="unset"
 
@@ -159,7 +151,8 @@ fi
 # where the binary actually exists.
 vpn_hint=""
 if command -v tailscale >/dev/null 2>&1; then
-    vpn_hint="    sudo systemctl enable --now tailscaled && sudo tailscale up   join tailnet (ships dormant)"
+    vpn_hint="    sudo systemctl enable --now tailscaled            # enable tailscaled (ships dormant)
+    sudo tailscale up                                 # join the tailnet"
 fi
 
 # Proxmox hosts run headless, so the operator otherwise has to guess the web
@@ -178,38 +171,34 @@ if [ "$shape" = proxmox ]; then
     pve_block="
   Proxmox VE:
     web UI:  https://${primary_ip}:8006
-    login:   first set a root password: sudo passwd root
-             then log in as root, realm: Linux PAM standard authentication
-             (odus, same realm, is also an admin)
+    login:   root, realm: Linux PAM standard authentication (odus is also an admin)
     bridge:  ${pve_bridge}
     storage: a blank extra disk auto-enrolls as nvme-data; else Datacenter > Storage
 "
 fi
 
 cat <<EOM
-
-  nosi ${shape} (${nosi_variant}, ${nosi_version})   ${distro}   Linux ${kernel}   ${arch}
+  nosi ${shape} (${nosi_variant}, ${nosi_version})
+  ${distro}   Linux ${kernel}   ${arch}
 ${default_pw_warning}
 
   hostname:  ${host}
-  ip:        ${ips}
   iommu:     ${iommu}
   hugepgs:   ${hugepgs}
   cpu:       ${cpu_model} x ${cpu_count}
   ram:       ${ram_gib} GiB
-  nvme:      ${nvme_count}
-${pve_block}
+  nvme:      ${nvme_count}${pve_block}
   Tools:     rg fd fzf lazygit delta yazi oras gh just direnv
   Helpers:
-    iommu {show|off-for-uio|off-for-vfio|strict|pt}   IOMMU substrate (reboot to apply)
-    devbind                                           bind/unbind PCI device to a driver
-    hugepages                                         inspect / reserve hugepages
-    nosi-selfcheck                                     verify the box matches a healthy nosi image
+    iommu {show|off-for-uio|off-for-vfio|strict|pt}   # IOMMU substrate (reboot to apply)
+    devbind                                           # bind/unbind PCI device to a driver
+    hugepages                                         # inspect / reserve hugepages
+    nosi-selfcheck                                    # verify the box matches a healthy nosi image
   Reconfigure:
-    sudo systemd-firstboot --force --prompt           interactive locale/keymap/timezone/hostname
-    sudo timedatectl set-timezone Europe/Copenhagen   timezone (default: UTC)
-    sudo hostnamectl set-hostname NAME                hostname (default: ${default_host})
-    sudo passwd odus                                  operator password (default: odus.321)
+    sudo timedatectl set-timezone Europe/Copenhagen   # timezone (default: UTC)
+    sudo hostnamectl set-hostname NAME                # hostname (default: ${default_host})
+    sudo passwd odus                                  # operator password (default: odus.321)
+    sudo passwd root                                  # set a root password (root ships locked)
 ${vpn_hint}
 EOM
 ' /usr/local/bin/nosi-motd 0755
