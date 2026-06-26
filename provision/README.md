@@ -144,8 +144,10 @@ sudo /opt/nosi/provision/apply.sh <variant>
 ```
 
 Steps with kernel-side effects (r8125 DKMS, IOMMU cmdline) take effect
-on next reboot. Hetzner VMs ship without RTL8125 NICs, so step 10
-no-ops there.
+on next reboot. Hetzner VMs ship without RTL8125 NICs, so step 10's
+driver stays built-but-unloaded there; its other RTL8125 mitigations
+(ASPM/EEE modprobe options and the offload-disable udev rule) are
+written anyway but only fire when an r8125/r8169 NIC actually binds.
 
 ## Use as a WSL2 distribution
 

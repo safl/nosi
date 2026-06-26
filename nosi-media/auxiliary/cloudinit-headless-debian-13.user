@@ -183,6 +183,13 @@ packages:
   # Lake-P et al.), iwlwifi, regulatory.db, etc. Debian 13 cloud images
   # already enable the non-free-firmware component by default.
   - firmware-misc-nonfree
+  # Realtek NIC firmware (rtl_nic/rtl8125*.fw, rtl8168*.fw, ...). Debian
+  # splits this OUT of firmware-misc-nonfree into its own package, unlike
+  # Ubuntu/Fedora's monolithic linux-firmware. The r8125/r8169 drivers load
+  # these blobs to bring up the 2.5GbE NICs on the GMKtec mini-PCs; without
+  # it the NIC probe fails and the link never comes up (no DHCP, no IP).
+  # See provision/steps/10-r8125-dkms.sh for the matching driver mitigations.
+  - firmware-realtek
   # CPU microcode (early-load via initramfs). intel-microcode and
   # amd64-microcode both live in non-free-firmware in Debian 13;
   # post-install hooks regenerate initramfs so the microcode prepend
