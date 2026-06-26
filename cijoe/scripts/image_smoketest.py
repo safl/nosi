@@ -923,6 +923,42 @@ def _run_assertions(
         lambda rc, out: (out.strip() == "enabled", out or f"exit {rc}"),
     )
 
+    # ---- RTL8125 2.5GbE NIC mitigations (step 10) ------------------------
+    # QEMU has no RTL8125, so we cannot prove the NIC works here; instead we
+    # assert the bake laid down every mitigation, so a regression fails the
+    # build rather than a bare-metal box silently losing its network. The
+    # config is hardware-independent: the files exist regardless of NIC.
+    check(
+        # ethtool is an sbin admin tool; the udev rule invokes /sbin/ethtool
+        # by absolute path, so assert the binary at that path rather than on
+        # an unprivileged PATH (Debian keeps sbin off a non-root PATH).
+        "ethtool present at /sbin/ethtool (offload-disable udev rule target)",
+        "test -x /sbin/ethtool && echo ok",
+        lambda rc, out: (out == "ok", out or "missing /sbin/ethtool"),
+    )
+    check(
+        "modprobe.d: r8125 softdep + aspm/eee options present",
+        "grep -q 'softdep r8169 pre: r8125' /etc/modprobe.d/nosi-r8125.conf "
+        "&& grep -q 'options r8125 enable_eee=0 aspm=0' /etc/modprobe.d/nosi-r8125.conf "
+        "&& echo ok",
+        lambda rc, out: (out == "ok", out or "missing softdep/options"),
+    )
+    check(
+        "udev rule disables RTL8125 offloads for r8125 + r8169",
+        "f=/etc/udev/rules.d/70-nosi-realtek-2g5-offloads.rules; "
+        'grep -q \'DRIVERS=="r8125"\' "$f" && grep -q \'DRIVERS=="r8169"\' "$f" '
+        "&& echo ok",
+        lambda rc, out: (out == "ok", out or "missing/!two-driver udev rule"),
+    )
+    if distro == "debian":
+        # Debian ships NIC firmware in firmware-realtek (split out of
+        # firmware-misc-nonfree); Ubuntu/Fedora carry it in linux-firmware.
+        check(
+            "firmware-realtek installed (rtl_nic/*.fw for the 2.5GbE NIC)",
+            "dpkg-query -W -f '${Status}' firmware-realtek 2>/dev/null",
+            lambda rc, out: ("install ok installed" in out, out or "not installed"),
+        )
+
     # ---- ModemManager actually gone --------------------------------------
     # systemctl is-active prints "active" / "inactive" / "failed" to stdout
     # and uses exit codes (3 for inactive, 4 for not-loaded). We only care

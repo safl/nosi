@@ -15,6 +15,23 @@
 # the chips r8125 explicitly claims. On a box with no RTL8125 at all,
 # r8125 stays built-but-unloaded (no PCI alias match, softdep no-op).
 #
+# The driver alone is not enough on these mini-PCs; this step ports the
+# three further RTL8125 mitigations bty (the netboot image) needs just to
+# PXE-boot the same boards:
+#   * firmware: the rtl_nic/*.fw blobs the driver loads ship in
+#     firmware-realtek on Debian (firmware-misc-nonfree does NOT carry NIC
+#     firmware), so debian-13's package list installs it; Ubuntu/Fedora get
+#     it from their monolithic linux-firmware. Without it the NIC probe can
+#     fail outright and the link never comes up -> no DHCP, no IP.
+#   * ASPM + EEE: on the GMKtec G5/G10 dual-2.5GbE boards PCIe ASPM L1
+#     transitions drop packets mid-transfer and Energy-Efficient Ethernet
+#     flaps the link, so we pass `options r8125 enable_eee=0 aspm=0`.
+#   * TX/RX offloads: some RTL8125/8126 firmware advertises TSO/GSO/GRO/LRO
+#     and TX-checksum offload but emits malformed frames peers silently
+#     drop, so DHCP and ping work while any real TCP transfer stalls. A udev
+#     rule turns the offloads off at link-up for whichever driver (r8125 or
+#     the r8169 fallback) bound the NIC.
+#
 # Cross-distro: works on apt (debian, ubuntu) + dnf (fedora). WSL exits
 # early because there are no kernel headers for the WSL kernel.
 #
@@ -74,6 +91,14 @@ dnf)
     ;;
 esac
 
+# ethtool backs the offload-disable udev rule written in section 5 (and is
+# a handy NIC diagnostic: `ethtool -i`/`-k`/`-S`). Same package name on apt
+# + dnf. Not a list package so apply.sh keeps parity on a vanilla VM too.
+# It is an sbin admin tool (/usr/sbin/ethtool); the udev rule invokes it by
+# absolute path, so it need not be on any unprivileged user's PATH (Debian
+# keeps sbin off a non-root PATH, unlike Ubuntu/Fedora).
+nosi_pkg_install ethtool || true
+
 # ---- 2. resolve the latest upstream release tag --------------------------
 
 ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
@@ -102,15 +127,37 @@ else
     dkms autoinstall
 fi
 
-# ---- 4. modprobe.d softdep -----------------------------------------------
+# ---- 4. modprobe.d: softdep + ASPM/EEE options ---------------------------
 # Targeted preference, NOT a blanket r8169 blacklist. See the comment at
-# the top of this script for rationale.
+# the top of this script for rationale. The options line is a no-op when
+# r8125 is not the bound driver (e.g. r8169 fallback, or no RTL8125 at all),
+# so it is safe to ship unconditionally.
 
 nosi_write_if_changed \
 "# Managed by nosi/provision/steps/10-r8125-dkms.sh
 # Prefer r8125 over r8169 for RTL8125 chips ONLY. r8169 still serves
 # RTL8111 (1GbE) + the rest of the Realtek family on the same machine.
 softdep r8169 pre: r8125
+# Disable PCIe ASPM and Energy-Efficient Ethernet: on the GMKtec G5/G10
+# dual-2.5GbE boards ASPM L1 transitions drop packets mid-transfer and EEE
+# flaps the link. Harmless when r8125 is not the loaded driver.
+options r8125 enable_eee=0 aspm=0
 " /etc/modprobe.d/nosi-r8125.conf 0644
+
+# ---- 5. udev: disable suspect Realtek 2.5GbE offloads at link-up ---------
+# RTL8125/8125B/8126 firmware advertises TSO/GSO/GRO/LRO + TX checksum
+# offload but, on some revisions, emits malformed frames that peers (apt
+# mirrors, OCI registries) drop silently. Net effect: DHCP and ping work
+# (small packets) while any larger TCP transfer stalls. Force software
+# segmentation/checksum via ethtool when the NIC appears. Fires for both
+# r8125 (the DKMS driver above) and r8169 (the in-tree fallback) since a
+# kernel update or override could put either in play. ATTR{type}=="1"
+# limits it to ethernet, skipping the tap/bridge devices NetworkManager
+# creates later. /sbin/ethtool resolves via usr-merge on all three distros.
+nosi_write_if_changed \
+'# Managed by nosi/provision/steps/10-r8125-dkms.sh
+ACTION=="add", SUBSYSTEM=="net", ATTR{type}=="1", DRIVERS=="r8125", RUN+="/sbin/ethtool -K $env{INTERFACE} tso off gso off gro off lro off tx-checksum-ip-generic off"
+ACTION=="add", SUBSYSTEM=="net", ATTR{type}=="1", DRIVERS=="r8169", RUN+="/sbin/ethtool -K $env{INTERFACE} tso off gso off gro off lro off tx-checksum-ip-generic off"
+' /etc/udev/rules.d/70-nosi-realtek-2g5-offloads.rules 0644
 
 nosi_info "step 10-r8125-dkms done"
