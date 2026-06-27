@@ -213,6 +213,21 @@ def _last_console(cmdline: str) -> str | None:
     return last
 
 
+def _last_console_token(cmdline: str) -> str | None:
+    """The full LAST console= token, options included, or None.
+
+    The bare-vs-baud distinction matters on a real UART (it is invisible under
+    QEMU's baud-agnostic -serial): a trailing bare console=ttyS0 leaves the
+    port at the kernel default (9600) and shows nothing on IPMI SOL at 115200,
+    so step 33 must make the last token carry an explicit ,115200n8.
+    """
+    last = None
+    for tok in cmdline.split():
+        if tok.startswith("console="):
+            last = tok
+    return last
+
+
 def _read_sidecar_sha256(path: Path) -> str:
     """Return the hash from <path>.sha256, or empty string if missing."""
     sidecar = Path(f"{path}.sha256")
@@ -910,6 +925,20 @@ def _run_assertions(
         lambda rc, out: (
             _last_console(out) == "ttyS0",
             f"last console= is {_last_console(out)!r}, want 'ttyS0': {out}",
+        ),
+    )
+    check(
+        # The last console= must pin the baud explicitly. A bare console=ttyS0
+        # (which the cloud bases leave in GRUB_CMDLINE_LINUX_DEFAULT) defaults
+        # the UART to 9600 and is silent on IPMI SOL at 115200 -- step 33's apt
+        # drop-in strips it and re-pins ,115200n8 last. QEMU's serial is
+        # baud-agnostic, so only this token check guards against a regression.
+        "last console= pins 115200n8 baud (deterministic IPMI SOL)",
+        "cat /proc/cmdline",
+        lambda rc, out: (
+            _last_console_token(out) == "console=ttyS0,115200n8",
+            f"last console token is {_last_console_token(out)!r}, "
+            f"want 'console=ttyS0,115200n8': {out}",
         ),
     )
     check(
