@@ -129,7 +129,7 @@ def _boot_proxmox(cijoe, overlay: Path, pidfile: Path, serial: Path) -> None:
         raise RuntimeError("qemu launch failed for proxmox boot-test")
 
 
-def _assert_pve(key: Path, timeout: int = 180) -> int:
+def _assert_pve(key: Path, timeout: int = 360) -> int:
     """Daemons active, web UI serving TLS with a real node cert, operator
     can log in.
 
@@ -143,7 +143,14 @@ def _assert_pve(key: Path, timeout: int = 180) -> int:
 
     Polls rather than checking once: sshd comes up before the PVE stack
     (and the nosi-proxmox-online oneshot) finishes settling, so an instant
-    check races the startup. Passes as soon as everything is up."""
+    check races the startup. Passes as soon as everything is up.
+
+    The timeout is generous (360s) because _boot_proxmox uses accel=kvm:tcg:
+    by the time this boot-test runs (late in the job) the runner's /dev/kvm
+    access can have reverted, dropping QEMU to TCG software emulation where
+    the full PVE stack settles several times slower. The box is healthy in
+    that case, just slow, so a tight bound would flake; 360s clears the
+    TCG-emulated path while a KVM boot still passes in well under a minute."""
     end = time.monotonic() + timeout
     last = "(no check yet)"
     while True:
