@@ -114,26 +114,34 @@ apt)
         exit 0
     }
 
-    # Detection scans /etc/default/grub AND the /etc/default/grub.d snippets
-    # the cloud images drop their console settings into, so a console already
-    # present is never duplicated. tty0 keeps the video console.
-    has() { grep -rqE "console=$1" "$GRUB" /etc/default/grub.d 2>/dev/null; }
-
-    want=""
-    has 'tty[01]([,"[:space:]]|$)' || want="console=tty0"
-    # Append ttyS1 (COM2) THEN ttyS0 (COM1). nosi_grub_cmdline_add appends to
-    # GRUB_CMDLINE_LINUX, so a base's own console=ttyS0 (typically in
-    # GRUB_CMDLINE_LINUX_DEFAULT, which trails) or this trailing ttyS0 ends up
-    # last => /dev/console = COM1. Gate the whole pair on ttyS1 so a re-run is a
-    # no-op; a redundant second console=ttyS0 is harmless (the kernel honours
-    # the last console= regardless).
-    has 'ttyS1' || want="${want:+$want }console=ttyS1,115200n8 console=ttyS0,115200n8"
-    if [ -n "$want" ]; then
-        nosi_info "grub cmdline += ${want}"
-        nosi_grub_cmdline_add "$want"
-    else
-        nosi_info "serial console already on the grub cmdline"
-    fi
+    # Pin the kernel serial console via a grub.d drop-in that grub-mkconfig
+    # sources LAST (after /etc/default/grub and every base snippet). Merely
+    # appending console= to GRUB_CMDLINE_LINUX is NOT enough: the Debian/Ubuntu
+    # cloud bases set a bare `console=ttyS0` (no baud) in
+    # GRUB_CMDLINE_LINUX_DEFAULT, which grub emits AFTER GRUB_CMDLINE_LINUX, so
+    # that bare token wins as /dev/console and leaves the UART at the kernel
+    # default (9600) -- which shows nothing on an IPMI SOL / terminal at 115200.
+    # So instead sanitize both assembled cmdline vars (strip every console= the
+    # base set) and re-pin the canonical ordered set with an explicit 115200n8
+    # at the END of *_DEFAULT, making ttyS0 (COM1) genuinely last =>
+    # /dev/console = COM1 @115200, with ttyS1 (COM2) also wired for BMCs that
+    # bridge it. Strip serial (ttyS) FIRST so the tty[0-9] strip never eats the
+    # `tty` in `ttyS`. Idempotent: the drop-in re-runs on every grub-mkconfig
+    # and converges. This is the apt equivalent of the dnf branch's
+    # grubby --remove-args/--args canonicalisation below.
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/33-serial-console.sh
+# Sourced last by grub-mkconfig. Strip any console= the base set, then pin the
+# canonical ordered serial console with an explicit baud so IPMI SOL is
+# deterministic (a trailing bare console=ttyS0 would default the UART to 9600).
+_nosi_strip="s/console=ttyS[0-9][^ ]*//g; s/console=tty[0-9][^ ]*//g; s/  */ /g; s/^ *//; s/ *$//"
+GRUB_CMDLINE_LINUX="$(printf %s "${GRUB_CMDLINE_LINUX:-}" | sed -e "$_nosi_strip")"
+GRUB_CMDLINE_LINUX_DEFAULT="$(printf %s "${GRUB_CMDLINE_LINUX_DEFAULT:-}" | sed -e "$_nosi_strip")"
+GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT:+${GRUB_CMDLINE_LINUX_DEFAULT} }console=tty0 console=ttyS1,115200n8 console=ttyS0,115200n8"
+unset _nosi_strip
+' /etc/default/grub.d/99-nosi-serial-console.cfg 0644
+    nosi_info "grub.d drop-in: pinned tty0 + ttyS1 (COM2) + ttyS0 (COM1) @115200n8"
+    update-grub
     enable_serial_gettys
     ;;
 dnf)
