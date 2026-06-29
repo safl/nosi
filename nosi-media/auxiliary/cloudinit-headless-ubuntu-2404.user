@@ -116,6 +116,7 @@ packages:
   - curl
   - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
   - jq
+  - moreutils            # errno/sponge/ts/chronic/ifne/vidir shell helpers
   - lsof
   - mtr-tiny
   - network-manager       # provides nmtui for interactive interface config

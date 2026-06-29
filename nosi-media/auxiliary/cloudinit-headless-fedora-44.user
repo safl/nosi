@@ -104,6 +104,7 @@ packages:
   - bind-utils
   - curl
   - jq
+  - moreutils            # errno/sponge/ts/chronic/ifne/vidir shell helpers
   - lsof
   - mtr
   - NetworkManager-tui    # nmtui for interactive interface config

@@ -82,6 +82,7 @@ packages:
   - htop
   - ipmitool             # IPMI / BMC: lights-out mgmt, sensors, SEL on servers
   - jq
+  - moreutils            # errno/sponge/ts/chronic/ifne/vidir shell helpers
   - ripgrep
   # vpn: if_wg (WireGuard) is in the base kernel; tailscaled installs
   # dormant (pkg never enables rc services). Activate with
