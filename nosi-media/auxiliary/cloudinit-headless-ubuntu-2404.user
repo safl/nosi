@@ -140,6 +140,19 @@ packages:
   - pkg-config
   - python3
   - valgrind
+  # kernel build toolchain: build or rebuild a kernel, an out-of-tree
+  # module, or a DKMS package on the box. build-essential + dwarves above
+  # already cover gcc/make/pahole; these add the kernel tree's extra needs.
+  - bc                  # Kconfig / kernel time-constant integer math
+  - bison               # kernel + BPF parser generators
+  - flex
+  - fakeroot            # build .deb kernel/module packages without root
+  - debhelper           # make bindeb-pkg packaging helpers
+  - libssl-dev          # module signing (CONFIG_MODULE_SIG) + certs
+  - libelf-dev          # objtool / BTF generation
+  - libdw-dev           # gendwarfksyms needs <dwarf.h> on 6.x/7.x; libelf-dev alone is NOT enough
+  - cpio                # kernel headers_install + initramfs
+  - rsync               # kernel headers_install / modules_install
   # See debian variant: name podman's Recommends explicitly (crun /
   # fuse-overlayfs / dbus-user-session) since Recommends are off.
   - buildah

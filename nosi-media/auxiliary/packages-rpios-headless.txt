@@ -83,6 +83,20 @@ pkg-config
 python3
 valgrind
 
+# kernel build toolchain: build/rebuild a kernel, an out-of-tree module,
+# or a DKMS package on the box (build-essential + dwarves above cover
+# gcc/make/pahole; these add the kernel tree's extra build-time needs).
+bc
+bison
+flex
+fakeroot
+debhelper
+libssl-dev
+libelf-dev
+libdw-dev
+cpio
+rsync
+
 # containers (crun + fuse-overlayfs + dbus-user-session are podman's Recommends
 # on Debian; named explicitly because nosi installs --no-install-recommends)
 buildah
