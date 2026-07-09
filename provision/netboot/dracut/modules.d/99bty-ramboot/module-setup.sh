@@ -26,10 +26,19 @@ check() {
     return 255
 }
 
-# The runtime hook depends on the base + network dracut modules to
-# initialize DHCP + resolv.conf before nbd-client tries to connect.
+# The runtime hook needs DHCP + resolv.conf initialized before
+# nbd-client can connect. Older dracut shipped the ``network`` module
+# as a single-name dependency, but Fedora 40+ split it into
+# ``network-manager``, ``network-legacy``, ``network-wicked``, and
+# ``network`` no longer resolves on Fedora 44 (dracut errors with
+# ``Module 'network' can't be installed``). List ``network-manager``
+# as the concrete dep -- both Fedora 44 and Ubuntu 26.04 ship it, and
+# it triggers the NetworkManager-in-initramfs path for DHCP. On the
+# Ubuntu path, initramfs-tools handles this via
+# /scripts/functions:configure_networking instead, so this dep is
+# dracut-only.
 depends() {
-    echo "base network"
+    echo "base network-manager"
     return 0
 }
 
