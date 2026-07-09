@@ -15,7 +15,12 @@ doc: |
      any derives ever get packed.
   3. ``img_gz_pack``: convert qcow2 -> raw -> gzip-compressed .img.gz with
      a sha256 sidecar, for direct ``dd`` flashing.
-  4. ``derive_pack``: build the derived-shape artifacts from the baked
+  4. ``netboot_bundle_pack``: qemu-nbd-attach the baked qcow2 and pull
+     the image's own vmlinuz + initrd out of /boot into a small bundle
+     directory alongside a manifest. Bty + nbdmux fetch this pair to
+     ramboot the image with its OWN kernel (see PLAN-netboot-bundle.md).
+     No-op on images without a ``[netboot]`` section.
+  5. ``derive_pack``: build the derived-shape artifacts from the baked
      headless rootfs (no re-bake). For each ``[[...derive]]`` entry in
      the base config it copies the base qcow2, chroots in, runs
      ``apply.sh <derived-variant> --shape-only``, optionally strips
@@ -41,6 +46,9 @@ steps:
 
 - name: img_gz_pack
   uses: img_gz_pack
+
+- name: netboot_bundle_pack
+  uses: netboot_bundle_pack
 
 - name: derive_pack
   uses: derive_pack
