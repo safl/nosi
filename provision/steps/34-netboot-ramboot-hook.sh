@@ -73,7 +73,11 @@ case "$NOSI_PKGMGR" in
     dnf)
         # dracut path (Fedora).
         # ``nbd`` binary is in the stock ``nbd`` package on Fedora.
-        nosi_pkg_install nbd
+        # ``dracut-network`` ships the network-manager + nbd dracut
+        # modules our conf.d references; without it the minimal
+        # cloud-image dracut has only base modules and the
+        # ``network-manager`` dep on our module fails to resolve.
+        nosi_pkg_install nbd dracut-network
         install -d -m 0755 /etc/dracut.conf.d /usr/lib/dracut/modules.d/99bty-ramboot
         install -m 0644 "$ASSETS/dracut/conf.d/99-nosi-netboot.conf" /etc/dracut.conf.d/99-nosi-netboot.conf
         install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh
