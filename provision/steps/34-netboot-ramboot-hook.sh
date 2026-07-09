@@ -58,8 +58,12 @@ ASSETS="$HERE/../netboot"
 
 case "$NOSI_PKGMGR" in
     apt)
-        # initramfs-tools path.
-        nosi_pkg_install nbd-client
+        # initramfs-tools path. busybox-static ships the tiny statically-
+        # linked busybox that the /scripts/ramboot driver reaches for
+        # (sleep 0.1 polls, ip addr show, awk, ...). Stock Debian cloud
+        # images don't include it; drop it in before update-initramfs so
+        # the hook can ``copy_exec /usr/bin/busybox``.
+        nosi_pkg_install nbd-client busybox-static
         install -d -m 0755 /etc/initramfs-tools/scripts /etc/initramfs-tools/hooks
         install -m 0644 "$ASSETS/initramfs-tools/scripts/ramboot" /etc/initramfs-tools/scripts/ramboot
         install -m 0755 "$ASSETS/initramfs-tools/hooks/bty-ramboot" /etc/initramfs-tools/hooks/bty-ramboot
