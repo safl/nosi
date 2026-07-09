@@ -107,12 +107,17 @@ def add_args(parser: ArgumentParser):
 
 
 def _provision_files(provision_root: Path) -> list[Path]:
-    """Sorted list of provision scripts (apply.sh + lib/*.sh + steps/*.sh)."""
-    return sorted(
-        p
-        for p in provision_root.rglob("*")
-        if p.is_file() and (p.suffix == ".sh" or p.name == "apply.sh")
-    )
+    """Sorted list of every file under ``provision/``.
+
+    Historically this filtered to ``.sh`` + ``apply.sh`` for the flat
+    ``apply.sh + lib/*.sh + steps/*.sh`` layout. The layout has since
+    grown ``netboot/`` with assets that don't (and can't) end in
+    ``.sh`` -- ``/etc/initramfs-tools/scripts/ramboot`` is looked up
+    by exact name by initramfs-tools' ``/init``; the dracut config
+    drop-in must end in ``.conf``. Include every file so subtrees can
+    ship whatever mix of names they need.
+    """
+    return sorted(p for p in provision_root.rglob("*") if p.is_file())
 
 
 def _build_provision_tarball(provision_root: Path, version: str) -> bytes:
