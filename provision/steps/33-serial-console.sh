@@ -97,12 +97,35 @@ esac
 # generator auto-starts one only on the single primary console, so with two
 # serial consoles on the cmdline the secondary port (e.g. the COM2 a BMC
 # bridges) would get kernel boot messages but no login. Enable both ports
-# explicitly. serial-getty@.service has BindsTo=dev-<port>.device, so the unit
-# for a port with no UART (a single-COM board, or no serial at all) stays
-# dormant rather than failed; this is the same dependency the generator itself
-# uses for the primary console.
+# explicitly.
+#
+# The stock ``serial-getty@.service`` has ``BindsTo=dev-%i.device``, which
+# ties getty startup to the ``dev-ttySN.device`` unit becoming active. That
+# .device unit is created when udev fires an ``add`` event for the port.
+# Platform-serial UARTs (8250, kernel-registered at boot, not hot-plug) do
+# NOT always get an ``add`` event replayed during systemd-udev-trigger's
+# coldplug -- observed on GIGABYTE MC12-LE0 and other server boards booted
+# over NBD-backed ramboot, where boot completes to a running sshd but no
+# login prompt paints on the BMC's IPMI SOL. Drop the BindsTo via a
+# drop-in and keep only ``ConditionPathExists=/dev/%I`` (already inherited
+# from the upstream unit) as the "is the port real" gate. Downside: on a
+# single-COM board the getty for the missing port cycles restart-fails
+# instead of staying dormant, but the condition check catches that too so
+# it exits immediately; systemd tolerates the churn.
 enable_serial_gettys() {
     command -v systemctl >/dev/null 2>&1 || return 0
+    mkdir -p /etc/systemd/system/serial-getty@.service.d
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/33-serial-console.sh.
+# Drop the ``BindsTo=dev-%i.device`` inherited from the upstream unit so
+# that platform-serial ports (kernel-registered at boot; no udev "add"
+# event replayed during coldplug) still get a login getty. See the
+# comment above ``enable_serial_gettys`` in the source step.
+[Unit]
+BindsTo=
+After=
+After=systemd-user-sessions.service plymouth-quit-wait.service getty-pre.target
+' /etc/systemd/system/serial-getty@.service.d/nosi-no-bindsto.conf 0644
     systemctl enable serial-getty@ttyS0.service serial-getty@ttyS1.service
 }
 
