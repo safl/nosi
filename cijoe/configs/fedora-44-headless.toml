@@ -45,6 +45,11 @@ publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-fedora-44-head
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-fedora-44-headless-x86_64.img.gz"
 publish.gzip_level = 9
 
+# Netboot bundle: vmlinuz + initrd extracted from the baked qcow2 so bty
+# can ramboot this image via NBD using the image's OWN kernel.
+netboot.bundle_dir = "{{ local.env.HOME }}/system_imaging/disk/nosi-fedora-44-headless-netboot-x86_64"
+netboot.source_disk_ref = "ghcr.io/safl/nosi/fedora-44-headless"
+
 # Desktop derives from this headless base (derive_pack copies the
 # baked qcow2, chroots, runs `apply.sh fedora-44-desktop --shape-only`
 # which installs the Sway stack via step 50, then packages a bootable

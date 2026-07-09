@@ -45,3 +45,8 @@ disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-headless-
 publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-headless-x86_64.img"
 publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-headless-x86_64.img.gz"
 publish.gzip_level = 9
+
+# Netboot bundle: vmlinuz + initrd extracted from the baked qcow2 so bty
+# can ramboot this image via NBD using the image's OWN kernel.
+netboot.bundle_dir = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2404-headless-netboot-x86_64"
+netboot.source_disk_ref = "ghcr.io/safl/nosi/ubuntu-2404-headless"
