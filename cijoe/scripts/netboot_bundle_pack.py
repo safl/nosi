@@ -119,6 +119,13 @@ def _find_boot_dir(mount_root: Path) -> tuple[Path, str]:
 
 def _connect_qemu_nbd(cijoe, qcow2_path: Path, mount_root: Path):
     """qemu-nbd --connect + partprobe + mount every partition RO."""
+    # The ``nbd`` module is loadable on the GHA runners but not loaded
+    # by default: ``/dev/nbd0`` is absent until modprobe fires, which
+    # makes qemu-nbd fail with ``Failed to open /dev/nbd0: No such
+    # file or directory``. ``max_part=8`` matches derive_pack.py so
+    # the two scripts inhabit the same nbd device / partition-node
+    # layout when they run in the same job.
+    cijoe.run_local("sudo modprobe nbd max_part=8")
     # Preemptive disconnect in case a previous aborted run left the
     # device attached; same defensive pattern as derive_pack.
     cijoe.run_local(f"sudo qemu-nbd --disconnect {NBD_DEV} >/dev/null 2>&1 || true")
