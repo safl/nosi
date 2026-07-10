@@ -78,7 +78,7 @@ if [ "$NOSI_DISTRO" = "freebsd" ]; then
     # so no compiler is invoked. Runs BEFORE the cijoe install below
     # so its startup imports resolve.
     /opt/nosi/cijoe-venv/bin/pip install --no-deps --quiet \
-        jinja2 pyyaml markupsafe
+        jinja2 pyyaml markupsafe scp
     # ``--no-deps`` is essential on FreeBSD: pip's resolver otherwise
     # decides at least one of cijoe's transitives (via cryptography's
     # PEP 517 build-system.requires) needs maturin, has no FreeBSD
