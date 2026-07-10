@@ -58,7 +58,14 @@ nosi_require_root
 if [ "$NOSI_DISTRO" = "freebsd" ]; then
     nosi_pkg_install ruff
     pyver="$(python3 -c 'import sys; print(f"py{sys.version_info.major}{sys.version_info.minor}")')"
-    nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil"
+    # cijoe's import-time deps beyond the Rust-native pair: jinja2
+    # (template rendering) + yaml (config) + markupsafe (jinja2's
+    # C-accelerated escape). All ship as native FreeBSD ports so the
+    # pkg install path never touches Rust. Adding them here keeps
+    # cijoe's --no-deps install (below) safe: pkg supplies every
+    # module cijoe imports at startup.
+    nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil" \
+        "${pyver}-Jinja2" "${pyver}-yaml" "${pyver}-MarkupSafe"
     [ -x /opt/nosi/cijoe-venv/bin/python ] \
         || python3 -m venv --system-site-packages /opt/nosi/cijoe-venv
     # ``--no-deps`` is essential on FreeBSD: pip's resolver otherwise
