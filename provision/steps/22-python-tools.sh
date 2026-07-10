@@ -61,7 +61,17 @@ if [ "$NOSI_DISTRO" = "freebsd" ]; then
     nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil"
     [ -x /opt/nosi/cijoe-venv/bin/python ] \
         || python3 -m venv --system-site-packages /opt/nosi/cijoe-venv
-    /opt/nosi/cijoe-venv/bin/pip install --upgrade --quiet cijoe
+    # ``--upgrade-strategy only-if-needed`` is essential on FreeBSD:
+    # a plain ``--upgrade`` cascades to transitive deps and can pull a
+    # newer cryptography (or its build backend maturin) whose sdist
+    # needs Rust. We deliberately don't ship Rust in the image, and
+    # FreeBSD has no PyPI wheels, so the source build wedges with
+    # ``Rust not found`` mid-bake. only-if-needed keeps cijoe on the
+    # newest version but leaves pkg-installed paramiko / cryptography
+    # / psutil in place unless the version cijoe requires is
+    # strictly outside the installed one.
+    /opt/nosi/cijoe-venv/bin/pip install \
+        --upgrade --upgrade-strategy only-if-needed --quiet cijoe
     ln -sf /opt/nosi/cijoe-venv/bin/cijoe /usr/local/bin/cijoe
     cijoe --version
     nosi_info "step 22-python-tools done (freebsd)"
