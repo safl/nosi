@@ -172,6 +172,19 @@ jobs:
           cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-img \
             -c configs/${{ matrix.variant }}.toml img_gz_pack
 
+      # Extract the image's own vmlinuz + initrd from the baked qcow2
+      # into a small bundle directory alongside a manifest so bty can
+      # ramboot the image with its OWN kernel via nbdmux's
+      # /artifacts/<export>/{vmlinuz,initrd} routes. Uncond: cijoe's
+      # netboot_bundle_pack no-ops on variants whose config has no
+      # ``[netboot]`` section (freebsd, and any future variants that
+      # opt out). The presence of the output directory + manifest.json
+      # is what the publish step checks.
+      - name: Pack netboot bundle
+        run: |
+          cd cijoe && cijoe tasks/build.yaml --monitor --tag pack-netboot \
+            -c configs/${{ matrix.variant }}.toml netboot_bundle_pack
+
       # The derived shapes (desktop / wsl / docker / lxc / proxmox) are NOT
       # built here. The baked headless qcow2 uploaded below is the stable hand-
       # off point; the `derive` job downloads it and builds each shape in its
@@ -345,6 +358,83 @@ jobs:
               "nosi-${IMG}-x86_64.img.gz" \
               "nosi-${IMG}-x86_64.metadata.json" \
               "$($gc --describe "${IMG}")"
+
+      - name: Publish netboot bundle to GHCR
+        # Sibling to the disk-image push above: for every headless
+        # variant that opted in to netboot (nosi/variants.yml:
+        # ``netboot: true``), tarball the vmlinuz + initrd + manifest
+        # produced by the earlier ``Pack netboot bundle`` step and
+        # oras-push under ``ghcr.io/<repo>/<variant>-netboot:<tag>``.
+        # bty's ipxe_ramboot chain points at nbdmux's
+        # /artifacts/<export>/{vmlinuz,initrd} routes which nbdmux
+        # fetches from this bundle at warm time. The gate is the
+        # bundle's own manifest.json: if it's missing (because the
+        # variant's config had no ``[netboot]`` section, so
+        # netboot_bundle_pack no-op'd), the push is skipped.
+        if: env.PUBLISH == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          IMG:  ${{ matrix.variant }}
+          ROLLING: ${{ steps.tag.outputs.rolling }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          cd "$HOME/system_imaging/disk"
+          src_dir="nosi-${IMG}-netboot-x86_64"
+          if [ ! -f "${src_dir}/manifest.json" ]; then
+              echo "no netboot bundle for ${IMG}; skipping"
+              exit 0
+          fi
+          tarball="nosi-${IMG}-netboot-x86_64.tar.gz"
+          # Repack from the extract dir so the archive members land at
+          # the archive root (vmlinuz + initrd + manifest.json), not
+          # under a wrapping directory. nbdmux's warmer expects this
+          # shape when it streams the tarball through ``curl | tar
+          # -xzf -``.
+          (cd "${src_dir}" && tar -czf "../${tarball}" vmlinuz initrd manifest.json)
+          sha256sum "${tarball}" > "${tarball}.sha256"
+          kver=$(jq -r '.kernel_version // empty' "${src_dir}/manifest.json")
+          framework=$(jq -r '.framework // empty' "${src_dir}/manifest.json")
+          built=$(jq -r '.built_at // empty' "${src_dir}/manifest.json")
+          desc="Netboot bundle for ${IMG}: vmlinuz + initrd (kernel ${kver}, ${framework}) extracted from the matching disk image so bty can ramboot it with its own kernel."
+          ref="ghcr.io/${REPO}/${IMG}-netboot:${ROLLING}"
+          attempts=0
+          until oras push "${ref}" \
+              --artifact-type application/vnd.nosi.netboot-bundle.v1+tar+gzip \
+              --annotation "org.opencontainers.image.title=nosi-${IMG}-netboot" \
+              --annotation "org.opencontainers.image.description=${desc}" \
+              --annotation "org.opencontainers.image.version=${ROLLING}" \
+              --annotation "org.opencontainers.image.created=${built}" \
+              --annotation "org.opencontainers.image.revision=${SHA}" \
+              --annotation "org.opencontainers.image.source=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.url=https://github.com/${REPO}" \
+              --annotation "org.opencontainers.image.os=linux" \
+              --annotation "dev.nosi.variant=${IMG}" \
+              --annotation "dev.nosi.netboot.kernel-version=${kver}" \
+              --annotation "dev.nosi.netboot.framework=${framework}" \
+              "${tarball}:application/vnd.nosi.netboot-bundle.layer.v1+tar+gzip" \
+              "${tarball}.sha256:text/plain" \
+              "${src_dir}/manifest.json:application/vnd.nosi.netboot-manifest.v1+json"; do
+              attempts=$((attempts + 1))
+              if [ $attempts -ge 3 ]; then
+                  echo "::error::oras push ${ref} failed after $attempts attempts"
+                  exit 1
+              fi
+              echo "::warning::oras push ${ref} attempt $attempts failed; retrying"
+              sleep $((attempts * 15))
+          done
+          # Retag :latest -- same eventual-consistency retry as
+          # oras_push (ghcr.io lookup can 404 right after push).
+          tag_attempts=0
+          until oras tag "${ref}" latest; do
+              tag_attempts=$((tag_attempts + 1))
+              if [ $tag_attempts -ge 5 ]; then
+                  echo "::error::oras tag ${ref} latest failed after $tag_attempts attempts"
+                  exit 1
+              fi
+              echo "::warning::oras tag ${ref} latest attempt $tag_attempts failed (propagation lag?); retrying"
+              sleep $((tag_attempts * 10))
+          done
 
       - name: Write build summary
         if: env.PUBLISH == 'true'
