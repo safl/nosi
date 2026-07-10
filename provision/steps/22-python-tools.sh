@@ -58,16 +58,27 @@ nosi_require_root
 if [ "$NOSI_DISTRO" = "freebsd" ]; then
     nosi_pkg_install ruff
     pyver="$(python3 -c 'import sys; print(f"py{sys.version_info.major}{sys.version_info.minor}")')"
-    # cijoe's import-time deps beyond the Rust-native pair: jinja2
-    # (template rendering) + yaml (config) + markupsafe (jinja2's
-    # C-accelerated escape). All ship as native FreeBSD ports so the
-    # pkg install path never touches Rust. Adding them here keeps
-    # cijoe's --no-deps install (below) safe: pkg supplies every
-    # module cijoe imports at startup.
-    nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil" \
-        "${pyver}-Jinja2" "${pyver}-yaml" "${pyver}-MarkupSafe"
+    # paramiko + psutil MUST come from pkg on FreeBSD: their
+    # transitive Rust-native cryptography (paramiko) and C ext
+    # (psutil) source-build the moment pip touches them, and we
+    # deliberately don't ship Rust in the image. FreeBSD ports
+    # pre-build both cleanly.
+    nosi_pkg_install "${pyver}-paramiko" "${pyver}-psutil"
     [ -x /opt/nosi/cijoe-venv/bin/python ] \
         || python3 -m venv --system-site-packages /opt/nosi/cijoe-venv
+    # cijoe's other import-time deps are pure Python: jinja2 (template
+    # rendering) + pyyaml (config; pure-Python fallback when libyaml
+    # is absent) + markupsafe (jinja2's escape helper; pure-Python
+    # fallback when its C ext is absent). FreeBSD's pkg tree only
+    # ports these on some releases (``py311-yaml`` + ``py311-MarkupSafe``
+    # were missing on FreeBSD-15 pkg repo at the time of this bake), so
+    # pip-install them straight from PyPI: --no-deps keeps the resolver
+    # from wandering off into cryptography/maturin (Rust) territory
+    # again, and each of the three ships a platform-independent wheel
+    # so no compiler is invoked. Runs BEFORE the cijoe install below
+    # so its startup imports resolve.
+    /opt/nosi/cijoe-venv/bin/pip install --no-deps --quiet \
+        jinja2 pyyaml markupsafe
     # ``--no-deps`` is essential on FreeBSD: pip's resolver otherwise
     # decides at least one of cijoe's transitives (via cryptography's
     # PEP 517 build-system.requires) needs maturin, has no FreeBSD
