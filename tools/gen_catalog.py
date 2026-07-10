@@ -174,6 +174,8 @@ def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
             continue
         desc = _load_description(name)  # raises if the file is missing/empty
         arch = str(entry.get("arch", "x86_64")).strip()
+        has_netboot = bool(entry.get("netboot"))
+        netboot_name = f"{name}-netboot" if has_netboot else None
         lines += [
             "",
             "[[images]]",
@@ -190,6 +192,36 @@ def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
             f'arch = "{arch}"',
             f'description = "{_toml_escape(desc)}"',
         ]
+        if netboot_name is not None:
+            # nbdmux consumes ``netboot_ref`` at warm time to fetch the
+            # sibling bundle whose bytes are the image's own kernel +
+            # initrd; bty's ipxe_ramboot then serves them so the
+            # rambooted guest runs its OWN kernel rather than
+            # bty-media's fallback. The referenced entry is emitted
+            # right below so both live in every catalog.toml the same
+            # workflow produces.
+            lines.append(f'netboot_ref = "{netboot_name}"')
+        # Emit the companion netboot bundle entry immediately after its
+        # sibling so operators reading catalog.toml see the pair
+        # together. Same ``ref_tag`` so pinned + rolling catalogs both
+        # point to matching bundle bytes. format=tar.gz because the
+        # bundle is packaged by ``cijoe/scripts/netboot_bundle_pack``
+        # into a single gzipped tarball containing vmlinuz + initrd +
+        # manifest.json at the archive root.
+        if netboot_name is not None:
+            netboot_desc = (
+                f"Netboot bundle for {name}: vmlinuz + initrd extracted from the "
+                "matching disk image so bty can ramboot it with its own kernel."
+            )
+            lines += [
+                "",
+                "[[images]]",
+                f'name = "nosi {name} netboot bundle ({arch}, {label})"',
+                f'src = "oras://{ORAS_NAMESPACE}/{netboot_name}:{ref_tag}"',
+                'format = "tar.gz"',
+                f'arch = "{arch}"',
+                f'description = "{_toml_escape(netboot_desc)}"',
+            ]
     return "\n".join(lines) + "\n"
 
 

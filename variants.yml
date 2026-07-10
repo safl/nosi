@@ -21,6 +21,18 @@
 #   arch         target architecture for the catalog label; optional,
 #                defaults to x86_64. Set to arm64 for the Raspberry Pi
 #                variants.
+#   netboot      true if this variant ships a sibling netboot bundle
+#                (vmlinuz + initrd extracted from the baked qcow2 by
+#                cijoe/scripts/netboot_bundle_pack) and the build workflow
+#                publishes it as a companion ORAS artifact under
+#                ``ghcr.io/<owner>/<repo>/<variant>-netboot:<tag>``. bty's
+#                ramboot chain fetches these to boot the image with its
+#                own kernel (see the trio's netboot design). Set on the
+#                x86 headless Linux variants only: freebsd needs a
+#                separate boot chain, and the RPi arm64 variants land on
+#                bty's netboot roadmap later. Non-headless shapes (desktop
+#                / wsl / lxc / docker / proxmox) never ramboot -- desktop
+#                and proxmox are flash-only, the others are containerised.
 #
 # The use-case prose ("what is this variant for?") is NOT here: each
 # variant's description lives in its own file, descriptions/<name>.md,
@@ -35,6 +47,7 @@ variants:
   debian-13-headless:
     shape: headless
     flashable: true
+    netboot: true
 
   debian-13-desktop:
     shape: desktop
@@ -51,10 +64,12 @@ variants:
   ubuntu-2404-headless:
     shape: headless
     flashable: true
+    netboot: true
 
   ubuntu-2604-headless:
     shape: headless
     flashable: true
+    netboot: true
 
   ubuntu-2604-wsl:
     shape: wsl
@@ -71,6 +86,7 @@ variants:
   fedora-44-headless:
     shape: headless
     flashable: true
+    netboot: true
 
   fedora-44-desktop:
     shape: desktop

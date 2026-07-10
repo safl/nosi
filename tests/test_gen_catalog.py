@@ -91,12 +91,49 @@ def test_catalog_parses_and_every_image_is_complete(registry):
     doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
     assert doc.get("version") == 1
     flashable = [n for n, s in registry.items() if s["flashable"]]
-    assert len(doc.get("images", [])) == len(flashable)
+    netboot = [n for n, s in registry.items() if s.get("netboot")]
+    # Every ``flashable: true`` variant emits its disk-image entry;
+    # every ``netboot: true`` variant emits a companion bundle entry
+    # right after it. So the total image count is flashable + netboot.
+    assert len(doc.get("images", [])) == len(flashable) + len(netboot)
     for img in doc["images"]:
         for field in ("name", "src", "format", "arch", "description"):
             assert img.get(field), f"{img.get('name', '?')}: missing {field}"
         assert img["src"].startswith("oras://")
         assert img["description"].strip()
+
+
+def test_netboot_entries_pair_with_their_disk_image(registry):
+    """Every ``netboot: true`` variant emits BOTH:
+    - a disk-image entry (format=img.gz) with ``netboot_ref`` pointing
+      at the companion bundle's ``name`` field, and
+    - a companion bundle entry (format=tar.gz) whose src is
+      ``<disk-src>-netboot`` and whose bare name (from the src path) is
+      the pointer target above.
+    The pairing is what nbdmux consumes at warm time to fetch the
+    image's own kernel + initrd for bty's ipxe_ramboot chain.
+    """
+    import tomllib
+
+    doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
+    imgs_by_variant = {img["src"].rsplit("/", 1)[1].split(":", 1)[0]: img for img in doc["images"]}
+    for name, spec in registry.items():
+        if not spec.get("netboot"):
+            # Disk-image entries without netboot: no netboot_ref.
+            if spec.get("flashable"):
+                assert "netboot_ref" not in imgs_by_variant[name], (
+                    f"{name}: netboot_ref set but variant has no netboot bundle"
+                )
+            continue
+        # Disk-image entry: has netboot_ref pointing at the sibling.
+        disk = imgs_by_variant[name]
+        assert disk["netboot_ref"] == f"{name}-netboot"
+        # Companion bundle entry: exists, tar.gz, matching arch.
+        bundle = imgs_by_variant[f"{name}-netboot"]
+        assert bundle["format"] == "tar.gz"
+        assert bundle["arch"] == disk["arch"]
+        # Sibling shouldn't itself carry netboot_ref (no chaining).
+        assert "netboot_ref" not in bundle
 
 
 def test_arch_field_matches_registry(registry):
