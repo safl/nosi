@@ -105,34 +105,48 @@ def test_catalog_parses_and_every_image_is_complete(registry):
 
 def test_netboot_entries_pair_with_their_disk_image(registry):
     """Every ``netboot: true`` variant emits BOTH:
-    - a disk-image entry (format=img.gz) with ``netboot_ref`` pointing
-      at the companion bundle's ``name`` field, and
-    - a companion bundle entry (format=tar.gz) whose src is
-      ``<disk-src>-netboot`` and whose bare name (from the src path) is
-      the pointer target above.
-    The pairing is what nbdmux consumes at warm time to fetch the
-    image's own kernel + initrd for bty's ipxe_ramboot chain.
+    - a disk-image entry (format=img.gz) with ``netboot_ref`` naming
+      the companion bundle by its actual ``name`` field, and
+    - a companion bundle entry (format=tar.gz) whose src is the
+      ``<disk-src>-netboot`` sibling.
+
+    Nbdmux's Warmer resolves the pairing with
+    ``_lookup_withcache_entry_by_name(netboot_ref)`` -- an EXACT
+    string match against the sibling's ``name`` field, not a
+    substring or a slug-derivation. Previously ``netboot_ref`` held
+    the slug ``<variant>-netboot`` while the sibling's ``name`` was
+    the display string ``nosi <variant> netboot bundle (<arch>,
+    <label>)``, so the lookup silently failed for every entry
+    loaded from a published catalog TOML and the ramboot chain fell
+    all the way back to bty-media's kernel. Pin the equality here
+    so a future drift fails this test rather than the deploy.
     """
     import tomllib
 
     doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
+    # Two indices: by variant (the slug baked into the oras src's
+    # path segment) so we can walk the registry, and by name so we
+    # can prove the netboot_ref lookup succeeds structurally.
     imgs_by_variant = {img["src"].rsplit("/", 1)[1].split(":", 1)[0]: img for img in doc["images"]}
+    imgs_by_name = {img["name"]: img for img in doc["images"]}
     for name, spec in registry.items():
         if not spec.get("netboot"):
-            # Disk-image entries without netboot: no netboot_ref.
             if spec.get("flashable"):
                 assert "netboot_ref" not in imgs_by_variant[name], (
                     f"{name}: netboot_ref set but variant has no netboot bundle"
                 )
             continue
-        # Disk-image entry: has netboot_ref pointing at the sibling.
         disk = imgs_by_variant[name]
-        assert disk["netboot_ref"] == f"{name}-netboot"
-        # Companion bundle entry: exists, tar.gz, matching arch.
-        bundle = imgs_by_variant[f"{name}-netboot"]
+        # Disk-image's netboot_ref must be resolvable via a plain
+        # name lookup -- the exact wire contract nbdmux uses.
+        ref = disk["netboot_ref"]
+        assert ref in imgs_by_name, f"{name}: netboot_ref {ref!r} does not name any catalog entry"
+        bundle = imgs_by_name[ref]
+        # Bundle also happens to sit at ``<variant>-netboot`` by src slug.
+        assert imgs_by_variant[f"{name}-netboot"] is bundle
         assert bundle["format"] == "tar.gz"
         assert bundle["arch"] == disk["arch"]
-        # Sibling shouldn't itself carry netboot_ref (no chaining).
+        # No chaining: the bundle itself never carries netboot_ref.
         assert "netboot_ref" not in bundle
 
 
