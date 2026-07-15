@@ -151,13 +151,30 @@ def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
         if not main_dir.is_dir():
             log.info(f"initrd {initrd_path} has no ``main/`` split; skipping strip")
             return
-        # Redact + remove the three artefact families.
+        # Redact + remove the artefact families that pin initrd boot
+        # to devices that only exist on a local disk:
+        #   * /etc/cmdline.d/20-root-dev.conf pins root=UUID=<rootfs>
+        #   * initqueue/finished/devexists-*.sh polls for each fs
+        #   * emergency/80-*.sh trips into the emergency shell when the
+        #     polls time out
+        #   * initrd.target.wants/dev-disk-by*.device symlinks + their
+        #     .device.d/ drop-ins pull /boot + /boot/efi filesystem
+        #     UUIDs into initrd.target's dependency graph, which
+        #     systemd waits ~90s for per device before giving up.
+        # dracut bakes these when the image is built with
+        # ``hostonly=yes`` (default on Ubuntu cloud images); they're
+        # correct for the disk boot path and fatal for netboot.
         redact_conf = f"{main_dir}/etc/cmdline.d/20-root-dev.conf"
         finished_glob = f"{main_dir}/var/lib/dracut/hooks/initqueue/finished/devexists-*.sh"
         emergency_glob = f"{main_dir}/var/lib/dracut/hooks/emergency/80-*.sh"
+        target_wants = f"{main_dir}/etc/systemd/system/initrd.target.wants"
+        device_wants_pat = f"{target_wants}/dev-disk-by*.device"
+        device_dropins = f"{main_dir}/etc/systemd/system/dev-disk-by*.device.d"
         cijoe.run_local(f"sudo bash -c ': > {redact_conf}' 2>/dev/null || true")
         cijoe.run_local(f"sudo bash -c 'rm -f {finished_glob}' 2>/dev/null || true")
         cijoe.run_local(f"sudo bash -c 'rm -f {emergency_glob}' 2>/dev/null || true")
+        cijoe.run_local(f"sudo bash -c 'rm -f {device_wants_pat}' 2>/dev/null || true")
+        cijoe.run_local(f"sudo bash -c 'rm -rf {device_dropins}' 2>/dev/null || true")
         # Repack. cpio order + newc format matches mkinitramfs output.
         cpio = "sudo find . -mindepth 1 -printf '%P\\n' | sudo cpio -H newc -o --quiet"
         cijoe.run_local(f"cd {early_dir} && {cpio} > {work}/initrd.early")
