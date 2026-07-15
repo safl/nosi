@@ -81,7 +81,13 @@ case "$NOSI_PKGMGR" in
         install -d -m 0755 /etc/dracut.conf.d /usr/lib/dracut/modules.d/99bty-ramboot
         install -m 0644 "$ASSETS/dracut/conf.d/99-nosi-netboot.conf" /etc/dracut.conf.d/99-nosi-netboot.conf
         install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh
-        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot.sh
+        # Three phased runtime hooks replace the old single ``bty-ramboot.sh``
+        # so the cmdline override lands before initqueue's baked root=UUID
+        # devexists polls and the mount phase runs after online has attached
+        # /dev/nbd0. See module-setup.sh for the full contract.
+        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh
+        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh
+        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh
         nosi_info "regenerating all initramfs images (dracut --regenerate-all --force)"
         dracut --regenerate-all --force
         ;;
