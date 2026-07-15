@@ -35,30 +35,17 @@ root_part_override="$(getarg bty.root_part=)"
 
 [ -b /dev/nbd0 ] || _bty_die "mount hook: /dev/nbd0 missing (online hook didn't run?)"
 
-# The online hook attaches nbd0 + kicks partx, but partition device
-# nodes can trickle in a few hundred ms later via udev. Wait briefly
-# for them before we sort by size.
-i=0
-while [ "$i" -lt 40 ]; do
-    [ -b /dev/nbd0p1 ] && break
-    sleep 0.1
-    i=$((i + 1))
-done
-_bty_trace "mount hook: nbd0 partition nodes: $(ls /dev/nbd0p* 2>/dev/null | tr '\n' ' ' || echo '<none>')"
-
+# Pixie's nbdkit serves the disk with --filter=partition partition=1
+# already applied, so /dev/nbd0 is the ext4 root filesystem. The
+# ``bty.root_part=`` override is retained for the legacy full-disk
+# case (nbdmux + non-pixie servers that don't partition-filter).
 if [ -n "$root_part_override" ]; then
     root_part="$root_part_override"
-elif [ -b /dev/nbd0p1 ]; then
-    root_part="$(
-        for p in /dev/nbd0p*; do
-            [ -b "$p" ] && echo "$(blockdev --getsize64 "$p") $p"
-        done | sort -n | tail -1 | cut -d' ' -f2
-    )"
 else
     root_part=/dev/nbd0
 fi
 _bty_trace "mount hook: picked root_part=${root_part}"
-[ -n "$root_part" ] && [ -e "$root_part" ] || _bty_die "no root partition on /dev/nbd0"
+[ -b "$root_part" ] || _bty_die "root_part ${root_part} is not a block device"
 
 # dracut may have partially mounted /sysroot already from an earlier
 # mount hook trying the baked root=UUID; unmount cleanly so the
@@ -90,15 +77,19 @@ mount -t overlay overlay \
     /sysroot \
     || _bty_die "failed to mount overlayfs at /sysroot"
 
-# Strip /boot + /boot/efi from fstab in overlay upper -- systemd
-# would otherwise try to mount them off the image's partition table
-# and race jbd2 over the loop stack.
-if [ -e /run/bty-lower/etc/fstab ]; then
-    mkdir -p /run/bty-upper/up/etc
-    awk '$2 != "/boot" && $2 != "/boot/efi" { print }' \
-        /run/bty-lower/etc/fstab > /run/bty-upper/up/etc/fstab
-    _bty_trace "mount hook: rewrote /etc/fstab in overlay upper"
-fi
+# Replace /etc/fstab in the overlay upper with a minimal one.
+# The image's fstab lists / (by LABEL cloudimg-rootfs), /boot, and
+# /boot/efi entries; letting systemd-fstab-generator materialise
+# any of them adds ordering deps on /dev/disk/by-uuid/* nodes that
+# never appear (we're not on a disk with a partition table anymore).
+# / is already mounted as the overlay from initrd -- fstab has no
+# more work to do.
+mkdir -p /run/bty-upper/up/etc
+cat > /run/bty-upper/up/etc/fstab <<EOF
+# Written by nosi bty-ramboot dracut hook -- ramboot overrides the
+# image's baked /etc/fstab. / is already the initrd's overlay.
+EOF
+_bty_trace "mount hook: wrote minimal /etc/fstab in overlay upper"
 
 # Mask systemd-networkd + cloud-init in overlay upper so they don't
 # tear down the NIC dracut's network module set up (we still own it

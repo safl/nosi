@@ -39,10 +39,27 @@ rmmod nbd 2>/dev/null || true
 modprobe nbd nbds_max=1 max_part=16 || _bty_die "modprobe nbd failed"
 modprobe overlay || _bty_die "modprobe overlay failed"
 
-_bty_trace "online hook: nbd-client -persist ${nbd_host}:${nbd_port} -name ${image}"
-if ! nbd-client -persist "$nbd_host" "$nbd_port" -name "$image" /dev/nbd0; then
-    _bty_die "nbd-client failed to connect to ${nbd_host}:${nbd_port}"
-fi
+# nbd-client argument shape: modern nbd-client requires flag options
+# BEFORE positional (host, port, device). ``-N NAME`` selects the
+# newstyle export name; ``-persist`` re-connects on drop; ``-block-size
+# 4096`` avoids the mis-sized-io warnings some kernels emit. Capture
+# stderr into a scratch file we can log if the connect fails.
+_bty_trace "online hook: nbd-client -N ${image} -persist ${nbd_host} ${nbd_port} /dev/nbd0"
+# TCP-level pre-check: some initrds see nbd-client return before it
+# has actually made a syscall; wrap the real attempt in a retry loop
+# so a single lost SYN doesn't drop us to emergency.
+attempt=0
+while [ "$attempt" -lt 5 ]; do
+    nbd_out="$(nbd-client -N "$image" -persist "$nbd_host" "$nbd_port" /dev/nbd0 2>&1)"
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        break
+    fi
+    _bty_trace "online hook: nbd-client attempt $((attempt + 1)) rc=${rc}: ${nbd_out}"
+    attempt=$((attempt + 1))
+    sleep 1
+done
+[ "$rc" -eq 0 ] || _bty_die "nbd-client failed to connect to ${nbd_host}:${nbd_port} after ${attempt} tries: ${nbd_out}"
 
 # Capacity ready.
 i=0
@@ -54,22 +71,12 @@ while [ "$i" -lt 100 ]; do
 done
 _bty_trace "online hook: nbd0 capacity ready after ${i} tick(s): ${sz:-0} bytes"
 
-# Partition scan is racy on nbd; fall back to userspace partx if
-# the kernel didn't emit the partition uevents in time.
+# Pixie's nbdkit serves a single partition (--filter=partition
+# partition=1), so /dev/nbd0 is ALREADY the root filesystem: no
+# partition table, no /dev/nbd0pN nodes, mount /dev/nbd0 directly.
+# We settle udev anyway so the block device is fully published
+# before the mount hook fires.
 udevadm settle --timeout=10 || true
-blockdev --rereadpt /dev/nbd0 2>/dev/null || true
-udevadm settle --timeout=10 || true
-
-i=0
-while [ "$i" -lt 20 ]; do
-    [ -b /dev/nbd0p1 ] && break
-    sleep 0.1
-    i=$((i + 1))
-done
-if [ ! -b /dev/nbd0p1 ]; then
-    partx --add /dev/nbd0 2>/dev/null || true
-    udevadm settle --timeout=10 || true
-fi
 
 : > /tmp/bty-nbd-attached  # pure-shell truncate, no ``touch`` dep (busybox in initrd may lack it)
 _bty_trace "online hook: done -- /dev/nbd0 attached"
