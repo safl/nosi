@@ -78,33 +78,20 @@ install() {
     inst_hook initqueue/online 20 "$moddir/bty-ramboot-online.sh"
     inst_hook mount 90 "$moddir/bty-ramboot-mount.sh"
 
-    # Ubuntu's cloud-image dracut config bakes root=UUID references
-    # into the initrd in three places that all need stripping so
-    # dracut doesn't hang for 3 min waiting for local disks that
-    # never appear under ramboot:
+    # NOTE ON THE ROOT=UUID SITUATION:
+    # Ubuntu's cloud-image dracut config bakes root=UUID references into
+    # the initrd in three places that keep dracut-initqueue waiting for
+    # local disks when the image is netbooted:
     #
     #   /etc/cmdline.d/20-root-dev.conf
-    #       kernel-cmdline fragment that adds root=UUID= (merged
-    #       into effective cmdline before any hook runs).
-    #
     #   /var/lib/dracut/hooks/initqueue/finished/devexists-*.sh
-    #       initqueue "am I done yet" polls that require the baked
-    #       root/boot/EFI UUIDs to appear as block devices.
-    #
     #   /var/lib/dracut/hooks/emergency/80-*.sh
-    #       emergency shell handlers that fire when the devexists
-    #       polls time out.
     #
-    # ``initdir`` is exported by dracut when install() runs.
-    # shellcheck disable=SC2154
-    if [ -d "${initdir}/etc/cmdline.d" ]; then
-        [ -e "${initdir}/etc/cmdline.d/20-root-dev.conf" ] && \
-            : > "${initdir}/etc/cmdline.d/20-root-dev.conf"
-    fi
-    if [ -d "${initdir}/var/lib/dracut/hooks/initqueue/finished" ]; then
-        rm -f "${initdir}/var/lib/dracut/hooks/initqueue/finished/devexists-"*.sh
-    fi
-    if [ -d "${initdir}/var/lib/dracut/hooks/emergency" ]; then
-        rm -f "${initdir}/var/lib/dracut/hooks/emergency/80-"*.sh
-    fi
+    # We DON'T strip them here because ``dracut --regenerate-all`` inside
+    # the image build (step 34) regenerates the SAME initrd the image
+    # boots locally from -- stripping would break the flash-boot path.
+    # The netboot bundle packer (cijoe/scripts/netboot_bundle_pack.py)
+    # strips these from ONLY the copy it ships in the bundle, so the
+    # ramboot path gets the stripped initrd while the local-disk path
+    # keeps the pristine one.
 }

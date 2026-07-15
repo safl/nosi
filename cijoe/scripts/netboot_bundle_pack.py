@@ -117,6 +117,61 @@ def _find_boot_dir(mount_root: Path) -> tuple[Path, str]:
     raise FileNotFoundError("no /boot with vmlinuz + matching initrd found in any partition")
 
 
+def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
+    """In-place mutation of a dracut-generated initrd: null out the
+    baked ``root=UUID=`` fragment + remove the initqueue ``devexists-``
+    polls + emergency handlers that would otherwise block ramboot.
+
+    Ubuntu 26.04's cloud-image dracut config emits these when the
+    image is baked (they make local-disk boot work). When the SAME
+    initrd is used for a netboot bundle the polls never resolve
+    (no local disks) and dracut-initqueue blocks for 3 min before
+    entering emergency mode.
+
+    Uses ``unmkinitramfs`` to split the initrd into early (uncompressed
+    microcode cpio) + main filesystem, edits the main tree, then
+    re-cpio's both parts and concatenates -- same shape the
+    upstream ``mkinitramfs`` produces. Kernel accepts uncompressed
+    concatenated cpio initrds fine.
+
+    Skips silently on framework == 'initramfs-tools' initrds: those
+    dispatch via /scripts/${BOOT} (which does the ramboot work
+    directly) and don't have the baked root=UUID artefacts.
+    """
+    import tempfile as _tmp
+
+    work = Path(_tmp.mkdtemp(prefix="nosi-initrd-strip-"))
+    try:
+        err, _ = cijoe.run_local(f"sudo unmkinitramfs {initrd_path} {work}")
+        if err:
+            log.warning(f"unmkinitramfs failed on {initrd_path}; skipping strip")
+            return
+        main_dir = work / "main"
+        early_dir = work / "early"
+        if not main_dir.is_dir():
+            log.info(f"initrd {initrd_path} has no ``main/`` split; skipping strip")
+            return
+        # Redact + remove the three artefact families.
+        redact_conf = f"{main_dir}/etc/cmdline.d/20-root-dev.conf"
+        finished_glob = f"{main_dir}/var/lib/dracut/hooks/initqueue/finished/devexists-*.sh"
+        emergency_glob = f"{main_dir}/var/lib/dracut/hooks/emergency/80-*.sh"
+        cijoe.run_local(f"sudo bash -c ': > {redact_conf}' 2>/dev/null || true")
+        cijoe.run_local(f"sudo bash -c 'rm -f {finished_glob}' 2>/dev/null || true")
+        cijoe.run_local(f"sudo bash -c 'rm -f {emergency_glob}' 2>/dev/null || true")
+        # Repack. cpio order + newc format matches mkinitramfs output.
+        cpio = "sudo find . -mindepth 1 -printf '%P\\n' | sudo cpio -H newc -o --quiet"
+        cijoe.run_local(f"cd {early_dir} && {cpio} > {work}/initrd.early")
+        cijoe.run_local(f"cd {main_dir} && {cpio} > {work}/initrd.main")
+        cijoe.run_local(
+            f"sudo bash -c 'cat {work}/initrd.early {work}/initrd.main > {initrd_path}.stripped'"
+        )
+        cijoe.run_local(f"sudo mv {initrd_path}.stripped {initrd_path}")
+        cijoe.run_local(f"sudo chown $(id -un):$(id -gn) {initrd_path}")
+        log.info(f"stripped dracut root=UUID polls from {initrd_path}")
+    finally:
+        cijoe.run_local(f"sudo rm -rf {work}")
+
+
 def _connect_qemu_nbd(cijoe, qcow2_path: Path, mount_root: Path):
     """qemu-nbd --connect + partprobe + mount every partition RO."""
     # The ``nbd`` module is loadable on the GHA runners but not loaded
@@ -213,6 +268,18 @@ def main(args, cijoe):
         if err:
             return err
         cijoe.run_local(f"sudo chown -R $(id -un):$(id -gn) {bundle_dir}")
+
+        # dracut-based initrds (Ubuntu 26.04, Fedora) bake root=UUID
+        # references in three places that keep dracut-initqueue waiting
+        # for local disks on a netboot -- fatal because there IS no
+        # local disk under ramboot. The bty-ramboot dracut module can't
+        # strip these at install() time (would break local-disk boot of
+        # the same image). Strip ONLY the copy we ship in the bundle.
+        # No-op on initramfs-tools initrds (they use /scripts/${BOOT}
+        # dispatch instead, which doesn't need these strips).
+        if framework == "dracut":
+            _strip_dracut_root_uuid_polls(cijoe, initrd_out)
+            # Recompute sha + size below picks up the modified file.
 
         manifest = {
             "variant": image_name.replace("nosi-", "").rsplit("-", 1)[0],
