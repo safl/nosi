@@ -112,7 +112,9 @@ if [ "$NOSI_PKGMGR" = "apt" ] && command -v dracut >/dev/null 2>&1 && [ -d /etc/
     install -d -m 0755 /usr/lib/dracut/modules.d/99bty-ramboot
     install -m 0644 "$ASSETS/dracut/conf.d/99-nosi-netboot.conf" /etc/dracut.conf.d/99-nosi-netboot.conf
     install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh
-    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh
     dracut --regenerate-all --force
 fi
 
