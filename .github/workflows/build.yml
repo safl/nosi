@@ -174,7 +174,7 @@ jobs:
 
       # Extract the image's own vmlinuz + initrd from the baked qcow2
       # into a small bundle directory alongside a manifest so bty can
-      # ramboot the image with its OWN kernel via nbdmux's
+      # nbdboot the image with its OWN kernel via nbdmux's
       # /artifacts/<export>/{vmlinuz,initrd} routes. Uncond: cijoe's
       # netboot_bundle_pack no-ops on variants whose config has no
       # ``[netboot]`` section (freebsd, and any future variants that
@@ -365,7 +365,7 @@ jobs:
         # ``netboot: true``), tarball the vmlinuz + initrd + manifest
         # produced by the earlier ``Pack netboot bundle`` step and
         # oras-push under ``ghcr.io/<repo>/<variant>-netboot:<tag>``.
-        # bty's ipxe_ramboot chain points at nbdmux's
+        # bty's ipxe/nbdboot chain points at nbdmux's
         # /artifacts/<export>/{vmlinuz,initrd} routes which nbdmux
         # fetches from this bundle at warm time. The gate is the
         # bundle's own manifest.json: if it's missing (because the
@@ -396,7 +396,7 @@ jobs:
           kver=$(jq -r '.kernel_version // empty' "${src_dir}/manifest.json")
           framework=$(jq -r '.framework // empty' "${src_dir}/manifest.json")
           built=$(jq -r '.built_at // empty' "${src_dir}/manifest.json")
-          desc="Netboot bundle for ${IMG}: vmlinuz + initrd (kernel ${kver}, ${framework}) extracted from the matching disk image so bty can ramboot it with its own kernel."
+          desc="Netboot bundle for ${IMG}: vmlinuz + initrd (kernel ${kver}, ${framework}) extracted from the matching disk image so bty/pixie can nbdboot it with its own kernel."
           ref="ghcr.io/${REPO}/${IMG}-netboot:${ROLLING}"
           attempts=0
           until oras push "${ref}" \
