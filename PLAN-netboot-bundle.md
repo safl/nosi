@@ -3,7 +3,7 @@
 ## Goal
 
 Publish, alongside every headless nosi disk image, a matching
-`vmlinuz` + `initrd` pair that lets bty ramboot the image via NBD
+`vmlinuz` + `initrd` pair that lets bty nbdboot the image via NBD
 using the image's OWN kernel (not bty-media's). Same kernel version
 as the image; matched modules; matched userspace glibc; supports both
 initramfs-tools (Debian) and dracut (Ubuntu 26.04, Fedora) families.
@@ -23,7 +23,7 @@ this pass because bty's netboot path is x86 iPXE today.
 
 Two moving parts, both inside nosi.
 
-### 1. Provision step: `34-netboot-ramboot-hook.sh`
+### 1. Provision step: `34-netboot-nbdboot-hook.sh`
 
 Runs during the QEMU cloud-init bake, after the base steps but
 before the metadata/motd finishers. Guarded on `NOSI_SHAPE=headless`
@@ -32,19 +32,19 @@ skip the step wholesale.
 
 initramfs-tools path (`NOSI_PKGMGR=apt`):
 - `nosi_pkg_install nbd-client`
-- Drop `/etc/initramfs-tools/scripts/ramboot`
-- Drop `/etc/initramfs-tools/hooks/bty-ramboot`
+- Drop `/etc/initramfs-tools/scripts/nbdboot`
+- Drop `/etc/initramfs-tools/hooks/nosi-nbdboot`
 - `update-initramfs -u -k all`
 
 dracut path (`NOSI_PKGMGR=dnf` or Ubuntu 26.04+):
 - `nosi_pkg_install nbd` (Fedora) or `nbd-client` (Ubuntu)
 - Drop `/etc/dracut.conf.d/99-nosi-netboot.conf` forcing `add_dracutmodules+=" nbd "` and `add_drivers+=" nbd overlay "`
-- Drop `/usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh` (install-time module hook)
-- Drop `/usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot.sh` (runtime attach + overlay)
+- Drop `/usr/lib/dracut/modules.d/99nosi-nbdboot/module-setup.sh` (install-time module hook)
+- Drop `/usr/lib/dracut/modules.d/99nosi-nbdboot/nosi-nbdboot-mount.sh` (runtime attach + overlay)
 - `dracut --regenerate-all --force`
 
 Hook assets live under `provision/netboot/` in the repo, copied by
-the step. The initramfs-tools `scripts/ramboot` is the canonical
+the step. The initramfs-tools `scripts/nbdboot` is the canonical
 attach-driver (moved from `bty-media` in a follow-up PR; source of
 truth for both frameworks conceptually, though dracut has its own
 module shape).
@@ -78,14 +78,13 @@ Tarballed for a single ORAS artifact:
 ### Wire contract to bty
 
 Withcache catalog entries gain an optional `netboot_ref` string.
-Presence means: this entry can be rambooted; nbdmux should fetch the
+Presence means: this entry can be nbdbooted; nbdmux should fetch the
 sibling bundle at warm time and serve its vmlinuz + initrd. Absence
 means: flash-only.
 
-bty's `ipxe_ramboot.j2` retargets from `${bty-base}/boot/bty-ramboot-init-*` to nbdmux's per-export `/artifacts/<export>/{vmlinuz,initrd}` route.
+pixie's `web/_templates/ipxe/nbdboot.j2` (formerly `bty/ipxe_ramboot.j2`) retargets from `${bty-base}/boot/bty-ramboot-init-*` to the per-export `/artifacts/<export>/{vmlinuz,initrd}` route.
 
-bty-media's `ramboot-init` variant is deleted in the follow-up bty
-PR once nbdmux serves the artifacts.
+pixie-media's `ramboot-init` variant was deleted in a follow-up PR once the artifacts pipeline shipped.
 
 ## Cross-repo sequencing
 
@@ -103,8 +102,7 @@ PR once nbdmux serves the artifacts.
    entries; `/catalog` envelope includes it. Bump minor.
 5. **nbdmux PR**: Warmer downloads bundle from `netboot_ref`,
    extracts to `/data/nbdmux/artifacts/<export>/`, adds routes.
-6. **bty PR**: `ipxe_ramboot.j2` retarget; delete bty-media
-   ramboot-init variant.
+6. **downstream (bty then pixie) PR**: `nbdboot.j2` retarget; delete the media-side `ramboot-init` variant.
 
 ## Non-goals
 

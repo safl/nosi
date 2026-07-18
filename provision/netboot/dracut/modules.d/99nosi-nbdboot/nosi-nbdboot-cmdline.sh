@@ -1,25 +1,25 @@
 #!/bin/sh
-# dracut cmdline hook for bty ramboot (priority 10).
+# dracut cmdline hook for nosi nbdboot (priority 10).
 #
 # Runs during dracut's cmdline phase, before ANY device lookups. Its
 # only job is to override dracut's baked ``root=UUID=`` with our NBD
 # device so the initqueue doesn't sit for 3 minutes waiting for a
-# disk UUID that will never appear (there's no local disk in a
-# ramboot).
+# disk UUID that will never appear (there's no local disk in an nbdboot
+# nbdboot).
 #
 # Does NOT do the actual nbd-client attach -- that needs the
 # ``network`` module to have brought a NIC up, which happens later
-# in the initqueue/online phase. See ``bty-ramboot-online.sh``.
+# in the initqueue/online phase. See ``nosi-nbdboot-online.sh``.
 
 # shellcheck disable=SC1091
 type getarg >/dev/null 2>&1 || . /lib/dracut-lib.sh
 
-_bty_trace() { echo "bty-ramboot: $*" >/dev/kmsg 2>/dev/null || echo "bty-ramboot: $*"; }
+_nosi_trace() { echo "nosi-nbdboot: $*" >/dev/kmsg 2>/dev/null || echo "nosi-nbdboot: $*"; }
 
 nbd_url="$(getarg bty.nbd=)"
 [ -n "$nbd_url" ] || return 0
 
-_bty_trace "cmdline hook: bty.nbd=${nbd_url}; overriding baked root= to block:/dev/nbd0"
+_nosi_trace "cmdline hook: bty.nbd=${nbd_url}; overriding baked root= to block:/dev/nbd0"
 
 # The image bakes ``root=UUID=<image-root-uuid>`` (etc.) into
 # ``/etc/cmdline.d/20-root-dev.conf`` inside the initrd; that file's
@@ -27,9 +27,9 @@ _bty_trace "cmdline hook: bty.nbd=${nbd_url}; overriding baked root= to block:/d
 # hook runs, and systemd's fstab-generator (also earlier than us)
 # emits ``dev-disk-by-uuid-<uuid>.device`` units from it. Redact the
 # file so those units never get emitted; the local-disk root= is
-# meaningless for ramboot.
+# meaningless for nbdboot.
 if [ -e /etc/cmdline.d/20-root-dev.conf ]; then
-    _bty_trace "cmdline hook: redacting /etc/cmdline.d/20-root-dev.conf"
+    _nosi_trace "cmdline hook: redacting /etc/cmdline.d/20-root-dev.conf"
     : > /etc/cmdline.d/20-root-dev.conf
 fi
 

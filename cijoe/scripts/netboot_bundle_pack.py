@@ -1,10 +1,10 @@
 """
-Extract the ramboot netboot bundle from a baked headless nosi image
+Extract the netboot bundle from a baked headless nosi image
 ==================================================================
 
 Runs after ``diskimage_build`` (specifically, after step
-``34-netboot-ramboot-hook`` inside the guest has regenerated the
-initrd with the bty ramboot attach-hook baked in). Attaches the
+``34-netboot-nbdboot-hook`` inside the guest has regenerated the
+initrd with the nbdboot attach-hook baked in). Attaches the
 baked qcow2 via ``qemu-nbd`` (same mechanism ``derive_pack`` uses to
 chroot into the rootfs), walks the partitions looking for the
 ``/boot`` filesystem (the one carrying ``vmlinuz-*`` +
@@ -120,7 +120,7 @@ def _find_boot_dir(mount_root: Path) -> tuple[Path, str]:
 def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
     """In-place mutation of a dracut-generated initrd: null out the
     baked ``root=UUID=`` fragment + remove the initqueue ``devexists-``
-    polls + emergency handlers that would otherwise block ramboot.
+    polls + emergency handlers that would otherwise block nbdboot.
 
     Ubuntu 26.04's cloud-image dracut config emits these when the
     image is baked (they make local-disk boot work). When the SAME
@@ -135,7 +135,7 @@ def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
     concatenated cpio initrds fine.
 
     Skips silently on framework == 'initramfs-tools' initrds: those
-    dispatch via /scripts/${BOOT} (which does the ramboot work
+    dispatch via /scripts/${BOOT} (which does the nbdboot work
     directly) and don't have the baked root=UUID artefacts.
     """
     import tempfile as _tmp
@@ -289,7 +289,7 @@ def main(args, cijoe):
         # dracut-based initrds (Ubuntu 26.04, Fedora) bake root=UUID
         # references in three places that keep dracut-initqueue waiting
         # for local disks on a netboot -- fatal because there IS no
-        # local disk under ramboot. The bty-ramboot dracut module can't
+        # local disk under nbdboot. The nosi-nbdboot dracut module can't
         # strip these at install() time (would break local-disk boot of
         # the same image). Strip ONLY the copy we ship in the bundle.
         # No-op on initramfs-tools initrds (they use /scripts/${BOOT}

@@ -1,8 +1,8 @@
 #!/bin/bash
-# dracut module: bty-ramboot
+# dracut module: nosi-nbdboot
 #
 # Install-time hook. Called by ``dracut -f`` (or dracut's automatic
-# runs after a kernel update) when 99bty-ramboot is in the module
+# runs after a kernel update) when 99nosi-nbdboot is in the module
 # list (pulled in by /etc/dracut.conf.d/99-nosi-netboot.conf on
 # nosi-baked images). Wires up:
 #
@@ -11,7 +11,7 @@
 #     dep chain.
 #   * userspace binaries (nbd-client + core utilities used by the
 #     runtime hooks) baked into the initrd tree.
-#   * Three phased hooks driving the ramboot chain:
+#   * Three phased hooks driving the nbdboot chain:
 #
 #     - cmdline (priority 10): parse ``bty.nbd=`` off /proc/cmdline
 #       and IMMEDIATELY override dracut's ``root`` var so the
@@ -74,9 +74,9 @@ install() {
     # ``$moddir`` is exported by dracut when it sources this file --
     # it points at the module's own directory.
     # shellcheck disable=SC2154
-    inst_hook cmdline 10 "$moddir/bty-ramboot-cmdline.sh"
-    inst_hook initqueue/online 20 "$moddir/bty-ramboot-online.sh"
-    inst_hook mount 90 "$moddir/bty-ramboot-mount.sh"
+    inst_hook cmdline 10 "$moddir/nosi-nbdboot-cmdline.sh"
+    inst_hook initqueue/online 20 "$moddir/nosi-nbdboot-online.sh"
+    inst_hook mount 90 "$moddir/nosi-nbdboot-mount.sh"
 
     # NOTE ON THE ROOT=UUID SITUATION:
     # Ubuntu's cloud-image dracut config bakes root=UUID references into
@@ -92,6 +92,6 @@ install() {
     # boots locally from -- stripping would break the flash-boot path.
     # The netboot bundle packer (cijoe/scripts/netboot_bundle_pack.py)
     # strips these from ONLY the copy it ships in the bundle, so the
-    # ramboot path gets the stripped initrd while the local-disk path
+    # nbdboot path gets the stripped initrd while the local-disk path
     # keeps the pristine one.
 }

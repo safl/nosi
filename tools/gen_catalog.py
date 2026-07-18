@@ -208,8 +208,8 @@ def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
         if netboot_entry_name is not None:
             # nbdmux consumes ``netboot_ref`` at warm time to fetch the
             # sibling bundle whose bytes are the image's own kernel +
-            # initrd; bty's ipxe_ramboot then serves them so the
-            # rambooted guest runs its OWN kernel rather than
+            # initrd; bty's ipxe_nbdboot then serves them so the
+            # nbdbooted guest runs its OWN kernel rather than
             # bty-media's fallback. The referenced entry is emitted
             # right below; ``netboot_ref`` names it by its actual
             # ``name`` field so nbdmux's by-name lookup succeeds.
@@ -224,7 +224,7 @@ def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
         if netboot_entry_name is not None:
             netboot_desc = (
                 f"Netboot bundle for {name}: vmlinuz + initrd extracted from the "
-                "matching disk image so bty can ramboot it with its own kernel."
+                "matching disk image so bty can nbdboot it with its own kernel."
             )
             lines += [
                 "",
