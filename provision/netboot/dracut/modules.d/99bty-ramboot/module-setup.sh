@@ -78,6 +78,27 @@ install() {
     inst_hook initqueue/online 20 "$moddir/bty-ramboot-online.sh"
     inst_hook mount 90 "$moddir/bty-ramboot-mount.sh"
 
+    # Mask systemd-networkd-wait-online.service in the SHIPPED initrd.
+    # Ubuntu 26.04+ ships dracut with the network + systemd modules
+    # that together pull in systemd-networkd-wait-online.service,
+    # which then waits 120 s for a network-online.target signal that
+    # never fires under nbdboot (our own online hook handles the
+    # nbd-client attach after dracut's ``network`` module brought a
+    # NIC up via DHCP; nothing in the initrd flips
+    # network-online.target). The wait-online.service times out,
+    # gives up, and boot moves on, but only after burning the full
+    # 120 s right in the initrd critical path.
+    #
+    # Symlink the unit to /dev/null in the initrd's unit dir so it
+    # can never start. ``$initdir`` is the initrd's rootfs at bake
+    # time; ``ln -sf`` here writes into the shipped initrd. This is
+    # separate from the equivalent mask the mount hook lays down in
+    # the overlay upper, which protects the pivoted rootfs.
+    # shellcheck disable=SC2154
+    mkdir -p "${initdir}/etc/systemd/system"
+    ln -sf /dev/null \
+        "${initdir}/etc/systemd/system/systemd-networkd-wait-online.service"
+
     # NOTE ON THE ROOT=UUID SITUATION:
     # Ubuntu's cloud-image dracut config bakes root=UUID references into
     # the initrd in three places that keep dracut-initqueue waiting for
