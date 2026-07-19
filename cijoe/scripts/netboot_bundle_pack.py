@@ -17,6 +17,18 @@ own kernel + initrd, produced at build time so runtime brittleness
 timestamp drift) never enters the picture. See
 PLAN-netboot-bundle.md for the full cross-repo sequencing.
 
+Framework detection is content-based: after the shipped initrd is
+staged in the bundle, ``unmkinitramfs`` splits it into early + main
+cpios and the presence of ``main/var/lib/dracut/hooks/`` decides
+framework=dracut. Filename shape (``initrd.img-*`` vs
+``initramfs-*.img``) and chroot config (``/etc/dracut.conf.d``,
+initramfs-tools stubs) both lie on Ubuntu 26.04, where the two
+toolchains coexist and ``update-initramfs`` writes an
+initramfs-tools-named file whose contents were built by dracut.
+The unpacked-content check is ground truth: whatever dispatches at
+boot is what the initrd actually is, and the manifest + strip pass
+key off that instead of a filename or config guess.
+
 Reads the new ``netboot`` section of
 ``system-imaging.images.<image_name>``:
 
@@ -74,12 +86,17 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _find_boot_dir(mount_root: Path) -> tuple[Path, str]:
+def _find_boot_dir(mount_root: Path) -> tuple[Path, str, Path]:
     """Search mounted partitions for /boot with a vmlinuz-* + initrd match.
 
-    Returns (boot_dir_path, framework) where framework is
-    ``initramfs-tools`` or ``dracut``. Raises FileNotFoundError if no
-    partition holds a matching pair.
+    Returns (boot_dir_path, kver, initrd_path). Framework is NOT
+    inferred here; the filename shape lies on distros where
+    initramfs-tools and dracut coexist (Ubuntu 26.04 writes
+    ``initrd.img-<KVER>`` even when the contents were built by
+    dracut). Callers decide framework by unpacking the shipped
+    initrd; see ``_detect_framework_and_strip_dracut``.
+
+    Raises FileNotFoundError if no partition holds a matching pair.
     """
     # Each subdir under mount_root is a partition mount. Some cloud images
     # (Debian) put /boot on the root partition; others (Ubuntu, Fedora)
@@ -110,33 +127,45 @@ def _find_boot_dir(mount_root: Path) -> tuple[Path, str]:
                 for entry in candidate.iterdir():
                     im = pattern.match(entry.name)
                     if im is not None and im.group(1) == kver:
-                        framework = (
-                            "initramfs-tools" if pattern.pattern.startswith("^initrd") else "dracut"
-                        )
-                        return candidate, framework
+                        return candidate, kver, entry
     raise FileNotFoundError("no /boot with vmlinuz + matching initrd found in any partition")
 
 
-def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
-    """In-place mutation of a dracut-generated initrd: null out the
-    baked ``root=UUID=`` fragment + remove the initqueue ``devexists-``
-    polls + emergency handlers that would otherwise block ramboot.
+def _detect_framework_and_strip_dracut(cijoe, initrd_path: Path) -> str:
+    """Decide framework from initrd contents, and if dracut, strip the
+    baked ``root=UUID=`` fragment + the initqueue ``devexists-`` polls
+    + emergency handlers that would otherwise block ramboot.
 
-    Ubuntu 26.04's cloud-image dracut config emits these when the
-    image is baked (they make local-disk boot work). When the SAME
-    initrd is used for a netboot bundle the polls never resolve
-    (no local disks) and dracut-initqueue blocks for 3 min before
-    entering emergency mode.
+    Returns ``"dracut"`` or ``"initramfs-tools"``. The framework is
+    read from ground truth: ``main/var/lib/dracut/hooks/`` inside the
+    unpacked initrd exists iff dracut generated the initrd. Filename
+    shape and chroot config are both misleading on Ubuntu 26.04,
+    where ``update-initramfs`` writes ``initrd.img-<KVER>`` but the
+    contents were built by dracut.
 
-    Uses ``unmkinitramfs`` to split the initrd into early (uncompressed
-    microcode cpio) + main filesystem, edits the main tree, then
-    re-cpio's both parts and concatenates -- same shape the
+    Ubuntu 26.04's cloud-image dracut config bakes the strip targets
+    when the image is built with ``hostonly=yes`` (default on Ubuntu
+    cloud images). They're correct for the local-disk boot path and
+    fatal for netboot: on a netboot the polls never resolve (no
+    local disks) and dracut-initqueue blocks for 3 min before
+    entering emergency mode. The bty-ramboot dracut module can't
+    strip them at install() time, since that would break the same
+    image booting from a local disk; strip only the copy we ship in
+    the bundle.
+
+    Uses ``unmkinitramfs`` to split the initrd into early
+    (uncompressed microcode cpio) + main filesystem, edits the main
+    tree, then re-cpio's both parts and concatenates, same shape the
     upstream ``mkinitramfs`` produces. Kernel accepts uncompressed
     concatenated cpio initrds fine.
 
-    Skips silently on framework == 'initramfs-tools' initrds: those
-    dispatch via /scripts/${BOOT} (which does the ramboot work
-    directly) and don't have the baked root=UUID artefacts.
+    On initramfs-tools initrds this is a detection-only pass with no
+    strip: those dispatch via ``/scripts/${BOOT}`` (which does the
+    ramboot work directly) and never carry the baked root=UUID
+    artefacts. If ``unmkinitramfs`` fails or the initrd has no
+    ``main/`` split we can't inspect the contents; fall back to
+    initramfs-tools since that keeps the strip a no-op and matches
+    the historical default for the Debian family.
     """
     import tempfile as _tmp
 
@@ -144,13 +173,22 @@ def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
     try:
         err, _ = cijoe.run_local(f"sudo unmkinitramfs {initrd_path} {work}")
         if err:
-            log.warning(f"unmkinitramfs failed on {initrd_path}; skipping strip")
-            return
+            log.warning(f"unmkinitramfs failed on {initrd_path}; assuming initramfs-tools")
+            return "initramfs-tools"
         main_dir = work / "main"
         early_dir = work / "early"
         if not main_dir.is_dir():
-            log.info(f"initrd {initrd_path} has no ``main/`` split; skipping strip")
-            return
+            log.info(f"initrd {initrd_path} has no ``main/`` split; assuming initramfs-tools")
+            return "initramfs-tools"
+        # Ground-truth framework check: dracut's runtime dispatcher
+        # is a tree of shell hooks staged under /var/lib/dracut/hooks
+        # inside the initrd; initramfs-tools doesn't create it.
+        # ``sudo test`` because ``unmkinitramfs`` extracts as root
+        # and the intermediate dirs may not be world-traversable.
+        err, _ = cijoe.run_local(f"sudo test -d {main_dir}/var/lib/dracut/hooks")
+        if err:
+            log.info(f"initrd {initrd_path} has no dracut hooks; framework=initramfs-tools")
+            return "initramfs-tools"
         # Redact + remove the artefact families that pin initrd boot
         # to devices that only exist on a local disk:
         #   * /etc/cmdline.d/20-root-dev.conf pins root=UUID=<rootfs>
@@ -161,9 +199,6 @@ def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
         #     .device.d/ drop-ins pull /boot + /boot/efi filesystem
         #     UUIDs into initrd.target's dependency graph, which
         #     systemd waits ~90s for per device before giving up.
-        # dracut bakes these when the image is built with
-        # ``hostonly=yes`` (default on Ubuntu cloud images); they're
-        # correct for the disk boot path and fatal for netboot.
         redact_conf = f"{main_dir}/etc/cmdline.d/20-root-dev.conf"
         finished_glob = f"{main_dir}/var/lib/dracut/hooks/initqueue/finished/devexists-*.sh"
         emergency_glob = f"{main_dir}/var/lib/dracut/hooks/emergency/80-*.sh"
@@ -185,6 +220,7 @@ def _strip_dracut_root_uuid_polls(cijoe, initrd_path: Path) -> None:
         cijoe.run_local(f"sudo mv {initrd_path}.stripped {initrd_path}")
         cijoe.run_local(f"sudo chown $(id -un):$(id -gn) {initrd_path}")
         log.info(f"stripped dracut root=UUID polls from {initrd_path}")
+        return "dracut"
     finally:
         cijoe.run_local(f"sudo rm -rf {work}")
 
@@ -255,21 +291,10 @@ def main(args, cijoe):
     mount_root = qcow2_path.with_suffix(".netboot-mnt")
     try:
         _connect_qemu_nbd(cijoe, qcow2_path, mount_root)
-        boot_dir, framework = _find_boot_dir(mount_root)
-        log.info(f"Found /boot at {boot_dir}, framework={framework}")
+        boot_dir, kver, initrd_src = _find_boot_dir(mount_root)
+        log.info(f"Found /boot at {boot_dir}, kver={kver}, initrd_src={initrd_src.name}")
 
-        matched: list[tuple[Path, str]] = []
-        for p in boot_dir.iterdir():
-            m = _KERNEL_RE.match(p.name)
-            if m is not None:
-                matched.append((p, m.group(1)))
-        matched.sort(key=lambda t: t[1])
-        kernel_src, kver = matched[-1]
-
-        if framework == "initramfs-tools":
-            initrd_src = boot_dir / f"initrd.img-{kver}"
-        else:
-            initrd_src = boot_dir / f"initramfs-{kver}.img"
+        kernel_src = boot_dir / f"vmlinuz-{kver}"
 
         bundle_dir.mkdir(parents=True, exist_ok=True)
         vmlinuz_out = bundle_dir / "vmlinuz"
@@ -286,17 +311,19 @@ def main(args, cijoe):
             return err
         cijoe.run_local(f"sudo chown -R $(id -un):$(id -gn) {bundle_dir}")
 
-        # dracut-based initrds (Ubuntu 26.04, Fedora) bake root=UUID
-        # references in three places that keep dracut-initqueue waiting
-        # for local disks on a netboot -- fatal because there IS no
-        # local disk under ramboot. The bty-ramboot dracut module can't
-        # strip these at install() time (would break local-disk boot of
-        # the same image). Strip ONLY the copy we ship in the bundle.
-        # No-op on initramfs-tools initrds (they use /scripts/${BOOT}
-        # dispatch instead, which doesn't need these strips).
-        if framework == "dracut":
-            _strip_dracut_root_uuid_polls(cijoe, initrd_out)
-            # Recompute sha + size below picks up the modified file.
+        # Decide framework from the shipped initrd's contents, not
+        # from the filename or the chroot's config: Ubuntu 26.04 lays
+        # down both initramfs-tools stubs AND the real dracut, so
+        # ``update-initramfs`` writes ``initrd.img-<KVER>`` even
+        # though the contents were built by dracut. If it's dracut,
+        # this call also strips the baked root=UUID artefacts that
+        # would otherwise block dracut-initqueue on netboot (no local
+        # disks to resolve). The bty-ramboot dracut module can't do
+        # the strip at install() time; it would break local-disk boot
+        # of the same image. Strip only the copy we ship.
+        framework = _detect_framework_and_strip_dracut(cijoe, initrd_out)
+        log.info(f"Framework={framework}")
+        # Recompute sha + size below picks up the modified file.
 
         manifest = {
             "variant": image_name.replace("nosi-", "").rsplit("-", 1)[0],
