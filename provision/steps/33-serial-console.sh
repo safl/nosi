@@ -126,6 +126,44 @@ BindsTo=
 After=
 After=systemd-user-sessions.service plymouth-quit-wait.service getty-pre.target
 ' /etc/systemd/system/serial-getty@.service.d/nosi-no-bindsto.conf 0644
+
+    # Disable XON/XOFF (software flow control) on the serial line before
+    # agetty starts. IPMI Serial-over-LAN viewers frequently emit stray
+    # Ctrl-S bytes during keystroke storms (some terminals map Ctrl-S to
+    # "save"; some BMC clients emit XOFF as a pacing signal). With ixon
+    # enabled, that XOFF halts TX and the console goes dead: the operator
+    # sees "no login prompt, hitting Enter does nothing", exactly the
+    # matx failure diagnosed live on 2026-07-19. -ixany also prevents any
+    # random incoming byte from restarting a paused output silently. The
+    # leading - on ExecStartPre ignores stty failure (device missing on
+    # single-COM boards) so agetty still starts; belt-and-suspenders for
+    # the pre-login window (agetty resets termios itself once running).
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/33-serial-console.sh.
+# Disable software flow control on the serial line so a stray Ctrl-S
+# (XOFF) from the SOL viewer does not freeze the console. See the
+# comment above ``enable_serial_gettys`` in the source step.
+[Service]
+ExecStartPre=-/bin/stty -F /dev/%I -ixon -ixoff -ixany
+' /etc/systemd/system/serial-getty@.service.d/nosi-no-flowctl.conf 0644
+
+    # Post-login: bash + readline re-enable ixon on interactive shells.
+    # Kill it again for anyone whose controlling tty is a serial port so
+    # the same XOFF hazard does not resurface after the operator logs in.
+    # POSIX profile.d shape; every sh-family login shell sources it. Not
+    # limited to ttyS* since USB serial (ttyUSB*) and Pi UART (ttyAMA*)
+    # have the same failure mode.
+    nosi_write_if_changed \
+'# Managed by nosi/provision/steps/33-serial-console.sh.
+# Disable software flow control on serial-attached login shells so a
+# stray Ctrl-S (XOFF) from a serial client does not freeze the shell.
+case "$(tty 2>/dev/null)" in
+    /dev/ttyS*|/dev/ttyUSB*|/dev/ttyAMA*)
+        stty -ixon -ixoff -ixany 2>/dev/null || true
+        ;;
+esac
+' /etc/profile.d/nosi-serial-noflowctl.sh 0644
+
     systemctl enable serial-getty@ttyS0.service serial-getty@ttyS1.service
 }
 
