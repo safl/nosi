@@ -22,6 +22,7 @@ required.
 overview
 quickstart
 desktop
+kexec
 ```
 
 ```{toctree}

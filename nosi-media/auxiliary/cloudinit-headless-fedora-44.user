@@ -101,6 +101,8 @@ packages:
   - kernel-devel         # DKMS / out-of-tree modules (Fedora's analog
                          # to Debian/Ubuntu's linux-headers-*)
   - perf                 # Linux perf events tooling
+  - kexec-tools          # `kexec -l && systemctl kexec` to run a locally-installed
+                         # kernel on top of the netboot-served one; see docs/kexec.md.
   - bind-utils
   - curl
   - jq
