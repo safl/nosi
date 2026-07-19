@@ -91,14 +91,28 @@ cat > /run/bty-upper/up/etc/fstab <<EOF
 EOF
 _bty_trace "mount hook: wrote minimal /etc/fstab in overlay upper"
 
-# Mask systemd-networkd + cloud-init in overlay upper so they don't
-# tear down the NIC dracut's network module set up (we still own it
-# from the initrd side).
+# Mask systemd-networkd + NetworkManager + cloud-init in overlay
+# upper so they don't tear down the NIC dracut's network module set
+# up (we still own it from the initrd side). Ubuntu 26.04 Server
+# ships NetworkManager as the default network stack; without the NM
+# masks below the pivoted userspace burns 60 s on
+# NetworkManager-wait-online.service before its own online check
+# times out. Observed live on GIGABYTE MC12-LE0 booting 2026.W29
+# ubuntu-2604-headless: systemd-analyze critical-chain reported
+# ``NetworkManager-wait-online.service @3.946s +59.988s`` alongside
+# the identical +59 s burn on systemd-networkd-wait-online in the
+# initrd (fixed separately by the wait-online mask in
+# module-setup.sh).
 mkdir -p /run/bty-upper/up/etc/systemd/system
 for unit in \
     systemd-networkd.service \
     systemd-networkd.socket \
     systemd-networkd-wait-online.service \
+    NetworkManager.service \
+    NetworkManager-wait-online.service \
+    NetworkManager-dispatcher.service \
+    nm-cloud-setup.service \
+    nm-cloud-setup.timer \
     cloud-init.service \
     cloud-init-local.service \
     cloud-config.service \
@@ -106,7 +120,7 @@ for unit in \
 ; do
     ln -sf /dev/null "/run/bty-upper/up/etc/systemd/system/${unit}"
 done
-_bty_trace "mount hook: masked networkd + cloud-init in overlay upper"
+_bty_trace "mount hook: masked networkd + NetworkManager + cloud-init in overlay upper"
 
 # Propagate DNS from dracut's netroot config. dracut writes DNS to
 # /tmp/net.*.resolv.conf (network-manager module) or /run/net-*.conf
