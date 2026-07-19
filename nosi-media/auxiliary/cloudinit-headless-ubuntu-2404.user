@@ -113,6 +113,10 @@ packages:
                          # ships GA 6.8 which both vendor stacks qualify against)
   - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
   - linux-tools-common   # shared man pages + helpers for the -generic tool set
+  - kexec-tools          # `kexec -l && systemctl kexec` to run a locally-installed
+                         # kernel on top of the netboot-served one; see docs/kexec.md.
+                         # Debconf's "load kexec on shutdown" prompt is systemd-inert
+                         # (default off for systemd), so noninteractive install is safe.
   - curl
   - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
   - jq
