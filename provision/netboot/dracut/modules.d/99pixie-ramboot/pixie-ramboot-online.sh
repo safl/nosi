@@ -55,7 +55,6 @@ nbd_url="$(_pixie_getarg nbd)"
 [ -n "$nbd_url" ] || return 0
 image="$(_pixie_getarg image)"
 [ -n "$image" ] || _pixie_die "missing pixie.image / bty.image on kernel cmdline"
-root_part_override="$(_pixie_getarg root_part)"
 
 _pixie_status "online.started"
 
@@ -105,46 +104,12 @@ while [ "$i" -lt 100 ]; do
 done
 _pixie_trace "online hook: nbd0 capacity ready after ${i} tick(s): ${sz:-0} bytes"
 
-# Force a partition-table rescan so the kernel exposes /dev/nbd0pN
-# nodes for the mount hook to pick from. Two paths land here:
-#
-#   Ephemeral (pixie nbdkit with --filter=partition partition=1):
-#   /dev/nbd0 IS the ext4 filesystem, no partition table exists, and
-#   ``partx -a`` is a no-op that returns 1. The mount hook uses
-#   /dev/nbd0 directly, so the missing p<N> nodes are fine.
-#
-#   Persistent (pixie qemu-nbd on a qcow2 wrapping the whole raw
-#   disk): /dev/nbd0 has a partition table, and ``partx -a`` (or the
-#   fallback ``blockdev --rereadpt``) triggers BLKPG_ADD_PARTITION
-#   and udev events. Without this, the kernel's auto-scan on nbd
-#   attach is racy under ``nbd.max_part=16`` and the mount hook
-#   fires before /dev/nbd0p1 becomes a block device. Silent on
-#   failure (either path may fail depending on the shape).
-_pixie_trace "online hook: partx -a /dev/nbd0 (force partition scan)"
-partx -a /dev/nbd0 2>/dev/null || blockdev --rereadpt /dev/nbd0 2>/dev/null || true
+# Settle udev so the block device is fully published before the
+# mount hook fires. Pixie serves /dev/nbd0 as the ext4 root partition
+# directly in both modes now (ephemeral via nbdkit
+# ``--filter=partition``; persist via qemu-nbd ``--offset=<part1>``),
+# so there is no partition-table rescan work for this hook to do.
 udevadm settle --timeout=10 || true
-
-# If the plan passed ``pixie.root_part=/dev/nbd0pN``, WAIT until that
-# specific block device is present. dracut-initqueue's ``wait_for_dev
-# /dev/nbd0`` only satisfies on the whole disk; without this the mount
-# hook races the partition-scan udev events and can die on
-# ``[ -b /dev/nbd0p1 ]``. 10 second cap (already close to
-# ``udevadm settle --timeout=10``).
-if [ -n "$root_part_override" ] && [ "$root_part_override" != /dev/nbd0 ]; then
-    _pixie_trace "online hook: waiting for ${root_part_override} to appear"
-    i=0
-    while [ "$i" -lt 100 ]; do
-        [ -b "$root_part_override" ] && break
-        sleep 0.1
-        i=$((i + 1))
-    done
-    if [ -b "$root_part_override" ]; then
-        _pixie_trace "online hook: ${root_part_override} present after ${i} tick(s)"
-    else
-        _pixie_trace "online hook: WARN ${root_part_override} still missing after 10s"
-    fi
-fi
-_pixie_status "online.partitions_ready"
 
 : > /tmp/pixie-nbd-attached  # pure-shell truncate, no ``touch`` dep (busybox in initrd may lack it)
 _pixie_trace "online hook: done -- /dev/nbd0 attached"
