@@ -31,6 +31,21 @@ _pixie_getarg() {
     echo "$val"
 }
 
+# Best-effort HTTP status ping. Traces via /dev/kmsg vanish below the
+# console loglevel on IPMI SoL, so this ships boot-phase progress to
+# pixie's event log via ``POST /pxe/<mac>/status`` -- the same shape
+# ``ramboot.up`` uses. Silent on failure (DHCP may not have completed
+# yet, wget may be missing). Reports the value passed as ``$1`` as
+# the status token (e.g. ``online.nbd_connected``).
+_pixie_status() {
+    _srv="$(_pixie_getarg server)"
+    _mac="$(_pixie_getarg mac)"
+    [ -n "$_srv" ] && [ -n "$_mac" ] || return 0
+    wget -q -O /dev/null --timeout=3 --tries=1 \
+        --post-data="status=$1" \
+        "${_srv}/pxe/${_mac}/status" 2>/dev/null || true
+}
+
 # Idempotent: initqueue/online can fire multiple times as the network
 # module reports readiness on each carrier event. Attach once.
 [ -e /tmp/pixie-nbd-attached ] && return 0
@@ -39,6 +54,9 @@ nbd_url="$(_pixie_getarg nbd)"
 [ -n "$nbd_url" ] || return 0
 image="$(_pixie_getarg image)"
 [ -n "$image" ] || _pixie_die "missing pixie.image / bty.image on kernel cmdline"
+root_part_override="$(_pixie_getarg root_part)"
+
+_pixie_status "online.started"
 
 # tcp://host:port -> host, port.
 nbd_host="${nbd_url#tcp://}"; nbd_host="${nbd_host%%:*}"
@@ -70,6 +88,7 @@ while [ "$attempt" -lt 5 ]; do
     sleep 1
 done
 [ "$rc" -eq 0 ] || _pixie_die "nbd-client failed to connect to ${nbd_host}:${nbd_port} after ${attempt} tries: ${nbd_out}"
+_pixie_status "online.nbd_connected"
 
 # Capacity ready.
 i=0
@@ -81,13 +100,46 @@ while [ "$i" -lt 100 ]; do
 done
 _pixie_trace "online hook: nbd0 capacity ready after ${i} tick(s): ${sz:-0} bytes"
 
-# Pixie's ephemeral path (nbdkit --filter=partition partition=1)
-# serves a single partition on /dev/nbd0, no partition table. The
-# persistent path (qemu-nbd on qcow2 wrapping a whole raw disk)
-# does serve a partition table -- ``nbd.max_part=16`` up top means
-# /dev/nbd0pN nodes appear as udev settles. Wait either way so the
-# mount hook picks whichever shape lands.
+# Force a partition-table rescan so the kernel exposes /dev/nbd0pN
+# nodes for the mount hook to pick from. Two paths land here:
+#
+#   Ephemeral (pixie nbdkit with --filter=partition partition=1):
+#   /dev/nbd0 IS the ext4 filesystem, no partition table exists, and
+#   ``partx -a`` is a no-op that returns 1. The mount hook uses
+#   /dev/nbd0 directly, so the missing p<N> nodes are fine.
+#
+#   Persistent (pixie qemu-nbd on a qcow2 wrapping the whole raw
+#   disk): /dev/nbd0 has a partition table, and ``partx -a`` (or the
+#   fallback ``blockdev --rereadpt``) triggers BLKPG_ADD_PARTITION
+#   and udev events. Without this, the kernel's auto-scan on nbd
+#   attach is racy under ``nbd.max_part=16`` and the mount hook
+#   fires before /dev/nbd0p1 becomes a block device. Silent on
+#   failure (either path may fail depending on the shape).
+_pixie_trace "online hook: partx -a /dev/nbd0 (force partition scan)"
+partx -a /dev/nbd0 2>/dev/null || blockdev --rereadpt /dev/nbd0 2>/dev/null || true
 udevadm settle --timeout=10 || true
+
+# If the plan passed ``pixie.root_part=/dev/nbd0pN``, WAIT until that
+# specific block device is present. dracut-initqueue's ``wait_for_dev
+# /dev/nbd0`` only satisfies on the whole disk; without this the mount
+# hook races the partition-scan udev events and can die on
+# ``[ -b /dev/nbd0p1 ]``. 10 second cap (already close to
+# ``udevadm settle --timeout=10``).
+if [ -n "$root_part_override" ] && [ "$root_part_override" != /dev/nbd0 ]; then
+    _pixie_trace "online hook: waiting for ${root_part_override} to appear"
+    i=0
+    while [ "$i" -lt 100 ]; do
+        [ -b "$root_part_override" ] && break
+        sleep 0.1
+        i=$((i + 1))
+    done
+    if [ -b "$root_part_override" ]; then
+        _pixie_trace "online hook: ${root_part_override} present after ${i} tick(s)"
+    else
+        _pixie_trace "online hook: WARN ${root_part_override} still missing after 10s"
+    fi
+fi
+_pixie_status "online.partitions_ready"
 
 : > /tmp/pixie-nbd-attached  # pure-shell truncate, no ``touch`` dep (busybox in initrd may lack it)
 _pixie_trace "online hook: done -- /dev/nbd0 attached"
