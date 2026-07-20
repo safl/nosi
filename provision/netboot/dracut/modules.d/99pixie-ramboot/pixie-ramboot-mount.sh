@@ -167,6 +167,7 @@ for unit in \
     systemd-networkd.service \
     systemd-networkd.socket \
     systemd-networkd-wait-online.service \
+    systemd-resolved.service \
     NetworkManager.service \
     NetworkManager-wait-online.service \
     NetworkManager-dispatcher.service \
@@ -184,6 +185,20 @@ _pixie_trace "mount hook: masked networkd + NetworkManager + cloud-init on ${upp
 # Propagate DNS from dracut's netroot config. dracut writes DNS to
 # /tmp/net.*.resolv.conf (network-manager module) or /run/net-*.conf
 # (network-legacy). Copy the first one that has content.
+#
+# Ubuntu 26.04 ships /etc/resolv.conf as a SYMLINK to
+# /run/systemd/resolve/stub-resolv.conf (systemd-resolved's stub).
+# Writing to /etc/resolv.conf via ``cp`` or ``>`` would follow the
+# symlink and dump into a /run tmpfs target that (a) is not the file
+# glibc actually reads until systemd-resolved starts, and (b)
+# vanishes on next boot. We masked systemd-networkd + NetworkManager
+# above, so nothing on the pivoted rootfs will populate that stub.
+# Blow the symlink away and write a plain resolv.conf so glibc's
+# resolver reads the initrd's DNS directly. Same treatment on
+# persist mode: the symlink lives on the RW rootfs and would drag
+# any operator apt / curl into "Temporary failure resolving" until
+# the operator manually replaces it.
+rm -f "${upper}/etc/resolv.conf"
 for candidate in /tmp/net.*.resolv.conf /run/net-*.conf; do
     [ -e "$candidate" ] || continue
     case "$candidate" in
