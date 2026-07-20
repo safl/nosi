@@ -3,25 +3,20 @@
 #
 # Runs after ``pixie-ramboot-online.sh`` has attached /dev/nbd0 and
 # after dracut's built-in mount hooks have (attempted to) mount
-# /sysroot. Two modes gated on ``pixie.persist=1`` (or the legacy
-# ``bty.persist=1``):
+# /sysroot. Mount the picked partition RO at /run/pixie-lower, tmpfs
+# at /run/pixie-upper, overlayfs at /sysroot. Writes on the target
+# go to RAM and vanish on reboot -- the "cattle" flow pixie expects
+# for ephemeral nbdboot. Persistent overlays (``pixie.persist=1``
+# on the cmdline) fell out of scope in this hook after a night of
+# stuck-in-initqueue debugging that we could not narrow down over
+# IPMI SoL; the flag stays honoured by pixie's plan renderer and
+# the qcow2 is still served, but writes on this side land on the
+# tmpfs upper. See docs/persist-status.md for the follow-up.
 #
-#   Ephemeral (default): mount the picked partition RO at
-#   /run/pixie-lower, tmpfs at /run/pixie-upper, overlayfs at
-#   /sysroot. Writes on the target go to RAM and vanish on reboot.
+# Additionally:
 #
-#   Persistent (``pixie.persist=1``): mount the picked partition RW
-#   directly at /sysroot. Writes land on the underlying block device
-#   (a qemu-nbd-served qcow2 in pixie's design) and survive reboots.
-#   Skip the overlayfs and the fstab rewrite (the image's fstab is
-#   still authoritative for /boot + /boot/efi, whose LABEL/UUID
-#   entries resolve to real ``/dev/nbd0p*`` nodes under
-#   ``nbd.max_part=16``).
-#
-# Both modes:
-#
-#   * Mask systemd-networkd + NetworkManager + cloud-init on the
-#     pivoted rootfs so userspace does not tear down the NIC the
+#   * Mask systemd-networkd + NetworkManager + cloud-init in the
+#     overlay upper so userspace does not tear down the NIC the
 #     initrd owns.
 #   * Propagate DNS from dracut's netroot config.
 #   * POST a status ping so the pixie appliance can log ramboot.up.
@@ -50,7 +45,6 @@ nbd_url="$(_pixie_getarg nbd)"
 [ -n "$nbd_url" ] || return 0
 overlay_size="$(_pixie_getarg overlay_size)"
 root_part_override="$(_pixie_getarg root_part)"
-persist="$(_pixie_getarg persist)"
 : "${overlay_size:=10G}"
 
 [ -b /dev/nbd0 ] || _pixie_die "mount hook: /dev/nbd0 missing (online hook didn't run?)"
@@ -77,60 +71,49 @@ _pixie_trace "mount hook: picked root_part=${root_part}"
 # the initrd's busybox, so we can't gate on it.
 umount /sysroot 2>/dev/null || true
 
-if [ "$persist" = "1" ]; then
-    # ---- persistent path ---------------------------------------------
-    _pixie_trace "mount hook: persist=1; mount rw ${root_part} -> /sysroot"
-    mkdir -p /sysroot
-    mnt_rc=1
-    for fstype in ext4 xfs btrfs auto; do
-        _pixie_trace "mount hook: mount -t ${fstype} -o rw ${root_part} -> /sysroot"
-        if mount -t "$fstype" -o rw "$root_part" /sysroot 2>/dev/null; then
-            mnt_rc=0
-            break
-        fi
-    done
-    [ "$mnt_rc" -eq 0 ] || _pixie_die "persist: failed to mount ${root_part} rw"
-    upper=/sysroot
-else
-    # ---- ephemeral path ----------------------------------------------
-    mkdir -p /run/pixie-lower /run/pixie-upper
-    mnt_rc=1
-    for fstype in ext4 xfs btrfs auto; do
-        _pixie_trace "mount hook: mount -t ${fstype} -o ro ${root_part} -> /run/pixie-lower"
-        if mount -t "$fstype" -o ro "$root_part" /run/pixie-lower 2>/dev/null; then
-            mnt_rc=0
-            break
-        fi
-    done
-    [ "$mnt_rc" -eq 0 ] || _pixie_die "failed to mount ${root_part}"
+# ---- ephemeral overlay path (only mode this hook supports today) ----
+# Persistent-overlay writes are the follow-up: pixie's plan renderer
+# still emits pixie.persist=1 + pixie.root_part=/dev/nbd0p1 when
+# ``overlay_profile`` is set, and the qcow2 is still served by qemu-nbd,
+# but this hook only knows how to build the ephemeral overlay right now.
+# See docs/persist-status.md for what's blocking.
+mkdir -p /run/pixie-lower /run/pixie-upper
+mnt_rc=1
+for fstype in ext4 xfs btrfs auto; do
+    _pixie_trace "mount hook: mount -t ${fstype} -o ro ${root_part} -> /run/pixie-lower"
+    if mount -t "$fstype" -o ro "$root_part" /run/pixie-lower 2>/dev/null; then
+        mnt_rc=0
+        break
+    fi
+done
+[ "$mnt_rc" -eq 0 ] || _pixie_die "failed to mount ${root_part}"
 
-    _pixie_trace "mount hook: tmpfs(${overlay_size}) -> /run/pixie-upper"
-    mount -t tmpfs -o "size=${overlay_size}" tmpfs /run/pixie-upper \
-        || _pixie_die "failed to mount tmpfs"
-    mkdir -p /run/pixie-upper/up /run/pixie-upper/work
+_pixie_trace "mount hook: tmpfs(${overlay_size}) -> /run/pixie-upper"
+mount -t tmpfs -o "size=${overlay_size}" tmpfs /run/pixie-upper \
+    || _pixie_die "failed to mount tmpfs"
+mkdir -p /run/pixie-upper/up /run/pixie-upper/work
 
-    _pixie_trace "mount hook: overlay -> /sysroot"
-    mkdir -p /sysroot
-    mount -t overlay overlay \
-        -o "lowerdir=/run/pixie-lower,upperdir=/run/pixie-upper/up,workdir=/run/pixie-upper/work" \
-        /sysroot \
-        || _pixie_die "failed to mount overlayfs at /sysroot"
+_pixie_trace "mount hook: overlay -> /sysroot"
+mkdir -p /sysroot
+mount -t overlay overlay \
+    -o "lowerdir=/run/pixie-lower,upperdir=/run/pixie-upper/up,workdir=/run/pixie-upper/work" \
+    /sysroot \
+    || _pixie_die "failed to mount overlayfs at /sysroot"
 
-    # Replace /etc/fstab in the overlay upper with a minimal one. The
-    # image's fstab lists / (by LABEL cloudimg-rootfs), /boot, and
-    # /boot/efi entries; letting systemd-fstab-generator materialise
-    # any of them adds ordering deps on /dev/disk/by-uuid/* nodes
-    # that never appear (we're not on a disk with a partition table
-    # anymore). / is already mounted as the overlay from initrd, so
-    # fstab has no more work to do.
-    mkdir -p /run/pixie-upper/up/etc
-    cat > /run/pixie-upper/up/etc/fstab <<EOF
+# Replace /etc/fstab in the overlay upper with a minimal one. The
+# image's fstab lists / (by LABEL cloudimg-rootfs), /boot, and
+# /boot/efi entries; letting systemd-fstab-generator materialise
+# any of them adds ordering deps on /dev/disk/by-uuid/* nodes
+# that never appear (we're not on a disk with a partition table
+# anymore). / is already mounted as the overlay from initrd, so
+# fstab has no more work to do.
+mkdir -p /run/pixie-upper/up/etc
+cat > /run/pixie-upper/up/etc/fstab <<EOF
 # Written by nosi pixie-ramboot dracut hook -- ramboot overrides the
 # image's baked /etc/fstab. / is already the initrd's overlay.
 EOF
-    _pixie_trace "mount hook: wrote minimal /etc/fstab in overlay upper"
-    upper=/run/pixie-upper/up
-fi
+_pixie_trace "mount hook: wrote minimal /etc/fstab in overlay upper"
+upper=/run/pixie-upper/up
 
 # Mask systemd-networkd + NetworkManager + cloud-init on the
 # pivoted rootfs so they don't tear down the NIC dracut's network
@@ -143,9 +126,7 @@ fi
 # ``NetworkManager-wait-online.service @3.946s +59.988s`` alongside
 # the identical +59 s burn on systemd-networkd-wait-online in the
 # initrd (fixed separately by the wait-online mask in
-# module-setup.sh). Symlinks land on the overlay upper (ephemeral)
-# or directly on the RW rootfs (persist); either way the pivoted
-# systemd sees them and refuses to start those units.
+# module-setup.sh). Symlinks land on the overlay upper.
 mkdir -p "${upper}/etc/systemd/system"
 for unit in \
     systemd-networkd.service \
@@ -203,4 +184,4 @@ if [ -n "$server" ] && [ -n "$mac" ]; then
         "${server}/pxe/${mac}/status" || true
 fi
 
-_pixie_trace "mount hook: done -- /sysroot is ${persist:+rw-nbd}${persist:-overlay-on-nbd}"
+_pixie_trace "mount hook: done -- /sysroot is overlay-on-nbd"
