@@ -30,15 +30,24 @@ _bty_die() {
 nbd_url="$(getarg bty.nbd=)"
 [ -n "$nbd_url" ] || return 0
 overlay_size="$(getarg bty.overlay_size=)"
-root_part_override="$(getarg bty.root_part=)"
+# Prefer ``pixie.root_part=`` (the current cmdline the pixie plan
+# renderer emits) and fall back to ``bty.root_part=`` for legacy
+# bundles booted against a bty appliance. Both names carry the
+# identical payload: a device path (e.g. ``/dev/nbd0p1``) the mount
+# hook uses instead of the default ``/dev/nbd0``.
+root_part_override="$(getarg pixie.root_part=)"
+[ -n "$root_part_override" ] || root_part_override="$(getarg bty.root_part=)"
 : "${overlay_size:=10G}"
 
 [ -b /dev/nbd0 ] || _bty_die "mount hook: /dev/nbd0 missing (online hook didn't run?)"
 
-# Pixie's nbdkit serves the disk with --filter=partition partition=1
-# already applied, so /dev/nbd0 is the ext4 root filesystem. The
-# ``bty.root_part=`` override is retained for the legacy full-disk
-# case (nbdmux + non-pixie servers that don't partition-filter).
+# Ephemeral nbdboot: pixie's nbdkit serves the disk with
+# ``--filter=partition partition=1`` already applied, so /dev/nbd0
+# is the ext4 root filesystem and no override is needed. Persistent
+# nbdboot: pixie's qemu-nbd serves the qcow2 wrapping the whole raw
+# disk (partition table + all partitions), and the plan render
+# passes ``pixie.root_part=/dev/nbd0p1`` so this hook mounts the
+# Linux root partition instead of trying the whole disk as ext4.
 if [ -n "$root_part_override" ]; then
     root_part="$root_part_override"
 else
