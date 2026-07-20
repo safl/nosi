@@ -10,13 +10,16 @@
 #   /run/pixie-lower, tmpfs at /run/pixie-upper, overlayfs at
 #   /sysroot. Writes on the target go to RAM and vanish on reboot.
 #
-#   Persistent (``pixie.persist=1``): mount the picked partition RW
-#   directly at /sysroot. Writes land on the underlying block device
-#   (a qemu-nbd-served qcow2 in pixie's design) and survive reboots.
-#   Skip the overlayfs and the fstab rewrite (the image's fstab is
-#   still authoritative for /boot + /boot/efi, whose LABEL/UUID
-#   entries resolve to real ``/dev/nbd0p*`` nodes under
-#   ``nbd.max_part=16``).
+#   Persistent (``pixie.persist=1``): mount /dev/nbd0 RW directly at
+#   /sysroot. Pixie's persist path spawns qemu-nbd with
+#   ``--offset=<partition_1_start_bytes>`` so /dev/nbd0 is the ext4
+#   partition at offset 0 (same shape ephemeral gets from nbdkit's
+#   ``--filter=partition``). Writes land in the underlying qcow2 and
+#   survive reboots. The image's baked /etc/fstab entries for /boot
+#   and /boot/efi refer to LABELs / UUIDs on the whole-disk view we
+#   are NOT exposing here; systemd-fstab-generator will fail those
+#   with a warning and boot proceeds -- /boot on the target is
+#   inert in nbdboot mode anyway (pixie serves the kernel).
 #
 # Both modes:
 #
@@ -63,7 +66,6 @@ _pixie_status() {
 nbd_url="$(_pixie_getarg nbd)"
 [ -n "$nbd_url" ] || return 0
 overlay_size="$(_pixie_getarg overlay_size)"
-root_part_override="$(_pixie_getarg root_part)"
 persist="$(_pixie_getarg persist)"
 : "${overlay_size:=10G}"
 
@@ -71,39 +73,14 @@ _pixie_status "mount.started"
 
 [ -b /dev/nbd0 ] || _pixie_die "mount hook: /dev/nbd0 missing (online hook didn't run?)"
 
-# Ephemeral nbdboot: pixie's nbdkit serves the disk with
-# ``--filter=partition partition=1`` already applied, so /dev/nbd0
-# is the ext4 root filesystem and no override is needed. Persistent
-# nbdboot: pixie's qemu-nbd serves the qcow2 wrapping the whole raw
-# disk (partition table + all partitions), and the plan render
-# passes ``pixie.root_part=/dev/nbd0p1`` so this hook mounts the
-# Linux root partition instead of trying the whole disk as ext4.
-if [ -n "$root_part_override" ]; then
-    root_part="$root_part_override"
-else
-    root_part=/dev/nbd0
-fi
-_pixie_trace "mount hook: picked root_part=${root_part}"
-
-# The online hook forces a partition rescan + waits for
-# ``root_part_override`` before returning, but re-check here in
-# case dracut fires this hook before /dev/nbd0pN is fully published
-# (udev event race). One more partx+settle+poll cycle rather than
-# a hard die.
-if [ ! -b "$root_part" ]; then
-    _pixie_trace "mount hook: ${root_part} not yet a block device; forcing partition scan"
-    _pixie_status "mount.partscan_retry"
-    partx -a /dev/nbd0 2>/dev/null || blockdev --rereadpt /dev/nbd0 2>/dev/null || true
-    udevadm settle --timeout=10 || true
-    i=0
-    while [ "$i" -lt 100 ]; do
-        [ -b "$root_part" ] && break
-        sleep 0.1
-        i=$((i + 1))
-    done
-fi
-[ -b "$root_part" ] || _pixie_die "root_part ${root_part} is not a block device (partition scan produced no p<N> nodes)"
-_pixie_status "mount.root_part_ready:${root_part}"
+# Pixie serves /dev/nbd0 as the ext4 root partition directly in both
+# modes: the ephemeral path via nbdkit ``--filter=partition
+# partition=1``, the persist path via ``qemu-nbd
+# --offset=<partition_1_start_bytes>`` on the qcow2 wrapping the
+# whole raw disk. Either way the mount hook just deals with
+# /dev/nbd0 and no partition scan is needed.
+root_part=/dev/nbd0
+_pixie_trace "mount hook: root_part=${root_part}"
 
 # dracut may have partially mounted /sysroot already from an earlier
 # mount hook trying the baked root=UUID; unmount cleanly so our own
