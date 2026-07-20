@@ -188,17 +188,27 @@ _pixie_trace "mount hook: masked networkd + NetworkManager + cloud-init on ${upp
 #
 # Ubuntu 26.04 ships /etc/resolv.conf as a SYMLINK to
 # /run/systemd/resolve/stub-resolv.conf (systemd-resolved's stub).
-# Writing to /etc/resolv.conf via ``cp`` or ``>`` would follow the
-# symlink and dump into a /run tmpfs target that (a) is not the file
-# glibc actually reads until systemd-resolved starts, and (b)
-# vanishes on next boot. We masked systemd-networkd + NetworkManager
-# above, so nothing on the pivoted rootfs will populate that stub.
-# Blow the symlink away and write a plain resolv.conf so glibc's
-# resolver reads the initrd's DNS directly. Same treatment on
-# persist mode: the symlink lives on the RW rootfs and would drag
-# any operator apt / curl into "Temporary failure resolving" until
-# the operator manually replaces it.
+# Two things need to happen for glibc to read our plain resolv.conf:
+#
+#   1. Blow the symlink away here so the ``cp`` / ``>`` below writes
+#      a regular file at /etc/resolv.conf instead of following the
+#      symlink into a /run tmpfs target that never gets populated
+#      once we mask systemd-resolved.
+#   2. Neutralise ``/usr/lib/tmpfiles.d/systemd-resolve.conf``'s
+#      ``L! /etc/resolv.conf ...`` rule so systemd-tmpfiles-setup on
+#      the pivoted rootfs does NOT recreate the symlink at boot,
+#      clobbering our file. Drop an empty override at
+#      ``/etc/tmpfiles.d/systemd-resolve.conf`` (same basename in
+#      /etc wins over /usr/lib per systemd-tmpfiles.d(5)).
 rm -f "${upper}/etc/resolv.conf"
+mkdir -p "${upper}/etc/tmpfiles.d"
+cat > "${upper}/etc/tmpfiles.d/systemd-resolve.conf" <<EOF
+# Managed by nosi pixie-ramboot dracut hook. Overrides
+# /usr/lib/tmpfiles.d/systemd-resolve.conf so systemd-tmpfiles does
+# not recreate /etc/resolv.conf as a symlink at boot. Pixie writes
+# a plain resolv.conf at initrd time and masks systemd-resolved, so
+# no one on the pivoted rootfs should touch that file.
+EOF
 for candidate in /tmp/net.*.resolv.conf /run/net-*.conf; do
     [ -e "$candidate" ] || continue
     case "$candidate" in
