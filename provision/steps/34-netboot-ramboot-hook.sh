@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # nosi/provision/steps/34-netboot-ramboot-hook.sh
 #
-# Bake the bty ramboot attach-hook into the image's initrd so the same
-# disk image can either flash-boot locally (hook inert) OR ramboot from
-# NBD (hook fires when ``bty.nbd=`` is on the kernel cmdline).
+# Bake the pixie ramboot attach-hook into the image's initrd so the
+# same disk image can either flash-boot locally (hook inert) OR
+# ramboot from NBD (hook fires when ``pixie.nbd=`` -- or the legacy
+# ``bty.nbd=`` for backwards compat -- is on the kernel cmdline).
 #
-# The bty ramboot chain used to load a bty-media-baked kernel+initrd
+# The pixie/bty ramboot chain used to load a bty-media-baked kernel+initrd
 # (Debian 6.12) regardless of the image's own kernel version, causing
 # ``uname -r`` under ramboot to not match the image's ``/lib/modules/``
 # tree; any driver not in bty-media's kernel was unloadable in a
 # rambooted guest (r8125 DKMS, nvidia, custom hypervisor stacks, ...).
 # Shifting the hook-install to build time here means the initrd we ship
 # in the image carries the ATTACH machinery + the correct kernel
-# modules for the image's own kernel; bty just fetches the extracted
-# vmlinuz + initrd at netboot time.
+# modules for the image's own kernel; pixie / bty just fetches the
+# extracted vmlinuz + initrd at netboot time.
 #
 # Two frameworks:
 #
@@ -22,12 +23,12 @@
 #     ``update-initramfs -u -k all``. Boot dispatch is
 #     initramfs-tools' /init reading ``boot=ramboot`` from cmdline.
 #
-#   dracut (Fedora / Ubuntu-26.04+): install a 99bty-ramboot module
+#   dracut (Fedora / Ubuntu-26.04+): install a 99pixie-ramboot module
 #     under /usr/lib/dracut/modules.d/, and force the stock ``nbd``
 #     module + nbd/overlay drivers into every initrd via
 #     /etc/dracut.conf.d/99-nosi-netboot.conf. Then
 #     ``dracut --regenerate-all --force``. Boot dispatch is the module's
-#     mount-hook reading ``bty.nbd=`` from cmdline.
+#     mount-hook reading ``pixie.nbd=`` / ``bty.nbd=`` from cmdline.
 #
 # Non-headless shapes (desktop / wsl / lxc / docker / proxmox) skip
 # entirely: netboot isn't a shape that ever matters for those.
@@ -78,16 +79,16 @@ case "$NOSI_PKGMGR" in
         # cloud-image dracut has only base modules and the
         # ``network-manager`` dep on our module fails to resolve.
         nosi_pkg_install nbd dracut-network
-        install -d -m 0755 /etc/dracut.conf.d /usr/lib/dracut/modules.d/99bty-ramboot
+        install -d -m 0755 /etc/dracut.conf.d /usr/lib/dracut/modules.d/99pixie-ramboot
         install -m 0644 "$ASSETS/dracut/conf.d/99-nosi-netboot.conf" /etc/dracut.conf.d/99-nosi-netboot.conf
-        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh
-        # Three phased runtime hooks replace the old single ``bty-ramboot.sh``
+        install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/module-setup.sh
+        # Three phased runtime hooks replace the old single ``pixie-ramboot.sh``
         # so the cmdline override lands before initqueue's baked root=UUID
         # devexists polls and the mount phase runs after online has attached
         # /dev/nbd0. See module-setup.sh for the full contract.
-        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh
-        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh
-        install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh
+        install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-cmdline.sh
+        install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-online.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-online.sh
+        install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-mount.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-mount.sh
         nosi_info "regenerating all initramfs images (dracut --regenerate-all --force)"
         dracut --regenerate-all --force
         ;;
@@ -109,12 +110,12 @@ esac
 if [ "$NOSI_PKGMGR" = "apt" ] && command -v dracut >/dev/null 2>&1 && [ -d /etc/dracut.conf.d ]; then
     nosi_info "apt-based host with dracut detected; also wiring dracut module"
     nosi_pkg_install nbd-client
-    install -d -m 0755 /usr/lib/dracut/modules.d/99bty-ramboot
+    install -d -m 0755 /usr/lib/dracut/modules.d/99pixie-ramboot
     install -m 0644 "$ASSETS/dracut/conf.d/99-nosi-netboot.conf" /etc/dracut.conf.d/99-nosi-netboot.conf
-    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99bty-ramboot/module-setup.sh
-    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-cmdline.sh
-    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-online.sh
-    install -m 0755 "$ASSETS/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh" /usr/lib/dracut/modules.d/99bty-ramboot/bty-ramboot-mount.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/module-setup.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/module-setup.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-cmdline.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-cmdline.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-online.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-online.sh
+    install -m 0755 "$ASSETS/dracut/modules.d/99pixie-ramboot/pixie-ramboot-mount.sh" /usr/lib/dracut/modules.d/99pixie-ramboot/pixie-ramboot-mount.sh
     dracut --regenerate-all --force
 fi
 
