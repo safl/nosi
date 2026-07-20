@@ -18,6 +18,7 @@ type getarg >/dev/null 2>&1 || . /lib/dracut-lib.sh
 _pixie_trace() { echo "pixie-ramboot: $*" >/dev/kmsg 2>/dev/null || echo "pixie-ramboot: $*"; }
 _pixie_die() {
     _pixie_trace "FATAL: $*"
+    _pixie_status "online.died:$*"
     type emergency_shell >/dev/null 2>&1 && emergency_shell "pixie-ramboot: $*"
     exec sleep 2147483647
 }
@@ -62,10 +63,12 @@ _pixie_status "online.started"
 nbd_host="${nbd_url#tcp://}"; nbd_host="${nbd_host%%:*}"
 nbd_port="${nbd_url##*:}"
 
+_pixie_status "online.modprobe_start"
 _pixie_trace "online hook: modprobe nbd (nbds_max=1 max_part=16) + overlay"
 rmmod nbd 2>/dev/null || true
 modprobe nbd nbds_max=1 max_part=16 || _pixie_die "modprobe nbd failed"
 modprobe overlay || _pixie_die "modprobe overlay failed"
+_pixie_status "online.modprobe_done"
 
 # nbd-client argument shape: modern nbd-client requires flag options
 # BEFORE positional (host, port, device). ``-N NAME`` selects the
@@ -78,12 +81,14 @@ _pixie_trace "online hook: nbd-client -N ${image} -persist ${nbd_host} ${nbd_por
 # so a single lost SYN doesn't drop us to emergency.
 attempt=0
 while [ "$attempt" -lt 5 ]; do
+    _pixie_status "online.nbd_attempt_${attempt}"
     nbd_out="$(nbd-client -N "$image" -persist "$nbd_host" "$nbd_port" /dev/nbd0 2>&1)"
     rc=$?
     if [ "$rc" -eq 0 ]; then
         break
     fi
     _pixie_trace "online hook: nbd-client attempt $((attempt + 1)) rc=${rc}: ${nbd_out}"
+    _pixie_status "online.nbd_attempt_${attempt}_failed_rc${rc}"
     attempt=$((attempt + 1))
     sleep 1
 done
