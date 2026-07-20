@@ -1,8 +1,8 @@
 #!/bin/bash
-# dracut module: bty-ramboot
+# dracut module: pixie-ramboot
 #
 # Install-time hook. Called by ``dracut -f`` (or dracut's automatic
-# runs after a kernel update) when 99bty-ramboot is in the module
+# runs after a kernel update) when 99pixie-ramboot is in the module
 # list (pulled in by /etc/dracut.conf.d/99-nosi-netboot.conf on
 # nosi-baked images). Wires up:
 #
@@ -13,7 +13,8 @@
 #     runtime hooks) baked into the initrd tree.
 #   * Three phased hooks driving the ramboot chain:
 #
-#     - cmdline (priority 10): parse ``bty.nbd=`` off /proc/cmdline
+#     - cmdline (priority 10): parse ``pixie.nbd=`` (or the legacy
+#       ``bty.nbd=`` for backwards compat) off /proc/cmdline
 #       and IMMEDIATELY override dracut's ``root`` var so the
 #       initqueue doesn't wait for the image's baked ``root=UUID=``
 #       (which never appears -- there's no local disk). Also
@@ -74,9 +75,9 @@ install() {
     # ``$moddir`` is exported by dracut when it sources this file --
     # it points at the module's own directory.
     # shellcheck disable=SC2154
-    inst_hook cmdline 10 "$moddir/bty-ramboot-cmdline.sh"
-    inst_hook initqueue/online 20 "$moddir/bty-ramboot-online.sh"
-    inst_hook mount 90 "$moddir/bty-ramboot-mount.sh"
+    inst_hook cmdline 10 "$moddir/pixie-ramboot-cmdline.sh"
+    inst_hook initqueue/online 20 "$moddir/pixie-ramboot-online.sh"
+    inst_hook mount 90 "$moddir/pixie-ramboot-mount.sh"
 
     # Mask systemd-networkd-wait-online.service in the SHIPPED initrd.
     # Ubuntu 26.04+ ships dracut with the network + systemd modules

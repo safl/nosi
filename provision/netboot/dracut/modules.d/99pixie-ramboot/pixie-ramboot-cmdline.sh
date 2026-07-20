@@ -1,5 +1,5 @@
 #!/bin/sh
-# dracut cmdline hook for bty ramboot (priority 10).
+# dracut cmdline hook for pixie ramboot (priority 10).
 #
 # Runs during dracut's cmdline phase, before ANY device lookups. Its
 # only job is to override dracut's baked ``root=UUID=`` with our NBD
@@ -9,17 +9,20 @@
 #
 # Does NOT do the actual nbd-client attach -- that needs the
 # ``network`` module to have brought a NIC up, which happens later
-# in the initqueue/online phase. See ``bty-ramboot-online.sh``.
+# in the initqueue/online phase. See ``pixie-ramboot-online.sh``.
 
 # shellcheck disable=SC1091
 type getarg >/dev/null 2>&1 || . /lib/dracut-lib.sh
 
-_bty_trace() { echo "bty-ramboot: $*" >/dev/kmsg 2>/dev/null || echo "bty-ramboot: $*"; }
+_pixie_trace() { echo "pixie-ramboot: $*" >/dev/kmsg 2>/dev/null || echo "pixie-ramboot: $*"; }
 
-nbd_url="$(getarg bty.nbd=)"
+# Prefer ``pixie.nbd=`` (current cmdline shape); fall back to
+# ``bty.nbd=`` for legacy bundles.
+nbd_url="$(getarg pixie.nbd=)"
+[ -n "$nbd_url" ] || nbd_url="$(getarg bty.nbd=)"
 [ -n "$nbd_url" ] || return 0
 
-_bty_trace "cmdline hook: bty.nbd=${nbd_url}; overriding baked root= to block:/dev/nbd0"
+_pixie_trace "cmdline hook: nbd=${nbd_url}; overriding baked root= to block:/dev/nbd0"
 
 # The image bakes ``root=UUID=<image-root-uuid>`` (etc.) into
 # ``/etc/cmdline.d/20-root-dev.conf`` inside the initrd; that file's
@@ -29,7 +32,7 @@ _bty_trace "cmdline hook: bty.nbd=${nbd_url}; overriding baked root= to block:/d
 # file so those units never get emitted; the local-disk root= is
 # meaningless for ramboot.
 if [ -e /etc/cmdline.d/20-root-dev.conf ]; then
-    _bty_trace "cmdline hook: redacting /etc/cmdline.d/20-root-dev.conf"
+    _pixie_trace "cmdline hook: redacting /etc/cmdline.d/20-root-dev.conf"
     : > /etc/cmdline.d/20-root-dev.conf
 fi
 

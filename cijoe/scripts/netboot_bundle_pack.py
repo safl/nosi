@@ -148,7 +148,7 @@ def _detect_framework_and_strip_dracut(cijoe, initrd_path: Path) -> str:
     cloud images). They're correct for the local-disk boot path and
     fatal for netboot: on a netboot the polls never resolve (no
     local disks) and dracut-initqueue blocks for 3 min before
-    entering emergency mode. The bty-ramboot dracut module can't
+    entering emergency mode. The pixie-ramboot dracut module can't
     strip them at install() time, since that would break the same
     image booting from a local disk; strip only the copy we ship in
     the bundle.
@@ -318,7 +318,7 @@ def main(args, cijoe):
         # though the contents were built by dracut. If it's dracut,
         # this call also strips the baked root=UUID artefacts that
         # would otherwise block dracut-initqueue on netboot (no local
-        # disks to resolve). The bty-ramboot dracut module can't do
+        # disks to resolve). The pixie-ramboot dracut module can't do
         # the strip at install() time; it would break local-disk boot
         # of the same image. Strip only the copy we ship.
         framework = _detect_framework_and_strip_dracut(cijoe, initrd_out)
