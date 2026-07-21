@@ -132,22 +132,30 @@ else
         /sysroot \
         || _pixie_die "failed to mount overlayfs at /sysroot"
 
-    # Replace /etc/fstab in the overlay upper with a minimal one. The
-    # image's fstab lists / (by LABEL cloudimg-rootfs), /boot, and
-    # /boot/efi entries; letting systemd-fstab-generator materialise
-    # any of them adds ordering deps on /dev/disk/by-uuid/* nodes
-    # that never appear (we're not on a disk with a partition table
-    # anymore). / is already mounted as the overlay from initrd, so
-    # fstab has no more work to do.
-    mkdir -p /run/pixie-upper/up/etc
-    cat > /run/pixie-upper/up/etc/fstab <<EOF
-# Written by nosi pixie-ramboot dracut hook -- ramboot overrides the
-# image's baked /etc/fstab. / is already the initrd's overlay.
-EOF
-    _pixie_trace "mount hook: wrote minimal /etc/fstab in overlay upper"
     upper=/run/pixie-upper/up
     _pixie_status "mount.ephemeral_mounted"
 fi
+
+# Override the image's baked /etc/fstab -- for BOTH modes. Its /
+# (LABEL=cloudimg-rootfs), /boot (LABEL=BOOT), and /boot/efi
+# (LABEL=UEFI) entries reference partitions on a whole-disk view we do
+# not expose under nbdboot, so systemd-fstab-generator materialises
+# boot.mount + boot-efi.mount, blocks on the
+# /dev/disk/by-label/{BOOT,UEFI} device units that never appear, fails
+# local-fs.target, and drops the machine into an emergency-mode loop
+# that never reaches sshd (unless the target happens to carry local
+# partitions with those labels). / is already mounted from the initrd
+# -- the overlay upper (ephemeral) or the RW rootfs (persist) -- so
+# fstab has no more work to do. ${upper} points at whichever one this
+# boot used. This rewrite previously lived in the ephemeral branch
+# only, so persistent boots kept the baked fstab and looped in
+# emergency mode on any board without local BOOT/UEFI labels.
+mkdir -p "${upper}/etc"
+cat > "${upper}/etc/fstab" <<EOF
+# Written by nosi pixie-ramboot dracut hook -- ramboot overrides the
+# image's baked /etc/fstab. / is already mounted from the initrd.
+EOF
+_pixie_trace "mount hook: wrote minimal /etc/fstab under ${upper}"
 
 # Mask systemd-networkd + NetworkManager + cloud-init on the
 # pivoted rootfs so they don't tear down the NIC dracut's network
