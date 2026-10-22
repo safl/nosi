@@ -68,20 +68,21 @@ for arg in "$@"; do
 done
 [ -n "$VARIANT" ] || nosi_die "usage: $0 <variant> [--shape-only]   (e.g. ubuntu-2604-headless | ubuntu-2604-docker | fedora-44-desktop)"
 
-# Shape is the trailing segment. Distro + version are carried in the
-# variant name but not enforced here: lib/common.sh derives the live
-# NOSI_DISTRO / NOSI_PKGMGR from /etc/os-release, so an operator-side
-# `apply.sh ubuntu-2604-headless` on a different-version Ubuntu box still
-# works -- the variant string is identity / catalog metadata, not a
-# runtime selector.
+# Shape is the trailing segment, except -rocm: a headless image whose
+# payload (step 40) is selected by the variant name. Distro + version are
+# carried in the variant name but not enforced here: lib/common.sh derives
+# the live NOSI_DISTRO / NOSI_PKGMGR from /etc/os-release, so an
+# operator-side `apply.sh ubuntu-2604-headless` on a different-version
+# Ubuntu box still works.
 case "$VARIANT" in
 *-headless) export NOSI_SHAPE=headless ;;
+*-rocm)     export NOSI_SHAPE=headless ;;
 *-desktop)  export NOSI_SHAPE=desktop  ;;
 *-wsl)      export NOSI_SHAPE=wsl      ;;
 *-docker)   export NOSI_SHAPE=docker   ;;
 *-lxc)      export NOSI_SHAPE=lxc      ;;
 *-proxmox)  export NOSI_SHAPE=proxmox  ;;
-*)          nosi_die "variant must end in -headless, -desktop, -wsl, -docker, -lxc, or -proxmox: $VARIANT" ;;
+*)          nosi_die "variant must end in -headless, -rocm, -desktop, -wsl, -docker, -lxc, or -proxmox: $VARIANT" ;;
 esac
 
 # Full variant string (e.g. "ubuntu-2604-headless") for identity-aware steps.
@@ -125,6 +126,7 @@ BASE_STEPS=(
     32-firstboot-inventory
     33-serial-console
     34-netboot-nbdboot-hook
+    40-rocm-ernic
     45-nosi-addons
 )
 

@@ -1,0 +1,52 @@
+# nosi base image : Ubuntu 26.10 (stonking) with ROCm 10 and the rocm-ernic
+# guest stack (step 40). Non-LTS: 26.10 is the first release whose archive
+# packages ROCm 10.
+#
+# Usage (from repo root, the Makefile cd's into cijoe/):
+#   make build VARIANT=ubuntu-2610-rocm
+
+[nosi]
+variant = "ubuntu-2610-rocm"
+
+[cijoe.transport.qemu_guest]
+username = "root"
+password = "root"
+hostname = "localhost"
+port = 4200
+
+[cijoe.workflow]
+fail_fast = true
+
+[qemu]
+img_bin = "qemu-img"
+
+[qemu.systems.x86_64]
+bin = "/usr/bin/qemu-system-x86_64"
+
+[qemu.guests.nosi-ubuntu-2610-rocm-x86_64]
+path = "{{ local.env.HOME }}/system_imaging/guests/nosi-ubuntu-2610-rocm-x86_64"
+system_label = "x86_64"
+system_image_name = "nosi-ubuntu-2610-rocm-x86_64"
+system_args.kwa = { cpu = "host", smp = 4, m = "4G", accel = "kvm" }
+system_args.tcp_forward = { host = 4200, guest = 22 }
+
+[system-imaging.images.nosi-ubuntu-2610-rocm-x86_64]
+system_label = "x86_64"
+
+cloud.url = "https://cloud-images.ubuntu.com/stonking/current/stonking-server-cloudimg-amd64.img"
+cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/stonking-server-cloudimg-amd64.img"
+cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
+cloud.userdata_path = "nosi-media/auxiliary/cloudinit-headless-ubuntu-2610.user"
+
+# ROCm adds ~4.5 GiB; the default 12G leaves too little for a rebuild.
+disk.bake_size = "24G"
+disk.path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2610-rocm-x86_64.qcow2"
+
+publish.raw_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2610-rocm-x86_64.img"
+publish.gz_path = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2610-rocm-x86_64.img.gz"
+publish.gzip_level = 9
+
+# Netboot bundle: vmlinuz + initrd extracted from the baked qcow2 so bty
+# can nbdboot this image via NBD using the image's OWN kernel.
+netboot.bundle_dir = "{{ local.env.HOME }}/system_imaging/disk/nosi-ubuntu-2610-rocm-netboot-x86_64"
+netboot.source_disk_ref = "ghcr.io/safl/nosi/ubuntu-2610-rocm"

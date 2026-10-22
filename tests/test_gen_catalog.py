@@ -53,9 +53,16 @@ def test_no_orphan_description_files(registry):
         assert name in registry, f"{path.name}: no such variant in variants.yml"
 
 
+# Suffixes that are not a shape name; must agree with the case in provision/apply.sh.
+SUFFIX_SHAPE = {"rocm": "headless"}
+
+
 def test_variant_names_match_their_shape_suffix(registry):
     for name, spec in registry.items():
-        assert name.endswith(f"-{spec['shape']}"), f"{name}: name does not end in -{spec['shape']}"
+        suffix = name.rsplit("-", 1)[-1]
+        assert SUFFIX_SHAPE.get(suffix, suffix) == spec["shape"], (
+            f"{name}: suffix -{suffix} does not map to shape {spec['shape']}"
+        )
 
 
 def test_describe_happy_path(registry):

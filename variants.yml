@@ -87,6 +87,11 @@ variants:
     shape: lxc
     flashable: false
 
+  ubuntu-2610-rocm:
+    shape: headless
+    flashable: true
+    netboot: true
+
   fedora-44-headless:
     shape: headless
     flashable: true
