@@ -171,6 +171,17 @@ if [ -n "$ip" ]; then
     printf "%s\t%s.localdomain %s # nosi-proxmox-online\n" "$ip" "$hn" "$hn" >> /etc/hosts
     log "mapped $hn -> $ip"
 fi
+# pmxcfs refuses a loopback-only node name, so on a boot where the network
+# came up after its first start it failed until the mapping above, and
+# systemd is restarting it now. Everything below needs /etc/pve mounted.
+systemctl is-failed -q pve-cluster && systemctl reset-failed pve-cluster \
+    && systemctl start --no-block pve-cluster
+i=0
+until systemctl is-active -q pve-cluster && [ -e /etc/pve/.version ]; do
+    i=$((i + 1))
+    [ "$i" -le 60 ] || { log "pmxcfs not up after 60s"; break; }
+    sleep 1
+done
 pvecm updatecerts --silent 2>/dev/null || log "updatecerts failed (retries next boot)"
 if [ ! -e /var/lib/nosi/proxmox-admin-granted ]; then
     if pveum user add odus@pam --comment "nosi operator" 2>/dev/null \
@@ -182,6 +193,8 @@ if [ ! -e /var/lib/nosi/proxmox-admin-granted ]; then
         else
             log "acl grant failed (retries next boot)"
         fi
+    else
+        log "pveum could not add or find odus@pam (retries next boot)"
     fi
 fi
 exit 0
