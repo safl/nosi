@@ -58,7 +58,7 @@ packages:
   - ccache               # transparent compiler cache; wraps gcc/clang
   - cmake                # ubiquitous C/C++ build orchestrator
   - cppcheck             # standalone C/C++ static analyzer
-  - dwarves              # pahole: struct layout / padding from DWARF (kernel/BPF)
+  # dwarves (pahole) is installed in runcmd, through the latest fallback repo.
   - gmake                # gnu make; FreeBSD's `make` is bsdmake
   - meson
   - ninja
@@ -144,6 +144,15 @@ runcmd:
   # build their own kernels and don't generally need the prebuilt
   # debug symbols for the cloud image's kernel.
   - rm -rf /usr/lib/debug
+
+  # Fall back to the latest package branch for what quarterly lacks. The
+  # 2026Q4 quarterly set for FreeBSD 15 dropped dwarves (pahole), which
+  # latest and FreeBSD 14 still carry. Quarterly keeps priority, so only
+  # packages missing there come from latest. UCL `key = value;` form keeps
+  # the line free of YAML's `: `; single line, as nuageinit requires.
+  - mkdir -p /usr/local/etc/pkg/repos
+  - printf '%s\n' 'FreeBSD-latest { url = "pkg+https://pkg.FreeBSD.org/${ABI}/latest"; mirror_type = "srv"; signature_type = "fingerprints"; fingerprints = "/usr/share/keys/pkg"; priority = -10; enabled = yes; }' > /usr/local/etc/pkg/repos/FreeBSD-latest.conf
+  - pkg install -y dwarves
 
   # Light cleanup; pkg cache is the main thing worth dropping.
   - pkg clean -aqy
