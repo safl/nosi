@@ -3,19 +3,21 @@ name: build-images
 on:
   push:
     branches: [main]
-    # Skip the fleet bake for docs-only changes (Sphinx site, README,
+    # Skip the fleet bake for docs-only changes (Sphinx site, README, AGENTS.md,
     # license, docs workflow): they don't touch the images. paths-ignore
     # skips only when ALL changed files match. docs.yml deploys the site.
     # schedule / workflow_dispatch ignore path filters and always build.
     paths-ignore:
       - 'docs/**'
       - 'README.md'
+      - 'AGENTS.md'
       - 'LICENSE'
       - '.github/workflows/docs.yml'
   pull_request:
     paths-ignore:
       - 'docs/**'
       - 'README.md'
+      - 'AGENTS.md'
       - 'LICENSE'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
