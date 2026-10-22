@@ -41,6 +41,12 @@ Adding a variant touches `variants.yml`, `descriptions/`, the matrix in
 `nosi-media/auxiliary/`. The matrix and the registry must stay in sync; the
 publish step fails loudly when they do not.
 
+Names are `<distro>-<version>-<shape>`, and tooling reads the shape from the
+suffix. The one exception is `-rocm`, a headless image named for its payload.
+A new exception needs the same mapping in the `case` in `provision/apply.sh`,
+in `cijoe/scripts/image_smoketest.py`, and in `SUFFIX_SHAPE` in
+`tests/test_gen_catalog.py`.
+
 Desktops ship on Debian, Fedora and Raspberry Pi OS. Do not add an Ubuntu
 desktop.
 
