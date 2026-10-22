@@ -61,8 +61,13 @@ depends() {
 # ignores modules not built for this kernel, which is what we want:
 # btrfs may or may not be available; the runtime hook probes
 # opportunistically.
+#
+# r8125 is the out-of-tree DKMS driver from step 10 (x86 only). An
+# RTL8125 NIC does not link up on the in-tree r8169 in early userspace,
+# and no generic driver set pulls in an /updates/dkms/ module, so it is
+# named here explicitly.
 installkernel() {
-    instmods nbd overlay ext4 xfs btrfs
+    instmods nbd overlay ext4 xfs btrfs r8125
 }
 
 # Userspace: nbd-client + shell tooling the runtime hooks use.
