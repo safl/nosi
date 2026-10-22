@@ -67,9 +67,8 @@ esac
 nosi_require_root
 
 # ---- 1. install DKMS + kernel headers/devel matching the running kernel ---
-# Also pull headers for any installed kernel image metapackage so DKMS
-# autoinstall handles the package_upgrade-bumped-kernel case (running
-# kernel older than the one apt/dnf just laid down).
+# Also pull headers for any installed kernel image metapackage, so section 3
+# can build for a kernel package_upgrade laid down that has not booted yet.
 
 case "$NOSI_PKGMGR" in
 apt)
@@ -108,24 +107,30 @@ ver=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
 
 nosi_info "latest upstream tag: $ver"
 
-# ---- 3. skip the fetch+dkms-add if this version is already installed -----
+# ---- 3. fetch, dkms-add, and build for every kernel with headers ---------
+# `dkms autoinstall` builds for the running kernel only, but the image boots
+# the newest one, which package_upgrade may have installed after this boot.
 
-if dkms status r8125 2>/dev/null | grep -q "^r8125, *${ver}"; then
-    nosi_info "r8125 ${ver} already in dkms; skipping build"
-else
-    if [ ! -d "/usr/src/r8125-${ver}" ]; then
-        nosi_info "fetching r8125 ${ver} source"
-        tmp=$(mktemp -d)
-        trap 'rm -rf "$tmp"' EXIT
-        curl -fsSL "https://github.com/awesometic/realtek-r8125-dkms/archive/refs/tags/${ver}.tar.gz" \
-            | tar -xz -C "$tmp"
-        src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)
-        install -d "/usr/src/r8125-${ver}"
-        cp -a "$src/." "/usr/src/r8125-${ver}/"
-    fi
-    dkms add -m r8125 -v "${ver}" || true   # already-added is fine
-    dkms autoinstall
+if [ ! -d "/usr/src/r8125-${ver}" ]; then
+    nosi_info "fetching r8125 ${ver} source"
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL "https://github.com/awesometic/realtek-r8125-dkms/archive/refs/tags/${ver}.tar.gz" \
+        | tar -xz -C "$tmp"
+    src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)
+    install -d "/usr/src/r8125-${ver}"
+    cp -a "$src/." "/usr/src/r8125-${ver}/"
 fi
+dkms add -m r8125 -v "${ver}" || true   # already-added is fine
+
+for build in /lib/modules/*/build; do
+    [ -e "$build" ] || continue
+    k="$(basename "$(dirname "$build")")"
+    if ! dkms status "r8125/${ver}" -k "$k" 2>/dev/null | grep -q installed; then
+        nosi_info "building r8125 ${ver} for $k"
+        dkms install "r8125/${ver}" -k "$k"
+    fi
+done
 
 # ---- 4. modprobe.d: softdep + ASPM/EEE options ---------------------------
 # Targeted preference, NOT a blanket r8169 blacklist. See the comment at
