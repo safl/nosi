@@ -1091,6 +1091,19 @@ def _run_assertions(
         "&& echo ok",
         lambda rc, out: (out == "ok", out or "missing/!two-driver udev rule"),
     )
+    if distro in ("debian", "ubuntu", "fedora"):
+        # The netboot bundle ships this initrd, and an RTL8125 box never gets
+        # past DHCP in it on r8169 alone (step 34's 99pixie-nbdboot module).
+        check(
+            "r8125 DKMS module built for the running kernel (step 10)",
+            "sudo -n modinfo -n r8125",
+            lambda rc, out: (rc == 0 and "r8125.ko" in out, out or f"exit {rc}"),
+        )
+        check(
+            "initrd carries r8125 for nbdboot (99pixie-nbdboot instmods)",
+            "sudo -n lsinitrd -k \"$(uname -r)\" | grep -q 'r8125\\.ko' && echo ok",
+            lambda rc, out: (out == "ok", out or "r8125 absent from the initrd"),
+        )
     if distro == "debian":
         # Debian ships NIC firmware in firmware-realtek (split out of
         # firmware-misc-nonfree); Ubuntu/Fedora carry it in linux-firmware.
