@@ -106,7 +106,9 @@ def main(args, cijoe):
         return errno.ENOENT
 
     variant = cijoe.getconf("nosi", {}).get("variant", "")
-    shape = variant.rsplit("-", 1)[-1]  # headless / desktop / wsl / docker / lxc / proxmox
+    suffix = variant.rsplit("-", 1)[-1]
+    # -rocm is a headless image; mirrors the case in provision/apply.sh.
+    shape = "headless" if suffix == "rocm" else suffix
     distro = variant.split("-", 1)[0] if "-" in variant else ""
 
     workdir = Path(tempfile.mkdtemp(prefix="nosi-smoketest-"))
@@ -1096,6 +1098,62 @@ def _run_assertions(
             "firmware-realtek installed (rtl_nic/*.fw for the 2.5GbE NIC)",
             "dpkg-query -W -f '${Status}' firmware-realtek 2>/dev/null",
             lambda rc, out: ("install ok installed" in out, out or "not installed"),
+        )
+
+    # ---- ROCm + rocm-ernic guest (step 40) -------------------------------
+    # QEMU here has neither an AMD GPU nor the emulated ionic NIC, so this
+    # proves the stack is installed and builds, not that a device comes up.
+    if variant.endswith("-rocm"):
+        check(
+            "kernel >= 6.18 (drivers/infiniband/hw/ionic)",
+            "printf '6.18\\n%s\\n' \"$(uname -r)\" | sort -V | head -1",
+            lambda rc, out: (out == "6.18", f"uname -r sorts below 6.18: {out}"),
+        )
+        for mod in ("ionic", "ionic_rdma"):
+            check(
+                f"{mod} is the ionic-ernic DKMS build for the running kernel",
+                f"sudo -n modinfo -n {mod}",
+                lambda rc, out: ("/updates/dkms/" in out, out or f"exit {rc}"),
+            )
+        check(
+            "ionic_rdma loaded at boot (modules-load.d; proves it links into this kernel)",
+            "test -d /sys/module/ionic_rdma && echo ok",
+            lambda rc, out: (out == "ok", "ionic_rdma not loaded"),
+        )
+        check(
+            "ionic verbs provider shipped by ibverbs-providers",
+            "dpkg -S /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav*.so",
+            lambda rc, out: (rc == 0 and out.startswith("ibverbs-providers"), out),
+        )
+        check(
+            "RDMA tools on PATH (ibv_devinfo, ib_send_bw, rocminfo, amd-smi)",
+            "command -v ibv_devinfo ib_send_bw rocminfo amd-smi >/dev/null && echo ok",
+            lambda rc, out: (out == "ok", out or "missing"),
+        )
+        check(
+            "hipcc compiles a HIP kernel for gfx942",
+            "d=$(mktemp -d) && printf '%s\\n' "
+            "'#include <hip/hip_runtime.h>' '__global__ void k(int *p) { *p = 1; }' "
+            '> "$d/k.hip" && hipcc --offload-arch=gfx942 -c "$d/k.hip" -o "$d/k.o" '
+            '&& echo ok; rm -rf "$d"',
+            lambda rc, out: (out.endswith("ok"), out or f"exit {rc}"),
+        )
+        check(
+            "rocm-ernic udev naming rule installed",
+            "test -s /etc/udev/rules.d/99-rocm-ernic.rules && echo ok",
+            lambda rc, out: (out == "ok", out or "missing"),
+        )
+        check(
+            "odus is in render + video (/dev/kfd, /dev/dri)",
+            "id -nG odus",
+            lambda rc, out: ({"render", "video"} <= set(out.split()), out),
+        )
+        check(
+            "provider.stamp names the archive rdma-core",
+            "v=$(dpkg-query -W -f='${Version}' rdma-core); "
+            'test "$(cat /usr/local/share/rocm-ernic/provider.stamp)" = "${v%%-*}:none" '
+            "&& echo ok",
+            lambda rc, out: (out == "ok", out or "stamp mismatch"),
         )
 
     # ---- ModemManager actually gone --------------------------------------
