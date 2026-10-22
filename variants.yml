@@ -33,6 +33,10 @@
 #                bty's netboot roadmap later. Non-headless shapes (desktop
 #                / wsl / lxc / docker / proxmox) never nbdboot -- desktop
 #                and proxmox are flash-only, the others are containerised.
+#   paused       true while a variant is out of the build matrix in
+#                build.yml; gen_catalog.py leaves it out of the catalog so
+#                the release never points at a tag that was not built.
+#                Optional, defaults to false.
 #
 # The use-case prose ("what is this variant for?") is NOT here: each
 # variant's description lives in its own file, descriptions/<name>.md,
@@ -120,3 +124,6 @@ variants:
   freebsd-15-headless:
     shape: headless
     flashable: true
+    # FreeBSD 15's 2026Q4 quarterly package set lacks dwarves (pahole), so
+    # the bake fails step 06. Unpause once quarterly carries it again.
+    paused: true

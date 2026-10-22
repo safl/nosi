@@ -170,7 +170,7 @@ def _render_catalog(variants: dict[str, dict], ref_tag: str) -> str:
     lines = ["version = 1", "", *header]
     for name in variants:  # insertion order == registry order
         entry = variants[name]
-        if not entry.get("flashable"):
+        if not entry.get("flashable") or entry.get("paused"):
             continue
         desc = _load_description(name)  # raises if the file is missing/empty
         arch = str(entry.get("arch", "x86_64")).strip()

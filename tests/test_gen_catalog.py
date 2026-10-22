@@ -8,6 +8,10 @@ import pytest
 KNOWN_SHAPES = {"headless", "desktop", "wsl", "docker", "lxc", "proxmox"}
 
 
+def _in_catalog(spec):
+    return spec["flashable"] and not spec.get("paused", False)
+
+
 @pytest.fixture(scope="module")
 def registry():
     return gen_catalog._load_registry()
@@ -20,6 +24,7 @@ def test_registry_schema(registry):
     for name, spec in registry.items():
         assert spec.get("shape") in KNOWN_SHAPES, f"{name}: bad shape {spec.get('shape')!r}"
         assert isinstance(spec.get("flashable"), bool), f"{name}: flashable must be a bool"
+        assert isinstance(spec.get("paused", False), bool), f"{name}: paused must be a bool"
 
 
 def test_every_variant_has_a_description_file(registry):
@@ -65,7 +70,7 @@ def test_describe_unknown_variant_fails_loudly(registry):
 
 def test_catalog_lists_only_flashable_for_each_ref_tag(registry):
     """Both render modes (rolling ``:latest`` and a pinned ``:YYYY.WNN``)
-    must carry every flashable variant and omit every non-flashable one.
+    must carry every flashable variant and omit every non-flashable or paused one.
     The unique per-image marker is the oras src ``.../<name>:<ref-tag>``,
     not a bare name substring and not ``[images.<name>]``: the renderer
     emits ``[[images]]`` table-arrays, so the bracket form never appears
@@ -75,11 +80,11 @@ def test_catalog_lists_only_flashable_for_each_ref_tag(registry):
         out = gen_catalog._render_catalog(registry, ref_tag=ref_tag)
         for name, spec in registry.items():
             ref = f"/{name}:{ref_tag}"
-            if spec["flashable"]:
+            if _in_catalog(spec):
                 assert ref in out, f"flashable {name} missing from catalog (ref_tag={ref_tag})"
             else:
                 assert ref not in out, (
-                    f"non-flashable {name} leaked into catalog (ref_tag={ref_tag})"
+                    f"non-flashable or paused {name} leaked into catalog (ref_tag={ref_tag})"
                 )
 
 
@@ -90,8 +95,8 @@ def test_catalog_parses_and_every_image_is_complete(registry):
 
     doc = tomllib.loads(gen_catalog._render_catalog(registry, ref_tag="latest"))
     assert doc.get("version") == 1
-    flashable = [n for n, s in registry.items() if s["flashable"]]
-    netboot = [n for n, s in registry.items() if s.get("netboot")]
+    flashable = [n for n, s in registry.items() if _in_catalog(s)]
+    netboot = [n for n, s in registry.items() if s.get("netboot") and _in_catalog(s)]
     # Every ``flashable: true`` variant emits its disk-image entry;
     # every ``netboot: true`` variant emits a companion bundle entry
     # right after it. So the total image count is flashable + netboot.
@@ -131,7 +136,7 @@ def test_netboot_entries_pair_with_their_disk_image(registry):
     imgs_by_name = {img["name"]: img for img in doc["images"]}
     for name, spec in registry.items():
         if not spec.get("netboot"):
-            if spec.get("flashable"):
+            if _in_catalog(spec):
                 assert "netboot_ref" not in imgs_by_variant[name], (
                     f"{name}: netboot_ref set but variant has no netboot bundle"
                 )
@@ -161,7 +166,7 @@ def test_arch_field_matches_registry(registry):
         img["src"].rsplit("/", 1)[1].split(":", 1)[0]: img["arch"] for img in doc["images"]
     }
     for name, spec in registry.items():
-        if not spec.get("flashable"):
+        if not _in_catalog(spec):
             continue
         expected = str(spec.get("arch", "x86_64"))
         assert by_variant[name] == expected, (
