@@ -23,7 +23,7 @@
 . "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
 
 ERNIC_REPO="https://github.com/ROCm/rocm-ernic"
-ERNIC_SHA="4880c3428efb8653ca9b9747f67820ecf251b3f8"
+ERNIC_SHA="cddb171f54feab119f7b6deca5c33148bb7c020d"
 ERNIC_DIR=/opt/rocm-ernic
 STAMP_DIR=/usr/local/share/rocm-ernic
 
