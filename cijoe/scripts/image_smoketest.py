@@ -1168,6 +1168,20 @@ def _run_assertions(
             "&& echo ok",
             lambda rc, out: (out == "ok", out or "stamp mismatch"),
         )
+        # rocm-ernic's server must run the revision the guest driver was
+        # built from, so consumers pin the server to this step's ERNIC_SHA.
+        step = Path(__file__).resolve().parents[2] / "provision/steps/40-rocm-ernic.sh"
+        pinned = next(
+            line.split("=", 1)[1].strip().strip('"')
+            for line in step.read_text().splitlines()
+            if line.startswith("ERNIC_SHA=")
+        )
+        check(
+            f"rocm-ernic checkout and ionic-ernic build are at {pinned[:12]}",
+            "cat /opt/rocm-ernic/.nosi-sha; "
+            "cut -d' ' -f1 /usr/local/share/rocm-ernic/ionic-ernic.built",
+            lambda rc, out: (out.split() == [pinned, pinned], out or "missing"),
+        )
 
     # ---- ModemManager actually gone --------------------------------------
     # systemctl is-active prints "active" / "inactive" / "failed" to stdout
