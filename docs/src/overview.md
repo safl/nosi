@@ -142,8 +142,8 @@ same distro coexist when their use cases call for it (for example,
 because NVIDIA / AMD / Mellanox qualify their apt repos against 24.04
 LTS while 26.04 LTS is the recency-leaning pick for non-vendor use).
 `ubuntu-2610-rocm` is the one name that does not end in its shape: it
-is a headless image whose name says what it carries, ROCm 10 and the
-rocm-ernic guest stack, on the non-LTS 26.10 because that is the first
+is a headless image whose name says what it carries, ROCm 10 and the RDMA
+userspace from the archive, on the non-LTS 26.10 because that is the first
 release whose archive packages ROCm 10.
 
 Each shape publishes to its own GHCR repo named for the variant.
