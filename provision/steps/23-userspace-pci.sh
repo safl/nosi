@@ -7,7 +7,8 @@
 #
 #   * /etc/modules-load.d/nosi-userspace-pci.conf: preload vfio-pci +
 #     uio_pci_generic so devices can be bound to a user space driver
-#     immediately.
+#     immediately, with the package that carries uio_pci_generic installed
+#     where the kernel flavour leaves it out (Ubuntu's linux-virtual).
 #   * /etc/udev/rules.d/99-nosi-vfio.rules: hand /dev/vfio/* to the kvm
 #     group, which odus is in, so passthrough works without sudo.
 #   * /etc/security/limits.d/nosi-memlock.conf: raise RLIMIT_MEMLOCK to
@@ -40,6 +41,14 @@ nosi_write_if_changed \
 vfio-pci
 uio_pci_generic
 ' /etc/modules-load.d/nosi-userspace-pci.conf 0644
+
+# Ubuntu's cloud images run linux-virtual, which on 24.04 leaves
+# uio_pci_generic in linux-modules-extra and does not install it, so the
+# preload above binds nothing. The generic flavour's metapackage carries
+# -extra for every kernel an upgrade brings; the running kernel gets its own.
+if [ "$NOSI_DISTRO" = ubuntu ] && ! modinfo uio_pci_generic >/dev/null 2>&1; then
+    nosi_pkg_install "linux-modules-extra-$(uname -r)" linux-image-generic
+fi
 
 # ---- /dev/vfio/* group ownership ------------------------------------------
 
