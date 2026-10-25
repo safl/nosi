@@ -27,7 +27,7 @@ help:
 	@echo "  debian-13-headless    Debian 13 trixie -> derives debian-13-desktop + debian-13-lxc + debian-13-proxmox"
 	@echo "  ubuntu-2404-headless  Ubuntu 24.04 noble (HW vendor stacks; cudadev/rocmdev pin here)"
 	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute -> derives ubuntu-2604-wsl + ubuntu-2604-docker + ubuntu-2604-lxc"
-	@echo "  ubuntu-2610-rocm      Ubuntu 26.10 stonking + ROCm 10 + rocm-ernic guest (ionic RDMA)"
+	@echo "  ubuntu-2610-rocm      Ubuntu 26.10 stonking + ROCm 10 + RDMA userspace"
 	@echo "  fedora-44-headless    Fedora 44 -> derives fedora-44-desktop + fedora-44-lxc"
 	@echo "  arch-headless         Arch Linux rolling (minimal netboot base; NO dev toolchain)"
 	@echo "  freebsd-14-headless   FreeBSD 14.4-RELEASE (Phase 1 scaffold)"

@@ -1,5 +1,5 @@
-# nosi base image : Ubuntu 26.10 (stonking) with ROCm 10 and the rocm-ernic
-# guest stack (step 40). Non-LTS: 26.10 is the first release whose archive
+# nosi base image : Ubuntu 26.10 (stonking) with ROCm 10 and the RDMA
+# userspace from the archive (step 40). Non-LTS: 26.10 is the first release whose archive
 # packages ROCm 10.
 #
 # Usage (from repo root, the Makefile cd's into cijoe/):

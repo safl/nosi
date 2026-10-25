@@ -1113,26 +1113,26 @@ def _run_assertions(
             lambda rc, out: ("install ok installed" in out, out or "not installed"),
         )
 
-    # ---- ROCm + rocm-ernic guest (step 40) -------------------------------
-    # QEMU here has neither an AMD GPU nor the emulated ionic NIC, so this
-    # proves the stack is installed and builds, not that a device comes up.
+    # ---- ROCm and RDMA userspace (step 40) -------------------------------
+    # QEMU here has no AMD GPU and no ionic NIC, so this proves the stack is
+    # installed and builds, not that a device comes up.
     if variant.endswith("-rocm"):
         check(
             "kernel >= 6.18 (drivers/infiniband/hw/ionic)",
             "printf '6.18\\n%s\\n' \"$(uname -r)\" | sort -V | head -1",
             lambda rc, out: (out == "6.18", f"uname -r sorts below 6.18: {out}"),
         )
+        # The image is flashed onto real machines, so it carries the kernel's
+        # own ionic drivers; patched ones for emulated NICs come at test time.
         for mod in ("ionic", "ionic_rdma"):
             check(
-                f"{mod} is the ionic-ernic DKMS build for the running kernel",
+                f"{mod} is the in-tree build, not a DKMS override",
                 f"sudo -n modinfo -n {mod}",
-                lambda rc, out: ("/updates/dkms/" in out, out or f"exit {rc}"),
+                lambda rc, out: (
+                    rc == 0 and "/kernel/drivers/" in out and "/updates/" not in out,
+                    out or f"exit {rc}",
+                ),
             )
-        check(
-            "ionic_rdma loaded at boot (modules-load.d; proves it links into this kernel)",
-            "test -d /sys/module/ionic_rdma && echo ok",
-            lambda rc, out: (out == "ok", "ionic_rdma not loaded"),
-        )
         check(
             "ionic verbs provider shipped by ibverbs-providers",
             "dpkg -S /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav*.so",
@@ -1152,35 +1152,16 @@ def _run_assertions(
             lambda rc, out: (out.endswith("ok"), out or f"exit {rc}"),
         )
         check(
-            "rocm-ernic udev naming rule installed",
-            "test -s /etc/udev/rules.d/99-rocm-ernic.rules && echo ok",
-            lambda rc, out: (out == "ok", out or "missing"),
-        )
-        check(
             "odus is in render + video (/dev/kfd, /dev/dri)",
             "id -nG odus",
             lambda rc, out: ({"render", "video"} <= set(out.split()), out),
         )
         check(
-            "provider.stamp names the archive rdma-core",
-            "v=$(dpkg-query -W -f='${Version}' rdma-core); "
-            'test "$(cat /usr/local/share/rocm-ernic/provider.stamp)" = "${v%%-*}:none" '
-            "&& echo ok",
-            lambda rc, out: (out == "ok", out or "stamp mismatch"),
-        )
-        # rocm-ernic's server must run the revision the guest driver was
-        # built from, so consumers pin the server to this step's ERNIC_SHA.
-        step = Path(__file__).resolve().parents[2] / "provision/steps/40-rocm-ernic.sh"
-        pinned = next(
-            line.split("=", 1)[1].strip().strip('"')
-            for line in step.read_text().splitlines()
-            if line.startswith("ERNIC_SHA=")
-        )
-        check(
-            f"rocm-ernic checkout and ionic-ernic build are at {pinned[:12]}",
-            "cat /opt/rocm-ernic/.nosi-sha; "
-            "cut -d' ' -f1 /usr/local/share/rocm-ernic/ionic-ernic.built",
-            lambda rc, out: (out.split() == [pinned, pinned], out or "missing"),
+            "no rocm-ernic guest stack (checkout, DKMS, udev rule, modules-load)",
+            "ls -d /opt/rocm-ernic /usr/local/share/rocm-ernic /usr/src/ionic-ernic-* "
+            "/etc/udev/rules.d/99-rocm-ernic.rules /etc/modules-load.d/rocm-ernic.conf "
+            "2>/dev/null; true",
+            lambda rc, out: (out == "", f"present: {out}"),
         )
 
     # ---- ModemManager actually gone --------------------------------------

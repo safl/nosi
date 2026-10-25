@@ -126,7 +126,7 @@ BASE_STEPS=(
     32-firstboot-inventory
     33-serial-console
     34-netboot-nbdboot-hook
-    40-rocm-ernic
+    40-rocm
     45-nosi-addons
 )
 

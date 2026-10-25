@@ -1,5 +1,4 @@
-Ubuntu 26.10 (stonking) headless with ROCm 10 from the Ubuntu archive and the
-guest side of rocm-ernic: the patched ionic and ionic_rdma drivers built as the
-ionic-ernic DKMS package, rdma-core with the ionic provider, and perftest. For
-QEMU guests driving rocm-ernic's emulated RDMA NIC, nbdboot, or bare metal.
+Ubuntu 26.10 (stonking) headless with ROCm 10 and the RDMA userspace from the
+Ubuntu archive: rdma-core with the ionic provider, perftest, and dkms with the
+kernel headers. Only stock packages, for bare metal, nbdboot, or QEMU guests.
 Non-LTS: it moves to the next Ubuntu release that packages a newer ROCm.

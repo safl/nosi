@@ -1,5 +1,5 @@
 #cloud-config
-# nosi base : Ubuntu 26.10 (stonking) + ROCm 10 + rocm-ernic guest. Default credentials: operator
+# nosi base : Ubuntu 26.10 (stonking) + ROCm 10 + RDMA userspace. Default credentials: operator
 # account `odus` with password `odus.321`, root locked, SSH password auth on.
 # Per-instance SSH identity: host keys stripped at end of cloud-init,
 # regenerated on first boot.

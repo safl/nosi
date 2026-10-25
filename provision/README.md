@@ -38,7 +38,7 @@ provision/
     ├── 30-clock-from-http.sh
     ├── 32-firstboot-inventory.sh
     ├── 33-serial-console.sh        # console=ttyS0+ttyS1 / comconsole / Pi serial0 for IPMI SOL
-    ├── 40-rocm-ernic.sh            # *-rocm only: ROCm 10, RDMA userspace, ionic-ernic DKMS
+    ├── 40-rocm.sh                  # *-rocm only: ROCm 10 and RDMA userspace, from the archive
     ├── 45-nosi-addons.sh           # install /opt/nosi/addons/ + /usr/local/bin/nosi-addon
     ├── 50-desktop-stack.sh         # desktop-shape only: greetd / sway / waybar configs
     ├── 98-metadata.sh              # /etc/nosi-metadata.json (tool versions, packages, identity)
@@ -117,22 +117,18 @@ binaries, with cijoe itself in a `--system-site-packages` venv.
 | `debian-13-headless`   | Debian 13 trixie     | -- |
 | `ubuntu-2404-headless` | Ubuntu 24.04 noble   | -- (HW vendor stacks: cudadev/rocmdev workflows pin to this base) |
 | `ubuntu-2604-headless` | Ubuntu 26.04 resolute| -- |
-| `ubuntu-2610-rocm`     | Ubuntu 26.10 stonking| ROCm 10 (archive) + rocm-ernic guest: ionic-ernic DKMS, RDMA userspace, perftest (step 40) |
+| `ubuntu-2610-rocm`     | Ubuntu 26.10 stonking| ROCm 10 and RDMA userspace with perftest, all from the archive (step 40) |
 | `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |
 | `fedora-44-headless`   | Fedora 44            | -- |
 | `fedora-44-desktop`    | Fedora 44            | Sway + tuigreet + Firefox + audio/bluetooth/power-management |
 | `freebsd-14-headless`  | FreeBSD 14.4-RELEASE | -- (C/C++/Python; apply.sh runs via nuageinit + a base64 tarball; Rust/Zig opt-in) |
 | `freebsd-15-headless`  | FreeBSD 15.0-RELEASE | -- (C/C++/Python; apply.sh runs via nuageinit + a base64 tarball; Rust/Zig opt-in) |
 
-`ubuntu-2610-rocm` builds the ionic sources at the running kernel's
-major.minor (v7.3) rather than rocm-ernic's own pin, and takes rdma-core
-from the archive. When driving it with rocm-ernic's `ernic_guest_setup`
-role, set `ernic_build_rdma_core: false`, or the role builds rdma-core
-from source over the archive's whenever GPU passthrough is on. Set
-`ernic_ionic_kernel_ref: v7.3`, or its kernel check rejects the image.
-`ernic_install_driver: false` avoids that check too, and `ionic_rdma`
-still loads at boot, but the role then also skips bringing the netdev
-up and waiting for the port.
+`ubuntu-2610-rocm` carries only archive packages, the kernel's own ionic
+drivers among them. It is flashed onto real machines too, so drivers
+patched for emulated devices, such as rocm-ernic's ionic-ernic, are
+installed by whoever tests with those devices, at test time; dkms and the
+headers are in the image so that such a package installs directly.
 
 ## Use from a flashed nosi image
 
