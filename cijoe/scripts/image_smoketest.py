@@ -1091,6 +1091,14 @@ def _run_assertions(
         "&& echo ok",
         lambda rc, out: (out == "ok", out or "missing/!two-driver udev rule"),
     )
+    # Step 23 preloads both; a module the kernel does not carry binds nothing
+    if distro in ("debian", "ubuntu", "fedora", "arch"):
+        for mod in ("vfio-pci", "uio_pci_generic"):
+            check(
+                f"{mod} module present for the running kernel (step 23)",
+                f"sudo -n modinfo -n {mod}",
+                lambda rc, out: (rc == 0 and ".ko" in out, out or f"exit {rc}"),
+            )
     if distro in ("debian", "ubuntu", "fedora"):
         # The netboot bundle ships this initrd, and an RTL8125 box never gets
         # past DHCP in it on r8169 alone (step 34's 99pixie-nbdboot module).
