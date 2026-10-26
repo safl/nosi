@@ -137,7 +137,8 @@ hand-curated prose that can drift.
 Variant names follow `<distro>-<version>-<shape>`, e.g.
 `debian-13-headless`, `ubuntu-2604-wsl`, `freebsd-15-headless`. The
 version-in-the-name lets multiple kernel / user-land releases of the
-same distro coexist.
+same distro coexist. Ubuntu has two: the latest LTS,
+`ubuntu-2604-headless`, and the latest release, `ubuntu-2610-headless`.
 `ubuntu-2610-rocm` is the one name that does not end in its shape: it
 is a headless image whose name says what it carries, ROCm 10 and the RDMA
 userspace from the archive, on the non-LTS 26.10 because that is the first

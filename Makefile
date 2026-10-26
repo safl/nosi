@@ -26,6 +26,7 @@ help:
 	@echo "Bakeable bases (VARIANT=...); each base also produces its derived shapes:"
 	@echo "  debian-13-headless    Debian 13 trixie -> derives debian-13-desktop + debian-13-lxc + debian-13-proxmox"
 	@echo "  ubuntu-2604-headless  Ubuntu 26.04 resolute -> derives ubuntu-2604-wsl + ubuntu-2604-docker + ubuntu-2604-lxc"
+	@echo "  ubuntu-2610-headless  Ubuntu 26.10 stonking, the latest release"
 	@echo "  ubuntu-2610-rocm      Ubuntu 26.10 stonking + ROCm 10 + RDMA userspace"
 	@echo "  fedora-44-headless    Fedora 44 -> derives fedora-44-desktop + fedora-44-lxc"
 	@echo "  arch-headless         Arch Linux rolling (minimal netboot base; NO dev toolchain)"
@@ -90,6 +91,7 @@ build-rpi:
 all:
 	$(MAKE) build VARIANT=debian-13-headless
 	$(MAKE) build VARIANT=ubuntu-2604-headless
+	$(MAKE) build VARIANT=ubuntu-2610-headless
 	$(MAKE) build VARIANT=ubuntu-2610-rocm
 	$(MAKE) build VARIANT=fedora-44-headless
 	$(MAKE) build VARIANT=arch-headless
