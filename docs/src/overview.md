@@ -90,11 +90,9 @@ CLIs, NVIDIA CUDA + NOKM + DOCA stack, AMD ROCm stack, MLNX_OFED,
   that filters by shape / distro / version). Today:
   `agentic-cli` (Node + claude-code / codex / gemini-cli / opencode +
   LSPs + JetBrainsMono Nerd Font).
-- **Multi-reboot installs** stay as **cijoe workflows** under
-  `cijoe/workflows/setup_*.yaml`, run from a control box over SSH.
-  cijoe's `wait_for_transport` step handles the reboots transparently.
-  Today: `setup_cudadev.yaml` (NVIDIA stack), `setup_rocmdev.yaml`
-  (AMD stack).
+- **Multi-reboot installs**, such as the NVIDIA and AMD GPU stacks,
+  are not part of nosi; the project that needs one installs it on
+  top of a flashed image with its own tooling.
 
 The intent: a flashable variant stays focused on **what kind of
 system it is**; "what extras you want installed" is the operator's

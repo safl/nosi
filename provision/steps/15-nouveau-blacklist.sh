@@ -7,7 +7,7 @@
 # Why always-on:
 #
 #   * nouveau and the proprietary NVIDIA driver are mutually exclusive.
-#     Any future cudadev install on top of this image hits a hard
+#     Any NVIDIA driver install on top of this image hits a hard
 #     conflict if nouveau is loaded -- the proprietary stack refuses
 #     to bind. Pre-blacklisting removes the post-flash gotcha.
 #

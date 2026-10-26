@@ -71,11 +71,10 @@ Each addon declares its eligibility in a short header:
 ```
 
 Multi-reboot installs (NVIDIA CUDA + NOKM + DOCA, AMD ROCm,
-MLNX_OFED) are **not** addons — they live as cijoe workflows under
-`cijoe/workflows/setup_*.yaml` and run from a control box over SSH,
-because cijoe's `core.wait_for_transport` step handles reboots
-transparently. `nosi-addon` is for installs that finish without
-asking the operator to reboot.
+MLNX_OFED) are **not** addons, and not part of nosi: the vendor GPU
+stacks are installed on top of a flashed image by the tooling of the
+project that needs them. `nosi-addon` is for installs that finish
+without asking the operator to reboot.
 
 `apply.sh` is fail-fast: any step error aborts the chain and the
 `/etc/nosi/apply-ok` sentinel never gets written. The smoketest's
