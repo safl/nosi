@@ -116,6 +116,7 @@ binaries, with cijoe itself in a `--system-site-packages` venv.
 |------------------------|----------------------|--------------------|
 | `debian-13-headless`   | Debian 13 trixie     | -- |
 | `ubuntu-2604-headless` | Ubuntu 26.04 resolute| -- |
+| `ubuntu-2610-headless` | Ubuntu 26.10 stonking| -- |
 | `ubuntu-2610-rocm`     | Ubuntu 26.10 stonking| ROCm 10 and RDMA userspace with perftest, all from the archive (step 40) |
 | `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |
 | `fedora-44-headless`   | Fedora 44            | -- |

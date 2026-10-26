@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-headless, ubuntu-2604-headless, ubuntu-2610-rocm, fedora-44-headless, arch-headless, freebsd-14-headless]
+        variant: [debian-13-headless, ubuntu-2604-headless, ubuntu-2610-headless, ubuntu-2610-rocm, fedora-44-headless, arch-headless, freebsd-14-headless]
 
     steps:
       - uses: actions/checkout@v5

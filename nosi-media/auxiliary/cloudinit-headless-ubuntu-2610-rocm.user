@@ -1,0 +1,265 @@
+#cloud-config
+# nosi base : Ubuntu 26.10 (stonking) + ROCm 10 + RDMA userspace. Default credentials: operator
+# account `odus` with password `odus.321`, root locked, SSH password auth on.
+# Per-instance SSH identity: host keys stripped at end of cloud-init,
+# regenerated on first boot.
+
+hostname: nosi-ubuntu
+fqdn: nosi-ubuntu.local
+manage_etc_hosts: true
+
+timezone: UTC
+
+ssh_pwauth: true
+
+# Strip the base cloud image's default user (`ubuntu`) before cloud-init's
+# users module runs. Two reasons: avoid an unused account in /etc/passwd,
+# and free UID 1000 so odus can claim it (the WSL/Linux convention for
+# the first interactive user; lots of tooling assumes UID 1000 = primary
+# operator).
+bootcmd:
+  - userdel -r ubuntu 2>/dev/null || true
+
+# Operator account: `odus` with password `odus.321`, passwordless sudo,
+# pinned to UID 1000. Created here (cloud-init users-module) rather than
+# in runcmd because users-module calls `useradd -p HASH`, which writes
+# the hash straight to /etc/shadow without going through PAM (so
+# pam_pwquality cannot reject `odus.321` for containing the username),
+# without depending on `openssl` being installed at runcmd time, and
+# without the runcmd hazard that a single non-zero exit silently skips
+# later items. Hash is `openssl passwd -6 -salt nosiOpRator odus.321`;
+# salt is fixed so identical bakes produce identical /etc/shadow.
+# `- default` is intentionally absent; the base image's default user is
+# gone (bootcmd). Root is locked in runcmd below. The default password
+# stays active out of the box so CI jobs can flash and ssh straight in;
+# step 29 just marks the system as on the default and the motd warns at
+# every interactive login until the operator rotates with `passwd odus`.
+# Operators who want a personal identity rename odus rather than create
+# a second account (see provision/README.md).
+users:
+  - name: odus
+    uid: 1000
+    gecos: nosi operator
+    shell: /bin/bash
+    groups: [sudo, kvm]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    hashed_passwd: "$6$nosiOpRator$MNNihj4cU2CANkmlcYthq7Fa.U2r5VwwJxtm1TlqmznXizzkddi0sxKc3YnkgRpcvOLc2V7nOGpbp/tOyD5M81"
+
+growpart:
+  mode: auto
+  devices: ["/"]
+
+resize_rootfs: true
+
+# Ubuntu cloud images already include universe in their default sources,
+# so btop / podman-docker resolve without extra config. (helix + zellij
+# are pulled from upstream tarballs in runcmd; the universe packages
+# either lag the upstream releases or, in 26.04, vanished entirely.)
+
+# Drop Install-Recommends to keep the image lean -- our explicit packages:
+# list already names everything we want, and Recommends were inflating
+# the gz by GBs on debian/ubuntu compared to fedora's weak-deps default.
+apt:
+  conf: |
+    APT::Install-Recommends "false";
+    APT::Install-Suggests "false";
+
+# See debian variant: upgrade the base snapshot before installing our
+# explicit packages, so the baked image picks up upstream security fixes.
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - openssh-server
+  - sudo
+  - systemd-resolved
+  # NTP via systemd's own daemon. See debian variant for rationale.
+  - systemd-timesyncd
+  - bash-completion      # autoloads /etc/bash_completion.d/* on interactive bash
+  - btop
+  - fastfetch            # system info summary (maintained C successor to neofetch)
+  - direnv               # per-directory env vars; bash hook in /etc/profile.d
+  - fd-find              # /usr/bin/fdfind; symlinked to fd in runcmd
+  - fzf
+  - gh                   # GitHub CLI
+  - git
+  - git-delta            # `delta` pager, wired into /etc/gitconfig
+  - git-lfs
+  - htop
+  - just                 # task runner (sister to make-as-task-runner)
+  - meson
+  - ninja-build
+  - parallel             # GNU parallel
+  - ripgrep
+  - shellcheck           # bash linter; headless's substitute for the
+                         # Node-based bash-language-server (agentic-cli addon)
+  - stress-ng            # CPU / memory stress for thermals + bench
+  - sysstat              # iostat / sar / mpstat
+  - time                 # GNU time (verbose vs the bash builtin)
+  - unzip                # yazi ships as a zip in its releases
+  - libicu-dev           # ICU runtime for marksman (.NET-based markdown LSP);
+                         # without it dotnet aborts with "Couldn't find a valid
+                         # ICU package" and step 20 fails fast on marksman
+  - linux-headers-generic # DKMS needs the running kernel's headers (r8125,
+                         # and any cudadev/rocmdev workflow run on top)
+  - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
+  - linux-tools-common   # shared man pages + helpers for the -generic tool set
+  - kexec-tools          # `kexec -l && systemctl kexec` to run a locally-installed
+                         # kernel on top of the netboot-served one; see docs/kexec.md.
+                         # Debconf's "load kexec on shutdown" prompt is systemd-inert
+                         # (default off for systemd), so noninteractive install is safe.
+  - curl
+  - bind9-dnsutils        # dig/nslookup; the dnsutils transitional name is gone in trixie/resolute
+  - jq
+  - moreutils            # errno/sponge/ts/chronic/ifne/vidir shell helpers
+  - lsof
+  - mtr-tiny
+  - network-manager       # provides nmtui for interactive interface config
+  - nmap
+  - strace
+  - tcpdump
+  - wget
+  - wireguard-tools      # wg / wg-quick for the in-kernel module; dormant until configured
+  - build-essential
+  - ccache               # transparent compiler cache; wraps gcc/clang
+  - clang
+  - clang-tools          # clang-format, clang-tidy
+  - clangd               # C/C++ LSP
+  - cmake                # ubiquitous C/C++ build orchestrator
+  - cppcheck             # standalone C/C++ static analyzer
+  - dwarves              # pahole: struct layout / padding from DWARF (kernel/BPF)
+  - gdb
+  - lldb                 # helix DAP debugger backend (lldb-dap binary)
+  - make
+  - pipx
+  - pkg-config
+  - python3
+  - valgrind
+  # kernel build toolchain: build or rebuild a kernel, an out-of-tree
+  # module, or a DKMS package on the box. build-essential + dwarves above
+  # already cover gcc/make/pahole; these add the kernel tree's extra needs.
+  - bc                  # Kconfig / kernel time-constant integer math
+  - bison               # kernel + BPF parser generators
+  - flex
+  - fakeroot            # build .deb kernel/module packages without root
+  - debhelper           # make bindeb-pkg packaging helpers
+  - libssl-dev          # module signing (CONFIG_MODULE_SIG) + certs
+  - libelf-dev          # objtool / BTF generation
+  - libdw-dev           # gendwarfksyms needs <dwarf.h> on 6.x/7.x; libelf-dev alone is NOT enough
+  - cpio                # kernel headers_install + initramfs
+  - rsync               # kernel headers_install / modules_install
+  # See debian variant: name podman's Recommends explicitly (crun /
+  # fuse-overlayfs / dbus-user-session) since Recommends are off.
+  - buildah
+  - crun
+  - dbus-user-session
+  - fuse-overlayfs
+  - passt
+  - podman
+  - podman-docker
+  - podman-compose       # `podman compose` provider; without it the wrapper
+                         # dies with "looking up compose provider failed"
+  - skopeo
+  - dmidecode
+  - hdparm
+  - ipmitool            # IPMI / BMC: lights-out mgmt, sensors, SEL on servers
+  - lshw
+  - nvme-cli
+  - pciutils
+  - smartmontools
+  - usbutils
+  # firmware for bare-metal targets flashed via bty: i915 GuC/HuC, iwlwifi,
+  # regulatory.db, etc. Named explicitly because we drop apt Recommends to
+  # keep the image lean -- the kernel package pulls linux-firmware only via
+  # Recommends.
+  - linux-firmware
+  # CPU microcode (early-load via initramfs). intel-microcode is in
+  # multiverse, amd64-microcode in main; both are default-enabled in
+  # Ubuntu server cloud images. Same rationale as the debian variant:
+  # silently load-bearing errata fixes for consumer Intel SKUs (N97 etc.)
+  # and recent AMD parts (Ryzen 5 in the GMKtec NucBox G10).
+  - intel-microcode
+  - amd64-microcode
+  - ovmf
+  - qemu-system-x86
+  # full-system arm/arm64 too, so an x86 box can boot a Pi / arm64 guest
+  # under cijoe (the qemu-system-arm package ships both qemu-system-arm and
+  # qemu-system-aarch64). User-mode cross-arch (binaries, chroots) is below.
+  - qemu-system-arm
+  - qemu-utils
+  # Cross-arch user-mode emulation: the static qemu-<arch> interpreters +
+  # binfmt registrations so the kernel transparently runs foreign-arch
+  # binaries (arm64 in an x86 chroot, `podman --platform`, etc.).
+  # binfmt-support owns the boot-time registration. Complements qemu-system-x86
+  # (system emulation for cijoe guests) and makes `make build-rpi` work from an
+  # x86 host / the ubuntu-2604-wsl shape with no extra setup.
+  - qemu-user-binfmt      # resolute dropped qemu-user-static; binfmt variant registers the interpreters
+  - binfmt-support
+  # cloud-init seed tooling: cloud-localds (cloud-image-utils) + mkisofs
+  # (genisoimage) let an on-target cijoe build a NoCloud seed.iso to boot
+  # cloud-init guests -- the docker bootstrap shape's job, and any guest
+  # workflow cijoe drives.
+  - genisoimage
+  - cloud-image-utils
+
+# Drop the nosi provision/ tree into /opt/nosi/provision/. The
+# __NOSI_PROVISION_FILES__ marker is expanded at bake time by
+# cijoe/scripts/userdata_render.py: it replaces this comment with one
+# write_files: entry per file under provision/ (apply.sh, lib/*,
+# steps/*), chmod 0755. The runcmd: section below then invokes
+# /opt/nosi/provision/apply.sh, which is also the same script
+# operators run on a vanilla Hetzner VM to reach image parity.
+write_files:
+  # __NOSI_PROVISION_FILES__
+
+runcmd:
+
+  # nosi provision: r8125 DKMS + softdep, clock-from-http + NTP enable,
+  # nosi-motd renderer + service, nosi-firstboot-inventory + service.
+  # Each step under provision/steps/ is independently idempotent and
+  # cross-distro where it makes sense. Same apply.sh runs on a vanilla
+  # Hetzner VM (`sudo /opt/nosi/provision/apply.sh ubuntu-2610-rocm`) to
+  # reach this image's parity.
+  - /opt/nosi/provision/apply.sh ubuntu-2610-rocm
+
+  # odus itself is created by the top-level `users:` block (hashed_passwd
+  # written straight to /etc/shadow). All that's left here is locking root
+  # so the only login channel is odus.
+  - passwd -l root
+
+  - rm -f /etc/ssh/ssh_host_*
+  - ': > /etc/machine-id'
+  - rm -f /var/lib/dbus/machine-id
+  - cloud-init clean --logs --seed || true
+
+  # Deep cleanup (see debian variant for rationale).
+  - |
+    set -eu
+    if [ -d /usr/share/locale ]; then
+        find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+            ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'C.*' \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
+    journalctl --vacuum-size=1M 2>/dev/null || true
+    rm -rf /var/log/installer /var/log/journal/* /var/log/dpkg.log* /var/log/apt
+    find /usr /opt /root /home -type d -name __pycache__ \
+        -exec rm -rf {} + 2>/dev/null || true
+    apt-get -y autoremove --purge
+    apt-get -y autoclean
+
+  # Clock floor: see debian variant for rationale. Touch /usr/lib/clock-epoch
+  # last so its mtime is the bake time; PID-1 systemd uses it as the
+  # minimum boot-time clock, defeating dead-CMOS TLS-cert breakage.
+  - touch /usr/lib/clock-epoch
+
+  - apt-get clean
+  - rm -rf /var/lib/apt/lists/* /root/.cache /home/*/.cache /tmp/* /var/tmp/*
+
+final_message: "nosi ubuntu-2610-rocm baked in $UPTIME seconds; powering off"
+
+power_state:
+  mode: poweroff
+  timeout: 60
+  message: "nosi build complete"

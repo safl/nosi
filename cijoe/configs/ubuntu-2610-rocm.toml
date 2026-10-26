@@ -36,7 +36,7 @@ system_label = "x86_64"
 cloud.url = "https://cloud-images.ubuntu.com/stonking/current/stonking-server-cloudimg-amd64.img"
 cloud.path = "{{ local.env.HOME }}/system_imaging/cloud/stonking-server-cloudimg-amd64.img"
 cloud.metadata_path = "nosi-media/auxiliary/cloudinit-metadata.meta"
-cloud.userdata_path = "nosi-media/auxiliary/cloudinit-headless-ubuntu-2610.user"
+cloud.userdata_path = "nosi-media/auxiliary/cloudinit-headless-ubuntu-2610-rocm.user"
 
 # ROCm adds ~4.5 GiB; the default 12G leaves too little for a rebuild.
 disk.bake_size = "24G"
