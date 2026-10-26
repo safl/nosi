@@ -20,8 +20,7 @@
 # body so operators who invoke an addon directly (bypassing the TUI)
 # still get a loud failure when on the wrong shape / distro.
 #
-# Multi-reboot installs (CUDA / ROCm / MLNX_OFED) live as cijoe
-# workflows under cijoe/workflows/setup_*.yaml, not as addons --
+# Multi-reboot installs (CUDA / ROCm / MLNX_OFED) are not nosi's;
 # nosi-addon is for one-shot, target-local, no-reboot installs.
 
 set -euo pipefail

@@ -103,7 +103,7 @@ packages:
                          # without it dotnet aborts with "Couldn't find a valid
                          # ICU package" and step 20 fails fast on marksman
   - linux-headers-generic # DKMS needs the running kernel's headers (r8125,
-                         # and any cudadev/rocmdev workflow run on top)
+                         # and any vendor GPU driver installed on top)
   - linux-tools-generic  # perf + bpftool, picked up via -$(uname -r) dep
   - linux-tools-common   # shared man pages + helpers for the -generic tool set
   - kexec-tools          # `kexec -l && systemctl kexec` to run a locally-installed
