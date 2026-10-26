@@ -8,7 +8,7 @@
 #   * /etc/modules-load.d/nosi-userspace-pci.conf: preload vfio-pci +
 #     uio_pci_generic so devices can be bound to a user space driver
 #     immediately, with the package that carries uio_pci_generic installed
-#     where a cloud kernel leaves it out (Ubuntu 24.04, Fedora).
+#     where a cloud kernel leaves it out (Fedora).
 #   * /etc/udev/rules.d/99-nosi-vfio.rules: hand /dev/vfio/* to the kvm
 #     group, which odus is in, so passthrough works without sudo.
 #   * /etc/security/limits.d/nosi-memlock.conf: raise RLIMIT_MEMLOCK to
@@ -42,14 +42,12 @@ vfio-pci
 uio_pci_generic
 ' /etc/modules-load.d/nosi-userspace-pci.conf 0644
 
-# Cloud images ship a kernel cut down to what a VM boots on, leaving
-# uio_pci_generic out, so the preload above binds nothing: Ubuntu 24.04's
-# linux-virtual keeps it in linux-modules-extra, Fedora's cloud image in
-# kernel-modules. The running kernel gets the package, and a metapackage
-# that brings it with every kernel an upgrade installs.
+# Fedora's cloud image ships a kernel cut down to what a VM boots on,
+# keeping uio_pci_generic in kernel-modules, so the preload above binds
+# nothing. The running kernel gets the package, and the metapackage that
+# brings it with every kernel an upgrade installs.
 if ! modinfo uio_pci_generic >/dev/null 2>&1; then
     case "$NOSI_DISTRO" in
-    ubuntu) nosi_pkg_install "linux-modules-extra-$(uname -r)" linux-image-generic ;;
     fedora) nosi_pkg_install "kernel-modules-$(uname -r)" kernel ;;
     esac
 fi

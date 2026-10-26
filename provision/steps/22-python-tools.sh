@@ -21,8 +21,8 @@
 # idiom -- venvs in /opt/pipx, shims in /usr/local/bin, no env-var
 # plumbing, `pipx list/upgrade/uninstall --global` stay consistent.
 #
-# The catch: --global is pipx 1.5+, and noble (24.04) ships pipx 1.4.
-# So we reach a modern pipx via `uvx pipx` -- uvx (installed in step 20
+# --global is pipx 1.5+, so rather than depend on each distro's pipx we
+# reach a modern pipx via `uvx pipx` -- uvx (installed in step 20
 # alongside uv) runs the latest pipx ephemerally, regardless of the
 # distro's pipx version. The distro pipx stays installed for operators'
 # own per-user use; this step is purely the system-wide install path.

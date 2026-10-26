@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [debian-13-headless, ubuntu-2404-headless, ubuntu-2604-headless, ubuntu-2610-rocm, fedora-44-headless, arch-headless, freebsd-14-headless]
+        variant: [debian-13-headless, ubuntu-2604-headless, ubuntu-2610-rocm, fedora-44-headless, arch-headless, freebsd-14-headless]
 
     steps:
       - uses: actions/checkout@v5
@@ -256,7 +256,7 @@ jobs:
       - name: Upload base qcow2 for the derive jobs
         # A dedicated single-file artifact (clean root, no nested paths) is the
         # hand-off to the `derive` jobs, which download it and build each shape.
-        # Only the bases that have derives need it; freebsd / ubuntu-2404 don't.
+        # Only the bases that have derives need it.
         if: >-
           matrix.variant == 'debian-13-headless' ||
           matrix.variant == 'ubuntu-2604-headless' ||

@@ -13,7 +13,7 @@ chroot-regen on the bty-server host (DNS from chroot, mirror
 availability, GPG timestamp drift, cross-arch qemu-user-static) all
 moves back to nosi CI where those inputs are stable.
 
-Variants in scope: `debian-13-headless`, `ubuntu-2404-headless`,
+Variants in scope: `debian-13-headless`,
 `ubuntu-2604-headless`, `fedora-44-headless`. Not desktop / wsl /
 lxc / docker / proxmox. Not FreeBSD (kernel format + boot chain
 differ; separate design). Raspberry Pi (arm64) is out of scope for

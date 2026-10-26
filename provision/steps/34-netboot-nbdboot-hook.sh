@@ -19,7 +19,7 @@
 # ONE framework: dracut.
 #
 # Every netboot-capable nosi image -- Fedora, Ubuntu-26.04+, and now
-# Debian / Ubuntu-24.04 too -- rides the same dracut 99pixie-nbdboot
+# Debian too -- rides the same dracut 99pixie-nbdboot
 # module. We install it under /usr/lib/dracut/modules.d/, force the
 # stock ``nbd`` module + nbd/overlay drivers into every initrd via
 # /etc/dracut.conf.d/99-nosi-netboot.conf, then ``dracut
@@ -70,7 +70,7 @@ ASSETS="$HERE/../netboot"
 # initramfs-tools so it can't clobber the dracut initrd later.
 case "$NOSI_PKGMGR" in
     apt)
-        # Debian / Ubuntu-24.04 headless netboot moves off initramfs-tools
+        # Debian headless netboot moves off initramfs-tools
         # onto dracut (see the header for the igb hang that motivates it).
         #
         # dracut-network ships the network / network-manager + nbd dracut

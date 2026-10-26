@@ -14,7 +14,7 @@ opinionated layer nosi puts on top of a stock cloud image. The
 suffix in the variant name describes the **shape** the system takes:
 how it's deployed, what kind of hardware or environment it's for.
 Distro + numerical version in a variant name are self-explanatory
-(Ubuntu 24.04, Debian 13, ...); the shape is the nosi-specific bit
+(Ubuntu 26.04, Debian 13, ...); the shape is the nosi-specific bit
 that needs an introduction.
 
 Six shapes ship today. `headless` is the **base**; the other five
@@ -137,10 +137,7 @@ hand-curated prose that can drift.
 Variant names follow `<distro>-<version>-<shape>`, e.g.
 `debian-13-headless`, `ubuntu-2604-wsl`, `freebsd-15-headless`. The
 version-in-the-name lets multiple kernel / user-land releases of the
-same distro coexist when their use cases call for it (for example,
-`ubuntu-2404-headless` exists alongside `ubuntu-2604-headless`
-because NVIDIA / AMD / Mellanox qualify their apt repos against 24.04
-LTS while 26.04 LTS is the recency-leaning pick for non-vendor use).
+same distro coexist.
 `ubuntu-2610-rocm` is the one name that does not end in its shape: it
 is a headless image whose name says what it carries, ROCm 10 and the RDMA
 userspace from the archive, on the non-LTS 26.10 because that is the first
