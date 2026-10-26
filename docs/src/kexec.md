@@ -15,7 +15,7 @@ one, and boots into the new one without going through firmware or the
 appliance again.
 
 Every netboot-shipping nosi variant (`debian-13-headless`,
-`ubuntu-2404-headless`, `ubuntu-2604-headless`, `ubuntu-2610-rocm`,
+`ubuntu-2604-headless`, `ubuntu-2610-rocm`,
 `fedora-44-headless`)
 bakes `kexec-tools` in, so `kexec` is available out of the box.
 

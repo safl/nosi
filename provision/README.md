@@ -115,7 +115,6 @@ binaries, with cijoe itself in a `--system-site-packages` venv.
 | variant                | base                 | adds over headless |
 |------------------------|----------------------|--------------------|
 | `debian-13-headless`   | Debian 13 trixie     | -- |
-| `ubuntu-2404-headless` | Ubuntu 24.04 noble   | -- (HW vendor stacks: cudadev/rocmdev workflows pin to this base) |
 | `ubuntu-2604-headless` | Ubuntu 26.04 resolute| -- |
 | `ubuntu-2610-rocm`     | Ubuntu 26.10 stonking| ROCm 10 and RDMA userspace with perftest, all from the archive (step 40) |
 | `ubuntu-2604-wsl`      | Ubuntu 26.04 resolute| meld + gitk + git-gui via WSLg; .tar.gz output instead of (alongside) .img.gz |

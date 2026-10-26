@@ -13,7 +13,7 @@
 #     # description: <one-liner shown in the menu>
 #     # shapes: headless desktop wsl     (or *)
 #     # distros: ubuntu debian fedora    (or *)
-#     # versions: 24.04 26.04            (or *)
+#     # versions: 26.04 26.10            (or *)
 #
 # Any field can be `*` to mean "any value". Missing fields default to
 # `*`. The addon itself should re-check eligibility at the top of its

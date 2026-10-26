@@ -18,7 +18,7 @@ set -euo pipefail
 # ---- distro detection ------------------------------------------------------
 # NOSI_DISTRO is one of: debian, ubuntu, fedora, arch, freebsd.
 # NOSI_PKGMGR is one of: apt, dnf, pacman, pkg.
-# Steps that need finer granularity (e.g. trixie vs noble) can read /etc/os-release directly.
+# Steps that need finer granularity (e.g. trixie vs resolute) can read /etc/os-release directly.
 
 nosi_detect_distro() {
     if [ -r /etc/os-release ]; then
